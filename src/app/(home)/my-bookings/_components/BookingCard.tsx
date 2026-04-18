@@ -199,12 +199,12 @@ const BookingCard: React.FC<BookingCardProps> = ({ booking }) => {
     const coords = getCoordinates();
     if (coords) {
       const url = `https://www.google.com/maps/dir/?api=1&destination=${coords.lat},${coords.lng}`;
-      window.open(url, '_blank');
+      window.open(url, '_blank', 'noopener,noreferrer');
     } else {
       // Fallback: try to use venue name for search
       const searchQuery = encodeURIComponent(booking.event.venue_name || booking.event.event_title);
       const url = `https://www.google.com/maps/search/?api=1&query=${searchQuery}`;
-      window.open(url, '_blank');
+      window.open(url, '_blank', 'noopener,noreferrer');
     }
   };
 

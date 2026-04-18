@@ -50,6 +50,7 @@ const toKeywordOption = (value: string): SelectOption => ({
 });
 
 const sanitizeNumericInput = (value: string) => value.replace(/[^\d]/g, "");
+const sanitizeKeywordInput = (value: string) => value.replace(/[^\w\s-]/g, "").slice(0, 40);
 
 export default function OwnerListingForm({ mode, propertyId, initialValue }: OwnerListingFormProps) {
     const router = useRouter();
@@ -369,8 +370,9 @@ export default function OwnerListingForm({ mode, propertyId, initialValue }: Own
                 <div className="mt-4 flex items-center gap-2">
                     <input
                         value={customKeyword}
-                        onChange={(event) => setCustomKeyword(event.target.value)}
+                        onChange={(event) => setCustomKeyword(sanitizeKeywordInput(event.target.value))}
                         placeholder="Add custom keyword"
+                        maxLength={40}
                         className="flex-1 rounded-xl border border-white/15 bg-[#0d0d14] px-3 py-2 text-sm outline-none focus:border-[#A67AEB]"
                     />
                     <button
@@ -410,7 +412,7 @@ export default function OwnerListingForm({ mode, propertyId, initialValue }: Own
                         Property images
                         <input
                             type="file"
-                            accept="image/*"
+                            accept="image/jpeg,image/png,image/webp,image/jpg"
                             multiple
                             onChange={(event) =>
                                 updateField("imageFiles", Array.from(event.target.files || []))
@@ -422,6 +424,7 @@ export default function OwnerListingForm({ mode, propertyId, initialValue }: Own
                         Verification document
                         <input
                             type="file"
+                            accept=".pdf,image/jpeg,image/png,image/jpg"
                             onChange={(event) =>
                                 updateField("documentFile", (event.target.files || [])[0] || null)
                             }

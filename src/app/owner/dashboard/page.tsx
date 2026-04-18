@@ -154,7 +154,7 @@ export default function OwnerDashboardPage() {
                                             <a
                                                 href={`https://wa.me/${lead.phone.replace(/\D/g, "")}`}
                                                 target="_blank"
-                                                rel="noreferrer"
+                                                rel="noopener noreferrer"
                                                 className="flex-1 rounded-xl bg-[#A67AEB] px-3 py-2 text-center text-sm font-semibold"
                                             >
                                                 WhatsApp
@@ -187,4 +187,3 @@ export default function OwnerDashboardPage() {
         </main>
     );
 }
-

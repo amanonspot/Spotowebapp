@@ -4,7 +4,8 @@ import { authService } from "@/lib/api";
 const SESSION_KEY = "spoto_session_v1";
 const PENDING_OTP_KEY = "spoto_pending_otp_v1";
 const DEFAULT_MOCK_OTP = process.env.NEXT_PUBLIC_OWNER_MOCK_OTP || "0000";
-const DEFAULT_MOCK_MODE = process.env.NEXT_PUBLIC_OWNER_MOCK_MODE === "true";
+const DEFAULT_MOCK_MODE =
+    process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_OWNER_MOCK_MODE === "true";
 
 interface PendingOtp {
     phone: string;

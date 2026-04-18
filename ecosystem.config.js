@@ -1,5 +1,5 @@
-# PM2 Ecosystem file for Next.js Spoto application
-# Run with: pm2 start ecosystem.config.js
+// PM2 Ecosystem file for Next.js Spoto application
+// Run with: pm2 start ecosystem.config.js
 
 module.exports = {
   apps: [
@@ -7,8 +7,8 @@ module.exports = {
       name: 'spoto-nextjs',
       script: 'npm',
       args: 'start',
-      cwd: '/var/www/spoto',  # Adjust path to your project directory
-      instances: 'max',  # Use all CPU cores
+      cwd: '/var/www/spoto',  // Adjust path to your project directory
+      instances: 'max',  // Use all CPU cores
       exec_mode: 'cluster',
       env: {
         NODE_ENV: 'production',
@@ -40,17 +40,17 @@ module.exports = {
       health_check_grace_period: 3000,
       
       // Environment variables
-      env_file: '.env.production'  # Optional: if you have environment file
+      env_file: '.env.production'  // Optional: if you have environment file
     }
   ],
 
   // Deployment configuration (optional)
   deploy: {
     production: {
-      user: 'www-data',  # Adjust user as needed
-      host: 'your-server-ip',  # Replace with your server IP
+      user: 'www-data',  // Adjust user as needed
+      host: 'your-server-ip',  // Replace with your server IP
       ref: 'origin/main',
-      repo: 'git@github.com:your-username/spoto.git',  # Replace with your repo
+      repo: 'git@github.com:your-username/spoto.git',  // Replace with your repo
       path: '/var/www/spoto',
       'post-deploy': 'npm install && npm run build && pm2 reload ecosystem.config.js --env production'
     }

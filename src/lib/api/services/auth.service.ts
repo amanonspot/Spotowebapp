@@ -13,9 +13,7 @@ import {
  * Generate OTP for phone login
  */
 export const generateOTP = async (phone: string): Promise<LoginResponse> => {
-  console.log('API: Generating OTP for phone:', phone);
   const response = await api.post<LoginResponse>('/api/login/', { phone });
-  console.log('API: OTP generation response:', response);
   return response;
 };
 
@@ -32,16 +30,12 @@ export const generateEmailOTP = async (email: string): Promise<LoginResponse> =>
  */
 export const verifyOTP = async (otp: string, phone?: string): Promise<VerifyOTPResponse> => {
   try {
-    console.log('API: Verifying OTP:', otp);
     const payload = phone ? { otp, phone } : { otp };
     const response = await api.post<VerifyOTPResponse>('/api/verify-otp/', payload);
-    console.log('API: OTP verification response:', response);
     
     // Validate response structure - ensure both access and refresh tokens are present
     if (!response.access || !response.refresh) {
-      const error = new Error('Invalid response: Missing access or refresh token');
-      console.error('API: Invalid OTP verification response:', response);
-      throw error;
+      throw new Error('Unable to verify OTP right now. Please try again.');
     }
     
     // Store tokens in localStorage only if both tokens are present
@@ -50,17 +44,10 @@ export const verifyOTP = async (otp: string, phone?: string): Promise<VerifyOTPR
       localStorage.setItem('refresh_token', response.refresh);
       localStorage.setItem('user_id', response.user_id);
       localStorage.setItem('isAuthenticated', 'true');
-      console.log('API: Tokens stored in localStorage successfully');
     }
     
     return response;
-  } catch (error: any) {
-    console.error('API: OTP verification failed:', {
-      message: error?.message || 'Unknown error',
-      status: error?.status,
-      response: error?.response,
-      otp: otp ? 'Present' : 'Missing'
-    });
+  } catch (error: unknown) {
     throw error;
   }
 };
@@ -81,9 +68,7 @@ export const googleSignIn = async (googleAccessToken: string): Promise<VerifyOTP
   
   // Validate response structure - ensure both access and refresh tokens are present
   if (!response.access || !response.refresh) {
-    const error = new Error('Invalid response: Missing access or refresh token');
-    console.error('API: Invalid Google sign-in response:', response);
-    throw error;
+    throw new Error('Unable to complete Google sign-in. Please try again.');
   }
   
   // Store tokens in localStorage only if both tokens are present
@@ -92,7 +77,6 @@ export const googleSignIn = async (googleAccessToken: string): Promise<VerifyOTP
     localStorage.setItem('refresh_token', response.refresh);
     localStorage.setItem('user_id', response.user_id);
     localStorage.setItem('isAuthenticated', 'true');
-    console.log('API: Google sign-in tokens stored in localStorage successfully');
   }
   
   return response;

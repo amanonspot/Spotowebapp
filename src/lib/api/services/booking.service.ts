@@ -29,45 +29,27 @@ export const createBooking = async (
   bookingData: CreateBookingRequest
 ): Promise<Order> => {
   try {
-    console.log('📦 Creating booking for event:', eventId);
-    console.log('📦 Booking data:', JSON.stringify(bookingData, null, 2));
-    
     const response = await api.post<Order>(`/api/book/?event_id=${eventId}`, bookingData);
-    
-    console.log('✅ Booking creation successful:', response);
     return response;
   } catch (error: any) {
-    console.error('❌ Booking creation error:', error);
-    console.error('❌ Error details:', {
-      message: error.message,
-      status: error.status,
-      errors: error.errors,
-      response: error.response
-    });
-    
     // Handle specific database errors
     if (error.message && error.message.includes('paymenthandler_paymentsettingsmodel')) {
-      const detailedError = new Error('Payment system configuration is incomplete. The backend team needs to set up the payment handler database tables. Please contact support.');
-      console.error('❌ Payment handler error:', detailedError.message);
+      const detailedError = new Error('Payment system is currently unavailable. Please try again shortly.');
       throw detailedError;
     }
     
     // Handle billing calculation errors
     if (error.message && error.message.includes('Billing calculation failed')) {
       const detailedError = new Error('Unable to process payment at this time. Please try again later or contact support.');
-      console.error('❌ Billing calculation error:', detailedError.message);
       throw detailedError;
     }
     
     // Handle empty error objects
     if (!error.message || error.message === '{}' || Object.keys(error).length === 0) {
       const detailedError = new Error('Booking request failed. The server did not provide error details. Please check your connection and try again.');
-      console.error('❌ Empty error object:', detailedError.message);
       throw detailedError;
     }
     
-    // Re-throw other errors with enhanced logging
-    console.error('❌ Unhandled booking error:', error);
     throw error;
   }
 };
@@ -97,9 +79,7 @@ export const checkTicketAvailability = async (
       quantity: quantity,
     }
   );
-  
-  console.log('Availability API response:', response);
-  
+
   // Parse the nested response structure
   if (response.results && response.results.success) {
     const message = response.results.message;
@@ -154,17 +134,7 @@ export const getUserTickets = async (userId: string): Promise<any[]> => {
 export const initiatePaymentSession = async (
   paymentData: PaymentSessionRequest
 ): Promise<PaymentSessionResponse> => {
-  console.log('Initiating payment session with data:', paymentData);
-  const response = await api.post<PaymentSessionResponse>(
-    '/api/payment/session/',
-    paymentData,
-    {
-      headers: {
-        'Authorization': 'Basic Og=='
-      }
-    }
-  );
-  console.log('Payment session response:', response);
+  const response = await api.post<PaymentSessionResponse>('/api/payment/session/', paymentData);
   return response;
 };
 
@@ -172,16 +142,8 @@ export const initiatePaymentSession = async (
  * Get user bookings
  */
 export const getUserBookings = async (userId: string): Promise<any[]> => {
-  console.log('📋 getUserBookings - Fetching for userId:', userId);
   const url = `/api/tickets/?user_id=${userId}`;
-  console.log('📋 getUserBookings - API URL:', url);
-  
   const response = await api.get<any[]>(url);
-  
-  console.log('📋 getUserBookings - Response:', response);
-  console.log('📋 getUserBookings - Response type:', typeof response);
-  console.log('📋 getUserBookings - Is array:', Array.isArray(response));
-  
   return response;
 };
 

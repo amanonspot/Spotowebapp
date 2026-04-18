@@ -38,16 +38,9 @@ export const getEventListings = async (params: EventListingParams = {}): Promise
   
   // Match curl format: /api/event/listing/?location=...&start_date=...&end_date=...&min_guests=...
   const url = `/api/event/listing/${queryString ? `?${queryString}` : ''}`;
-  
-  console.log('🔍 API Call - getEventListings URL:', url);
-  console.log('🔍 API Call - Params:', params);
-  console.log('🔍 API Call - Query String:', queryString);
-  console.log('🔍 API Call - Full Backend URL: https://production.api.spoto.in' + url);
-  
+
   const response = await api.get<Event[]>(url);
-  
-  console.log('🔍 API Response - getEventListings count:', response?.length || 0);
-  
+
   return response;
 };
 
@@ -55,11 +48,7 @@ export const getEventListings = async (params: EventListingParams = {}): Promise
  * Get event details by ID
  */
 export const getEventDetails = async (eventId: string): Promise<Event> => {
-  console.log('🔍 API Call - getEventDetails for eventId:', eventId);
   const response = await api.get<Event>(`/api/event/details/?event_id=${eventId}`);
-  console.log('🔍 API Response - getEventDetails:', response);
-  console.log('🔍 API Response - event_lowest_price:', response?.event_lowest_price);
-  console.log('🔍 API Response - phases_tickets:', response?.phases_tickets);
   return response;
 };
 

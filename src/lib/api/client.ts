@@ -14,11 +14,21 @@ const getAccessToken = () => {
 };
 
 const buildErrorMessage = (error: AxiosError): string => {
+    const status = error.response?.status;
+    if (status === 401) return "Your session has expired. Please log in again.";
+    if (status === 403) return "You are not authorized to perform this action.";
+    if (status === 429) return "Too many requests. Please try again shortly.";
+    if (typeof status === "number" && status >= 500) {
+        return "Something went wrong on the server. Please try again.";
+    }
+
     const payload = error.response?.data;
     if (payload && typeof payload === "object") {
         const data = payload as Record<string, unknown>;
         const message = data.message || data.error || data.detail;
-        if (typeof message === "string" && message.trim()) return message;
+        if (typeof message === "string" && message.trim()) {
+            return message.trim().slice(0, 200);
+        }
     }
     if (error.message) return error.message;
     return "Network request failed";
@@ -27,7 +37,6 @@ const buildErrorMessage = (error: AxiosError): string => {
 export interface ApiError extends Error {
     status?: number;
     errors?: Record<string, string[]>;
-    payload?: unknown;
     unauthorized?: boolean;
 }
 
@@ -66,6 +75,7 @@ apiClient.interceptors.response.use(
             localStorage.removeItem("access_token");
             localStorage.removeItem("refresh_token");
             localStorage.removeItem("isAuthenticated");
+            localStorage.removeItem("spoto_session_v1");
         }
 
         return Promise.reject(error);
@@ -108,7 +118,6 @@ export const apiRequest = async <T = unknown>(
 
         const apiError = new Error(buildErrorMessage(unknownError)) as ApiError;
         apiError.status = unknownError.response?.status;
-        apiError.payload = unknownError.response?.data;
         apiError.unauthorized = unknownError.response?.status === 401;
 
         const payload = unknownError.response?.data;
@@ -146,4 +155,3 @@ export const apiFormData = {
 };
 
 export default apiClient;
-

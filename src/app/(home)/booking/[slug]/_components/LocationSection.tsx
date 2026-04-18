@@ -65,12 +65,12 @@ const LocationSection: React.FC<LocationSectionProps> = ({ event }) => {
         if (coords) {
             // Open Google Maps directions
             const url = `https://www.google.com/maps/dir/?api=1&destination=${coords.lat},${coords.lng}`;
-            window.open(url, '_blank');
+            window.open(url, '_blank', 'noopener,noreferrer');
         } else {
             // Fallback: use location string for search
             const searchQuery = encodeURIComponent(getLocationString());
             const url = `https://www.google.com/maps/search/?api=1&query=${searchQuery}`;
-            window.open(url, '_blank');
+            window.open(url, '_blank', 'noopener,noreferrer');
         }
     };
 

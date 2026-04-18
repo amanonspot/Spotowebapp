@@ -24,7 +24,7 @@ export default function OwnerCard({ owner, isUnlocked }: OwnerCardProps) {
                         <a
                             href={`https://wa.me/${owner.whatsappNumber.replace(/\D/g, "")}`}
                             target="_blank"
-                            rel="noreferrer"
+                            rel="noopener noreferrer"
                             className="flex-1 rounded-xl bg-[#A67AEB] px-4 py-3 text-center text-base font-semibold text-white"
                         >
                             WhatsApp

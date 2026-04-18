@@ -47,7 +47,7 @@ export default function TenantContactsPage() {
                                     <a
                                         href={`https://wa.me/${contact.phone.replace(/\D/g, "")}`}
                                         target="_blank"
-                                        rel="noreferrer"
+                                        rel="noopener noreferrer"
                                         className="rounded-xl bg-[#A67AEB] px-3 py-2 text-sm font-semibold"
                                     >
                                         WhatsApp
@@ -68,4 +68,3 @@ export default function TenantContactsPage() {
         </main>
     );
 }
-
