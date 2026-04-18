@@ -1,0 +1,39 @@
+# Systemd service file for Next.js Spoto application
+# Place this file in /etc/systemd/system/spoto.service
+
+[Unit]
+Description=Spoto Next.js Application
+Documentation=https://nextjs.org/docs
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/spoto
+Environment=NODE_ENV=production
+Environment=PORT=9000
+Environment=HOSTNAME=localhost
+ExecStart=/usr/bin/npm start
+Restart=always
+RestartSec=10
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=spoto-nextjs
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/www/spoto
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=4096
+
+[Install]
+WantedBy=multi-user.target

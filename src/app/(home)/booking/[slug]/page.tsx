@@ -1,0 +1,202 @@
+"use client";
+
+import React, { use, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import OwnerCard from "@/components/revamp/OwnerCard";
+import UnlockCard from "@/components/revamp/UnlockCard";
+import PrimaryButton from "@/components/revamp/PrimaryButton";
+import { authAdapter, checkoutAdapter, propertyAdapter } from "@/lib/adapters";
+import { CheckoutState, PropertyDetail } from "@/lib/adapters/types";
+
+interface PageProps {
+    params: Promise<{ slug: string }>;
+}
+
+export default function BookingDetailPage({ params }: PageProps) {
+    const router = useRouter();
+    const { slug } = use(params);
+
+    const [property, setProperty] = useState<PropertyDetail | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const [checkoutState, setCheckoutState] = useState<CheckoutState | null>(null);
+    const [showCheckoutModal, setShowCheckoutModal] = useState(false);
+    const [isUnlocked, setIsUnlocked] = useState(false);
+
+    useEffect(() => {
+        let mounted = true;
+
+        const load = async () => {
+            try {
+                setLoading(true);
+                const detail = await propertyAdapter.getPropertyDetail(slug);
+                if (mounted) {
+                    setProperty(detail);
+                }
+            } catch (err) {
+                if (mounted) {
+                    setError(err instanceof Error ? err.message : "Unable to load property details");
+                }
+            } finally {
+                if (mounted) {
+                    setLoading(false);
+                }
+            }
+        };
+
+        load();
+
+        return () => {
+            mounted = false;
+        };
+    }, [slug]);
+
+    const handlePayNow = async () => {
+        if (property === null) return;
+        const session = authAdapter.getSession();
+        if (!session.isAuthenticated) {
+            router.push("/auth/login");
+            return;
+        }
+
+        const pending = await checkoutAdapter.startUnlock({
+            propertyId: property.id,
+            amount: property.unlockOffer.weeklyPassPrice,
+        });
+
+        setCheckoutState(pending);
+        setShowCheckoutModal(true);
+    };
+
+    const completeCheckout = async (outcome: "success" | "failed") => {
+        if (checkoutState === null) return;
+
+        const resolved = await checkoutAdapter.confirmUnlock(checkoutState.id, outcome);
+        setCheckoutState(resolved);
+
+        if (resolved.status === "success") {
+            setIsUnlocked(true);
+        }
+
+        setShowCheckoutModal(false);
+    };
+
+    if (loading) {
+        return (
+            <main className="min-h-screen bg-[#050507] p-6 text-white">
+                <div className="mx-auto max-w-4xl rounded-2xl border border-white/10 bg-[#101014] p-8 text-center">
+                    Loading property details...
+                </div>
+            </main>
+        );
+    }
+
+    if (error !== null || property === null) {
+        return (
+            <main className="min-h-screen bg-[#050507] p-6 text-white">
+                <div className="mx-auto max-w-4xl rounded-2xl border border-red-500/30 bg-[#101014] p-8 text-center">
+                    {error || "Property not found"}
+                </div>
+            </main>
+        );
+    }
+
+    const effectiveOwner =
+        checkoutState?.status === "success" && checkoutState.unlockedPhone
+            ? {
+                  ...property.owner,
+                  ownerName: checkoutState.unlockedName || property.owner.ownerName,
+                  whatsappNumber: checkoutState.unlockedPhone,
+              }
+            : property.owner;
+
+    return (
+        <main className="min-h-screen bg-[#050507] pb-28 text-white md:pb-10">
+            <div className="relative h-[320px] w-full md:h-[420px]">
+                <img src={property.image} alt={property.title} className="h-full w-full object-cover" />
+                <button
+                    onClick={() => router.back()}
+                    className="absolute left-4 top-4 rounded-full bg-black/50 px-3 py-2 text-sm font-semibold"
+                >
+                    ← Back
+                </button>
+            </div>
+
+            <div className="mx-auto grid max-w-[1180px] grid-cols-1 gap-6 px-4 py-6 md:grid-cols-[1.4fr_0.9fr] md:px-6 lg:px-8">
+                <section className="space-y-6">
+                    <div>
+                        <h1 className="text-3xl font-bold md:text-4xl">{property.title}</h1>
+                        <p className="mt-2 text-lg text-[#AFAFAF]">{property.locality}, {property.city}</p>
+                        <p className="mt-3 text-2xl font-bold text-[#B7F041]">₹{property.pricePerMonth.toLocaleString("en-IN")} / Month</p>
+                        <p className="text-base text-[#B3B3B3]">₹{property.deposit.toLocaleString("en-IN")} Deposit • {property.furnished ? "Furnished" : "Unfurnished"}</p>
+                    </div>
+
+                    <div className="rounded-2xl border border-white/15 bg-[#111116] p-4">
+                        <h2 className="text-xl font-semibold">Map Preview</h2>
+                        <div className="relative mt-3 h-52 overflow-hidden rounded-xl border border-white/10 bg-[linear-gradient(120deg,#1d1d24,#101015)]">
+                            <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(175,122,235,0.25),transparent_45%)]" />
+                            <div className="absolute bottom-3 left-3 right-3 rounded-lg bg-black/70 px-4 py-3 text-center">
+                                <p className="text-sm font-bold text-white">{property.mapPreviewLabel}</p>
+                                <p className="mt-1 text-sm text-[#B7F041]">{property.mapPreviewSubLabel}</p>
+                            </div>
+                        </div>
+                        <p className="mt-3 text-sm text-white/70">{property.description}</p>
+                    </div>
+
+                    <div className="rounded-2xl border border-white/15 bg-[#111116] p-4">
+                        <h2 className="text-2xl font-semibold">What this place offers</h2>
+                        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                            {property.amenities.map((amenity) => (
+                                <p key={amenity} className="text-base text-white/85">• {amenity}</p>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-white/15 bg-[#111116] p-4">
+                        <h2 className="text-2xl font-semibold">Highlights</h2>
+                        <div className="mt-3 space-y-2">
+                            {property.highlights.map((highlight) => (
+                                <p key={highlight} className="text-base text-white/85">• {highlight}</p>
+                            ))}
+                        </div>
+                    </div>
+                </section>
+
+                <aside className="space-y-4 md:sticky md:top-4 md:h-fit">
+                    <OwnerCard owner={effectiveOwner} isUnlocked={isUnlocked} />
+                    <UnlockCard offer={property.unlockOffer} checkoutState={checkoutState} onPayNow={handlePayNow} />
+                </aside>
+            </div>
+
+            <div className="fixed bottom-0 left-0 right-0 border-t border-white/10 bg-[#0c0c12] p-4 md:hidden">
+                <PrimaryButton onClick={handlePayNow} className="w-full text-lg">
+                    {isUnlocked ? "Owner Contacts Unlocked" : "Get 99 Unlimited Pass"}
+                </PrimaryButton>
+            </div>
+
+            {showCheckoutModal ? (
+                <div className="fixed inset-0 z-[120] bg-black/80 backdrop-blur-sm">
+                    <div className="mx-auto mt-24 w-[92%] max-w-md rounded-2xl border border-white/20 bg-[#121218] p-5 text-white">
+                        <h3 className="text-xl font-semibold">Prototype Checkout</h3>
+                        <p className="mt-2 text-sm text-white/70">Select a simulated outcome for this payment attempt.</p>
+
+                        <div className="mt-5 grid grid-cols-1 gap-3">
+                            <PrimaryButton onClick={() => completeCheckout("success")} variant="green">
+                                Simulate Success
+                            </PrimaryButton>
+                            <PrimaryButton onClick={() => completeCheckout("failed")} variant="ghost">
+                                Simulate Failure
+                            </PrimaryButton>
+                            <button
+                                onClick={() => setShowCheckoutModal(false)}
+                                className="rounded-xl border border-white/20 px-4 py-2 text-sm text-white/80"
+                            >
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            ) : null}
+        </main>
+    );
+}
