@@ -6,10 +6,13 @@ export type SortOption = "recommended" | "price_low_to_high" | "price_high_to_lo
 export interface FilterState {
     query: string;
     selectedLocalities: string[];
+    selectedLocalityIds?: string[];
     bhk: BHKOption[];
+    selectedBhkIds?: string[];
     budgetMin: number;
     budgetMax: number;
     propertyTypes: PropertyType[];
+    selectedPropertyTypeIds?: string[];
     moveInBy: MoveInOption[];
     sortBy: SortOption;
 }
@@ -17,14 +20,24 @@ export interface FilterState {
 export interface PropertyListItem {
     id: string;
     title: string;
+    propertyTitle?: string;
     locality: string;
+    localityId?: string;
     city: string;
+    cityId?: string;
     pricePerMonth: number;
     deposit: number;
     furnished: boolean;
     image: string;
+    galleryImages?: string[];
     bhk: BHKOption;
+    bhkId?: string;
     propertyTypes: PropertyType[];
+    propertyTypeId?: string;
+    furnishingId?: string;
+    availabilityId?: string;
+    status?: string;
+    isVerified?: boolean;
     moveInOptions: MoveInOption[];
     badges: string[];
     features: string[];
@@ -49,7 +62,9 @@ export interface PropertyDetail extends PropertyListItem {
     mapPreviewLabel: string;
     mapPreviewSubLabel: string;
     amenities: string[];
+    amenityIds?: string[];
     highlights: string[];
+    keywordIds?: string[];
     owner: OwnerContact;
     unlockOffer: UnlockOffer;
 }
@@ -57,6 +72,7 @@ export interface PropertyDetail extends PropertyListItem {
 export interface HomeFeed {
     categories: string[];
     localities: string[];
+    localityOptions?: SelectOption[];
     recommended: PropertyListItem[];
     listings: PropertyListItem[];
     topEvents: PropertyListItem[];
@@ -123,7 +139,8 @@ export interface SelectOption {
 }
 
 export interface OwnerListingFormInput {
-    title: string;
+    propertyTitle: string;
+    title?: string;
     propertyTypeId: string;
     cityId: string;
     localityId: string;

@@ -1,4 +1,5 @@
 import { api, apiFormData } from "@/lib/api";
+import { clearCache } from "@/lib/api/client";
 import {
     OwnerPropertyUpsertPayload,
     RentalContactUnlockRequestWire,
@@ -7,6 +8,7 @@ import {
     RentalPassActivatePayloadWire,
     RentalPassActivateResponseWire,
     RentalPropertyWire,
+    WireApiEnvelope,
 } from "@/lib/rentals/wireTypes";
 
 export interface RentalPropertyListParams {
@@ -33,7 +35,9 @@ const appendFileIfPresent = (formData: FormData, key: string, file: File | null 
 const buildOwnerFormData = (payload: OwnerPropertyUpsertPayload): FormData => {
     const formData = new FormData();
 
-    appendIfPresent(formData, "title", payload.title);
+    const propertyTitle = payload.propertyTitle?.trim() || payload.title?.trim() || "";
+    appendIfPresent(formData, "property_title", propertyTitle);
+    appendIfPresent(formData, "title", propertyTitle);
     appendIfPresent(formData, "property_type_id", payload.propertyTypeId);
     appendIfPresent(formData, "city_id", payload.cityId);
     appendIfPresent(formData, "rent", payload.rent);
@@ -60,10 +64,10 @@ const buildOwnerFormData = (payload: OwnerPropertyUpsertPayload): FormData => {
 
 export const rentalsService = {
     listProperties: (params?: RentalPropertyListParams) =>
-        api.get<RentalPropertyWire[]>("/api/rental/properties/", { params }),
+        api.get<WireApiEnvelope<RentalPropertyWire[]>>("/api/rental/properties/", { params }),
 
     getPropertyDetail: (propertyId: string) =>
-        api.get<RentalPropertyWire | RentalPropertyWire[]>("/api/rental/properties/", {
+        api.get<WireApiEnvelope<RentalPropertyWire | RentalPropertyWire[]>>("/api/rental/properties/", {
             params: { property_id: propertyId },
         }),
 
@@ -78,24 +82,43 @@ export const rentalsService = {
         return apiFormData.post<RentalPassActivateResponseWire>("/api/rental/passes/activate/", formData);
     },
 
-    getOwnerProperties: () => api.get<RentalPropertyWire[]>("/api/rental/my/properties/"),
+    getOwnerProperties: () => api.get<WireApiEnvelope<RentalPropertyWire[]>>("/api/rental/my/properties/"),
 
-    createOwnerProperty: (payload: OwnerPropertyUpsertPayload) =>
-        apiFormData.post<RentalPropertyWire>("/api/rental/my/properties/create/", buildOwnerFormData(payload)),
+    createOwnerProperty: async (payload: OwnerPropertyUpsertPayload) => {
+        const created = await apiFormData.post<WireApiEnvelope<RentalPropertyWire>>(
+            "/api/rental/my/properties/create/",
+            buildOwnerFormData(payload)
+        );
+        clearCache("/api/rental/my/properties/");
+        clearCache("/api/rental/properties/");
+        return created;
+    },
 
-    updateOwnerProperty: (propertyId: string, payload: OwnerPropertyUpsertPayload) =>
-        apiFormData.post<RentalPropertyWire>(`/api/rental/my/properties/?property_id=${encodeURIComponent(propertyId)}`, buildOwnerFormData(payload)),
+    updateOwnerProperty: async (propertyId: string, payload: OwnerPropertyUpsertPayload) => {
+        const updated = await api.patch<WireApiEnvelope<RentalPropertyWire>>(
+            `/api/rental/my/properties/update/?property_id=${encodeURIComponent(propertyId)}`,
+            buildOwnerFormData(payload),
+            {
+                headers: {
+                    "Content-Type": "multipart/form-data",
+                },
+            }
+        );
+        clearCache("/api/rental/my/properties/");
+        clearCache("/api/rental/properties/");
+        clearCache(`/api/rental/properties/?property_id=${encodeURIComponent(propertyId)}`);
+        return updated;
+    },
 
-    listCities: () => api.get<RentalMasterOptionWire[]>("/api/rental/masters/cities/"),
+    listCities: () => api.get<WireApiEnvelope<RentalMasterOptionWire[]>>("/api/rental/masters/cities/"),
     listLocalities: (cityId?: string) =>
-        api.get<RentalMasterOptionWire[]>("/api/rental/masters/localities/", {
+        api.get<WireApiEnvelope<RentalMasterOptionWire[]>>("/api/rental/masters/localities/", {
             params: cityId ? { city_id: cityId } : undefined,
         }),
-    listPropertyTypes: () => api.get<RentalMasterOptionWire[]>("/api/rental/masters/property-types/"),
-    listBhkTypes: () => api.get<RentalMasterOptionWire[]>("/api/rental/masters/bhk-types/"),
-    listFurnishingTypes: () => api.get<RentalMasterOptionWire[]>("/api/rental/masters/furnishing-types/"),
-    listAvailabilityTypes: () => api.get<RentalMasterOptionWire[]>("/api/rental/masters/availability-types/"),
-    listAmenities: () => api.get<RentalMasterOptionWire[]>("/api/rental/masters/amenities/"),
-    listKeywords: () => api.get<RentalMasterOptionWire[]>("/api/rental/masters/keywords/"),
+    listPropertyTypes: () => api.get<WireApiEnvelope<RentalMasterOptionWire[]>>("/api/rental/masters/property-types/"),
+    listBhkTypes: () => api.get<WireApiEnvelope<RentalMasterOptionWire[]>>("/api/rental/masters/bhk-types/"),
+    listFurnishingTypes: () => api.get<WireApiEnvelope<RentalMasterOptionWire[]>>("/api/rental/masters/furnishing-types/"),
+    listAvailabilityTypes: () => api.get<WireApiEnvelope<RentalMasterOptionWire[]>>("/api/rental/masters/availability-types/"),
+    listAmenities: () => api.get<WireApiEnvelope<RentalMasterOptionWire[]>>("/api/rental/masters/amenities/"),
+    listKeywords: () => api.get<WireApiEnvelope<RentalMasterOptionWire[]>>("/api/rental/masters/keywords/"),
 };
-

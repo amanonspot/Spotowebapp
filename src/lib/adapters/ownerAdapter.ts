@@ -7,25 +7,29 @@ import {
     OwnerMastersData,
     SelectOption,
 } from "@/lib/adapters/types";
-import { mockPropertyDetails, mockPropertyList } from "@/mocks/properties";
+import { mockPropertyList } from "@/mocks/properties";
 import {
     addUnlockedOwnerContact,
     consumeCredit,
     extractErrorMessage,
     getCredits,
     getUnlockedOwnerContacts,
+    isUuidLike,
     normalizeMasterOptions,
     normalizePropertyDetail,
     normalizePropertyList,
+    RENTALS_MOCK_MODE,
     rentalsService,
-    readSyncedListingStore,
     toMasterSelectOption,
-    upsertSyncedListingRecord,
+    WireApiEnvelope,
+    RentalMasterOptionWire,
+    RentalPropertyWire,
 } from "@/lib/rentals";
 
 const OWNER_LEADS_KEY = "spoto_owner_leads_v1";
 
 const defaultFormInput: OwnerListingFormInput = {
+    propertyTitle: "",
     title: "",
     propertyTypeId: "",
     cityId: "",
@@ -46,33 +50,27 @@ const defaultFormInput: OwnerListingFormInput = {
     documentFile: null,
 };
 
-const defaultLeads: OwnerLeadCard[] = [
-    {
-        id: "lead-1",
-        tenantName: "Aman",
-        phoneMasked: "+91-7XX32-XXXX",
-        phone: "+917003220551",
-        state: "unlocked",
-        propertyId: mockPropertyList[0]?.id || "listing-1",
-        unlockedAt: new Date().toISOString(),
-    },
-    {
-        id: "lead-2",
-        tenantName: "Ritika",
-        phoneMasked: "+91-9XX34-XXXX",
-        phone: "+919843400000",
-        state: "locked",
-        propertyId: mockPropertyList[0]?.id || "listing-1",
-    },
-    {
-        id: "lead-3",
-        tenantName: "Rahul",
-        phoneMasked: "+91-8XX12-XXXX",
-        phone: "+918891255551",
-        state: "locked",
-        propertyId: mockPropertyList[1]?.id || "listing-2",
-    },
-];
+const defaultLeads: OwnerLeadCard[] = RENTALS_MOCK_MODE
+    ? [
+          {
+              id: "lead-1",
+              tenantName: "Aman",
+              phoneMasked: "+91-7XX32-XXXX",
+              phone: "+917003220551",
+              state: "unlocked",
+              propertyId: mockPropertyList[0]?.id || "listing-1",
+              unlockedAt: new Date().toISOString(),
+          },
+          {
+              id: "lead-2",
+              tenantName: "Ritika",
+              phoneMasked: "+91-9XX34-XXXX",
+              phone: "+919843400000",
+              state: "locked",
+              propertyId: mockPropertyList[0]?.id || "listing-1",
+          },
+      ]
+    : [];
 
 const isBrowser = () => typeof window !== "undefined";
 
@@ -109,30 +107,122 @@ const defaultMasters = (): OwnerMastersData => ({
     keywords: fallbackOptions(["Near Metro", "Tech Park", "Road Facing"]),
 });
 
+const unwrapToList = (payload: WireApiEnvelope<unknown>): RentalPropertyWire[] => {
+    const envelope = payload as Record<string, unknown>;
+    const data = Array.isArray(payload)
+        ? payload
+        : Array.isArray(envelope.data)
+        ? envelope.data
+        : Array.isArray(envelope.results)
+        ? envelope.results
+        : Array.isArray(envelope.items)
+        ? envelope.items
+        : envelope.data && typeof envelope.data === "object"
+        ? [envelope.data]
+        : [];
+
+    return data as RentalPropertyWire[];
+};
+
+const toMap = (options: SelectOption[]): Record<string, string> =>
+    options.reduce<Record<string, string>>((acc, option) => {
+        acc[option.id] = option.name;
+        return acc;
+    }, {});
+
+const toToken = (value: string) =>
+    value
+        .toLowerCase()
+        .replace(/[_-]+/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+
+const toIdByTokenMap = (wires: RentalMasterOptionWire[]): Record<string, string> =>
+    wires.reduce<Record<string, string>>((acc, wire) => {
+        const id = `${wire.id || wire.uuid || ""}`.trim();
+        if (!id) return acc;
+        const tokens = [wire.name, wire.label, wire.code, `${wire.value || ""}`]
+            .map((value) => toToken(`${value || ""}`))
+            .filter(Boolean);
+        tokens.forEach((token) => {
+            acc[token] = id;
+        });
+        return acc;
+    }, {});
+
+const buildNormalizationContext = async (payload: WireApiEnvelope<unknown>) => {
+    const wires = unwrapToList(payload);
+    const cityIds = new Set<string>();
+    wires.forEach((wire) => {
+        const cityId = `${wire.city_id || wire.city || ""}`.trim();
+        if (isUuidLike(cityId)) cityIds.add(cityId);
+    });
+
+    const [citiesRes, amenitiesRes, keywordsRes, localitiesRes, propertyTypesRes, bhkRes, furnishingRes, availabilityRes] =
+        await Promise.allSettled([
+        rentalsService.listCities(),
+        rentalsService.listAmenities(),
+        rentalsService.listKeywords(),
+        Promise.all(Array.from(cityIds).map((cityId) => rentalsService.listLocalities(cityId))),
+        rentalsService.listPropertyTypes(),
+        rentalsService.listBhkTypes(),
+        rentalsService.listFurnishingTypes(),
+        rentalsService.listAvailabilityTypes(),
+    ]);
+
+    const propertyTypeWires =
+        propertyTypesRes.status === "fulfilled" ? normalizeMasterOptions(propertyTypesRes.value) : [];
+    const bhkWires = bhkRes.status === "fulfilled" ? normalizeMasterOptions(bhkRes.value) : [];
+    const furnishingWires = furnishingRes.status === "fulfilled" ? normalizeMasterOptions(furnishingRes.value) : [];
+    const availabilityWires =
+        availabilityRes.status === "fulfilled" ? normalizeMasterOptions(availabilityRes.value) : [];
+
+    const cityNameById =
+        citiesRes.status === "fulfilled" ? toMap(normalizeMasterOptions(citiesRes.value).map(toMasterSelectOption)) : {};
+    const amenityNameById =
+        amenitiesRes.status === "fulfilled" ? toMap(normalizeMasterOptions(amenitiesRes.value).map(toMasterSelectOption)) : {};
+    const keywordNameById =
+        keywordsRes.status === "fulfilled" ? toMap(normalizeMasterOptions(keywordsRes.value).map(toMasterSelectOption)) : {};
+    const localityNameById =
+        localitiesRes.status === "fulfilled"
+            ? localitiesRes.value
+                  .flatMap((item) => normalizeMasterOptions(item))
+                  .map(toMasterSelectOption)
+                  .reduce<Record<string, string>>((acc, option) => {
+                      acc[option.id] = option.name;
+                      return acc;
+                  }, {})
+            : {};
+
+    return {
+        cityNameById,
+        localityNameById,
+        amenityNameById,
+        keywordNameById,
+        propertyTypeIdByToken: toIdByTokenMap(propertyTypeWires),
+        bhkIdByToken: toIdByTokenMap(bhkWires),
+        furnishingIdByToken: toIdByTokenMap(furnishingWires),
+        availabilityIdByToken: toIdByTokenMap(availabilityWires),
+    };
+};
+
 const toSummary = (listing: ReturnType<typeof normalizePropertyList>[number]): OwnerListingSummary => ({
     id: listing.id,
-    title: listing.title,
+    title: listing.propertyTitle || listing.title,
     locality: listing.locality,
     city: listing.city,
     rent: listing.pricePerMonth,
     deposit: listing.deposit,
-    status: "pending_review",
+    status: listing.status || "pending_review",
     image: listing.image,
     updatedAt: new Date().toISOString(),
 });
 
-const toOwnerForm = (summary: OwnerListingSummary): OwnerListingFormInput => ({
-    ...defaultFormInput,
-    title: summary.title,
-    cityId: summary.city,
-    localityId: summary.locality,
-    rent: String(summary.rent),
-    deposit: String(summary.deposit),
-    description: "",
-});
+const titleFromInput = (input: OwnerListingFormInput) => input.propertyTitle.trim() || input.title?.trim() || "";
 
 const toUpsertPayload = (input: OwnerListingFormInput) => ({
-    title: input.title.trim(),
+    propertyTitle: titleFromInput(input),
+    title: titleFromInput(input),
     propertyTypeId: input.propertyTypeId,
     cityId: input.cityId,
     localityId: input.localityId,
@@ -154,40 +244,6 @@ const toUpsertPayload = (input: OwnerListingFormInput) => ({
     clearDocuments: input.clearDocuments,
 });
 
-const syncTenantListing = (summary: OwnerListingSummary) => {
-    const fallbackDetail = mockPropertyDetails[0];
-    upsertSyncedListingRecord({
-        id: summary.id,
-        listItem: {
-            id: summary.id,
-            title: summary.title,
-            locality: summary.locality,
-            city: summary.city,
-            pricePerMonth: summary.rent,
-            deposit: summary.deposit,
-            furnished: true,
-            image: summary.image || fallbackDetail.image,
-            bhk: "1_bhk",
-            propertyTypes: ["rent_house"],
-            moveInOptions: ["immediately"],
-            badges: ["Owner Updated"],
-            features: ["Verified"],
-        },
-        detail: {
-            ...fallbackDetail,
-            id: summary.id,
-            title: summary.title,
-            locality: summary.locality,
-            city: summary.city,
-            pricePerMonth: summary.rent,
-            deposit: summary.deposit,
-            image: summary.image || fallbackDetail.image,
-        },
-        updatedAt: summary.updatedAt,
-        source: "owner_update",
-    });
-};
-
 class HybridOwnerAdapter implements OwnerListingAdapter {
     async getOwnerEntryRoute(): Promise<"/owner/dashboard" | "/owner/list-property"> {
         const dashboard = await this.getDashboard();
@@ -197,28 +253,28 @@ class HybridOwnerAdapter implements OwnerListingAdapter {
     async getDashboard(): Promise<OwnerDashboardData> {
         try {
             const response = await rentalsService.getOwnerProperties();
-            const listings = normalizePropertyList(response, { fallbackToMock: false }).map(toSummary);
-            const leads = readLeads();
+            const context = await buildNormalizationContext(response);
+            const listings = normalizePropertyList(response, { fallbackToMock: false, ...context }).map(toSummary);
             return {
                 ownerName: "Owner",
                 creditsLeft: getCredits("owner"),
                 listings,
-                leads,
-            };
-        } catch {
-            const syncedListings = Object.values(readSyncedListingStore()).map((record) => toSummary(record.listItem));
-            return {
-                ownerName: "Owner",
-                creditsLeft: getCredits("owner"),
-                listings: syncedListings,
                 leads: readLeads(),
             };
+        } catch (error) {
+            if (RENTALS_MOCK_MODE) {
+                return {
+                    ownerName: "Owner",
+                    creditsLeft: getCredits("owner"),
+                    listings: mockPropertyList.map((item) => toSummary(item)),
+                    leads: readLeads(),
+                };
+            }
+            throw new Error(extractErrorMessage(error, "Unable to load owner dashboard"));
         }
     }
 
     async getMasters(cityId?: string): Promise<OwnerMastersData> {
-        const fallback = defaultMasters();
-
         const [cities, localities, propertyTypes, bhkTypes, furnishingTypes, availabilityTypes, amenities, keywords] =
             await Promise.allSettled([
                 rentalsService.listCities(),
@@ -231,114 +287,124 @@ class HybridOwnerAdapter implements OwnerListingAdapter {
                 rentalsService.listKeywords(),
             ]);
 
-        return {
-            cities: cities.status === "fulfilled" ? normalizeMasterOptions(cities.value).map(toMasterSelectOption) : fallback.cities,
-            localities:
-                localities.status === "fulfilled"
-                    ? normalizeMasterOptions(localities.value).map(toMasterSelectOption)
-                    : fallback.localities,
+        const parsed: OwnerMastersData = {
+            cities: cities.status === "fulfilled" ? normalizeMasterOptions(cities.value).map(toMasterSelectOption) : [],
+            localities: localities.status === "fulfilled" ? normalizeMasterOptions(localities.value).map(toMasterSelectOption) : [],
             propertyTypes:
-                propertyTypes.status === "fulfilled"
-                    ? normalizeMasterOptions(propertyTypes.value).map(toMasterSelectOption)
-                    : fallback.propertyTypes,
-            bhkTypes:
-                bhkTypes.status === "fulfilled"
-                    ? normalizeMasterOptions(bhkTypes.value).map(toMasterSelectOption)
-                    : fallback.bhkTypes,
+                propertyTypes.status === "fulfilled" ? normalizeMasterOptions(propertyTypes.value).map(toMasterSelectOption) : [],
+            bhkTypes: bhkTypes.status === "fulfilled" ? normalizeMasterOptions(bhkTypes.value).map(toMasterSelectOption) : [],
             furnishingTypes:
                 furnishingTypes.status === "fulfilled"
                     ? normalizeMasterOptions(furnishingTypes.value).map(toMasterSelectOption)
-                    : fallback.furnishingTypes,
+                    : [],
             availabilityTypes:
                 availabilityTypes.status === "fulfilled"
                     ? normalizeMasterOptions(availabilityTypes.value).map(toMasterSelectOption)
-                    : fallback.availabilityTypes,
-            amenities:
-                amenities.status === "fulfilled"
-                    ? normalizeMasterOptions(amenities.value).map(toMasterSelectOption)
-                    : fallback.amenities,
-            keywords:
-                keywords.status === "fulfilled"
-                    ? normalizeMasterOptions(keywords.value).map(toMasterSelectOption)
-                    : fallback.keywords,
+                    : [],
+            amenities: amenities.status === "fulfilled" ? normalizeMasterOptions(amenities.value).map(toMasterSelectOption) : [],
+            keywords: keywords.status === "fulfilled" ? normalizeMasterOptions(keywords.value).map(toMasterSelectOption) : [],
         };
+
+        if (RENTALS_MOCK_MODE) {
+            const fallback = defaultMasters();
+            return {
+                cities: parsed.cities.length > 0 ? parsed.cities : fallback.cities,
+                localities: parsed.localities.length > 0 ? parsed.localities : fallback.localities,
+                propertyTypes: parsed.propertyTypes.length > 0 ? parsed.propertyTypes : fallback.propertyTypes,
+                bhkTypes: parsed.bhkTypes.length > 0 ? parsed.bhkTypes : fallback.bhkTypes,
+                furnishingTypes: parsed.furnishingTypes.length > 0 ? parsed.furnishingTypes : fallback.furnishingTypes,
+                availabilityTypes: parsed.availabilityTypes.length > 0 ? parsed.availabilityTypes : fallback.availabilityTypes,
+                amenities: parsed.amenities.length > 0 ? parsed.amenities : fallback.amenities,
+                keywords: parsed.keywords.length > 0 ? parsed.keywords : fallback.keywords,
+            };
+        }
+
+        return parsed;
     }
 
     async getPropertyForEdit(id: string): Promise<OwnerListingFormInput> {
         try {
             const detailResponse = await rentalsService.getPropertyDetail(id);
-            const detail = normalizePropertyDetail(detailResponse, id);
+            const context = await buildNormalizationContext(detailResponse);
+            const detail = normalizePropertyDetail(detailResponse, id, { fallbackToMock: false, ...context });
             return {
                 ...defaultFormInput,
-                title: detail.title,
-                cityId: detail.city,
-                localityId: detail.locality,
+                propertyTitle: detail.propertyTitle || detail.title,
+                title: detail.propertyTitle || detail.title,
+                propertyTypeId: detail.propertyTypeId || "",
+                cityId: detail.cityId || "",
+                localityId: detail.localityId || "",
+                bhkId: detail.bhkId || "",
+                furnishingId: detail.furnishingId || "",
+                availabilityId: detail.availabilityId || "",
                 rent: String(detail.pricePerMonth),
                 deposit: String(detail.deposit),
                 description: detail.description,
-                contactPhone: detail.owner.whatsappNumber,
+                contactPhone: detail.owner.whatsappNumber.replace(/\D/g, "").slice(-10),
                 keywords: [...detail.highlights],
-                amenityIds: [...detail.amenities],
+                amenityIds: detail.amenityIds && detail.amenityIds.length > 0 ? [...detail.amenityIds] : [...detail.amenities],
             };
-        } catch {
-            const dashboard = await this.getDashboard();
-            const listing = dashboard.listings.find((item) => item.id === id);
-            if (!listing) return defaultFormInput;
-            return toOwnerForm(listing);
+        } catch (error) {
+            if (RENTALS_MOCK_MODE) return defaultFormInput;
+            throw new Error(extractErrorMessage(error, "Unable to load listing for edit"));
         }
     }
 
     async createProperty(input: OwnerListingFormInput): Promise<OwnerListingSummary> {
         try {
             const response = await rentalsService.createOwnerProperty(toUpsertPayload(input));
-            const parsed = normalizePropertyList([response])[0];
-            const summary = toSummary(parsed);
-            syncTenantListing(summary);
-            return summary;
+            const context = await buildNormalizationContext(response);
+            const parsed = normalizePropertyList(response, { fallbackToMock: false, ...context })[0];
+            if (!parsed) throw new Error("Unable to parse created listing");
+            return toSummary(parsed);
         } catch (error) {
-            const fallbackSummary: OwnerListingSummary = {
-                id: `owner-${Date.now()}`,
-                title: input.title,
-                locality: input.localityId || "Bengaluru",
-                city: input.cityId || "Bengaluru",
-                rent: Number(input.rent || 0),
-                deposit: Number(input.deposit || 0),
-                status: "pending_review",
-                image: mockPropertyList[0]?.image || "",
-                updatedAt: new Date().toISOString(),
-            };
-            syncTenantListing(fallbackSummary);
-            if (input.title.trim().length === 0) {
-                throw new Error(extractErrorMessage(error, "Title is required"));
+            if (RENTALS_MOCK_MODE) {
+                const fallbackSummary: OwnerListingSummary = {
+                    id: `owner-${Date.now()}`,
+                    title: titleFromInput(input),
+                    locality: input.localityId || "Bengaluru",
+                    city: input.cityId || "Bengaluru",
+                    rent: Number(input.rent || 0),
+                    deposit: Number(input.deposit || 0),
+                    status: "pending_review",
+                    image: mockPropertyList[0]?.image || "",
+                    updatedAt: new Date().toISOString(),
+                };
+                return fallbackSummary;
             }
-            return fallbackSummary;
+
+            if (titleFromInput(input).length === 0) {
+                throw new Error("Property title is required");
+            }
+            throw new Error(extractErrorMessage(error, "Unable to publish listing"));
         }
     }
 
     async updateProperty(id: string, input: OwnerListingFormInput): Promise<OwnerListingSummary> {
         try {
             const response = await rentalsService.updateOwnerProperty(id, toUpsertPayload(input));
-            const parsed = normalizePropertyList([response])[0];
-            const summary = toSummary(parsed);
-            syncTenantListing(summary);
-            return summary;
+            const context = await buildNormalizationContext(response);
+            const parsed = normalizePropertyList(response, { fallbackToMock: false, ...context })[0];
+            if (!parsed) throw new Error("Unable to parse updated listing");
+            return toSummary(parsed);
         } catch (error) {
-            if (input.title.trim().length === 0) {
-                throw new Error(extractErrorMessage(error, "Title is required"));
+            if (RENTALS_MOCK_MODE) {
+                return {
+                    id,
+                    title: titleFromInput(input),
+                    locality: input.localityId || "Bengaluru",
+                    city: input.cityId || "Bengaluru",
+                    rent: Number(input.rent || 0),
+                    deposit: Number(input.deposit || 0),
+                    status: "pending_review",
+                    image: mockPropertyList[0]?.image || "",
+                    updatedAt: new Date().toISOString(),
+                };
             }
-            const fallbackSummary: OwnerListingSummary = {
-                id,
-                title: input.title,
-                locality: input.localityId || "Bengaluru",
-                city: input.cityId || "Bengaluru",
-                rent: Number(input.rent || 0),
-                deposit: Number(input.deposit || 0),
-                status: "pending_review",
-                image: mockPropertyList[0]?.image || "",
-                updatedAt: new Date().toISOString(),
-            };
-            syncTenantListing(fallbackSummary);
-            return fallbackSummary;
+            if (titleFromInput(input).length === 0) {
+                throw new Error("Property title is required");
+            }
+            throw new Error(extractErrorMessage(error, "Unable to update listing"));
         }
     }
 

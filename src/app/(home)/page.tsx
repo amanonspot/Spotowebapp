@@ -32,6 +32,7 @@ export default function HomePage() {
     const [feed, setFeed] = useState<HomeFeed>(initialFeed);
     const [loading, setLoading] = useState(true);
     const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+    const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
         let mounted = true;
@@ -39,9 +40,15 @@ export default function HomePage() {
         const loadFeed = async () => {
             try {
                 setLoading(true);
+                setError(null);
                 const nextFeed = await propertyAdapter.getHomeFeed();
                 if (mounted) {
                     setFeed(nextFeed);
+                }
+            } catch (feedError) {
+                if (mounted) {
+                    setFeed(initialFeed);
+                    setError(feedError instanceof Error ? feedError.message : "Unable to load listings");
                 }
             } finally {
                 if (mounted) {
@@ -136,10 +143,19 @@ export default function HomePage() {
                             Sort by
                         </button>
                     </div>
+                    {error ? (
+                        <div className="mb-4 rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-100">
+                            {error}
+                        </div>
+                    ) : null}
 
                     {loading ? (
                         <div className="rounded-2xl border border-white/10 bg-[#0f0f13] p-6 text-center text-white/70">
                             Loading listings...
+                        </div>
+                    ) : visibleListings.length === 0 ? (
+                        <div className="rounded-2xl border border-white/10 bg-[#0f0f13] p-6 text-center text-white/70">
+                            No properties available right now.
                         </div>
                     ) : (
                         <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">

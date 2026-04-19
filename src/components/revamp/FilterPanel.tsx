@@ -1,14 +1,14 @@
 "use client";
 
 import React, { useMemo } from "react";
-import { BHKOption, FilterState, MoveInOption, PropertyType } from "@/lib/adapters/types";
+import { BHKOption, FilterState, MoveInOption, PropertyType, SelectOption } from "@/lib/adapters/types";
 import Chip from "@/components/revamp/Chip";
 import PrimaryButton from "@/components/revamp/PrimaryButton";
 
 interface FilterPanelProps {
     isOpen: boolean;
     filters: FilterState;
-    localities: string[];
+    localities: SelectOption[];
     onChange: (filters: FilterState) => void;
     onClose: () => void;
     onApply: () => void;
@@ -55,10 +55,10 @@ export default function FilterPanel({
     onApply,
     onSkip,
 }: FilterPanelProps) {
-    const filteredLocalities = useMemo(
-        () => localities.filter((locality) => locality.toLowerCase().includes(filters.query.toLowerCase())),
-        [localities, filters.query]
-    );
+    const filteredLocalities = useMemo(() => {
+        const query = filters.query.toLowerCase();
+        return localities.filter((locality) => locality.name.toLowerCase().includes(query));
+    }, [localities, filters.query]);
 
     if (!isOpen) return null;
 
@@ -90,13 +90,20 @@ export default function FilterPanel({
                         <div className="mt-3 flex flex-wrap gap-3">
                             {filteredLocalities.map((locality) => (
                                 <Chip
-                                    key={locality}
-                                    label={locality}
-                                    selected={filters.selectedLocalities.includes(locality)}
+                                    key={locality.id}
+                                    label={locality.name}
+                                    selected={(filters.selectedLocalityIds || []).includes(locality.id)}
                                     onClick={() =>
                                         onChange({
                                             ...filters,
-                                            selectedLocalities: toggleValue(filters.selectedLocalities, locality),
+                                            selectedLocalities: toggleValue(
+                                                filters.selectedLocalities,
+                                                locality.name
+                                            ),
+                                            selectedLocalityIds: toggleValue(
+                                                filters.selectedLocalityIds || [],
+                                                locality.id
+                                            ),
                                         })
                                     }
                                 />

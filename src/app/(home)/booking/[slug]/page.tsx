@@ -7,6 +7,7 @@ import UnlockCard from "@/components/revamp/UnlockCard";
 import PrimaryButton from "@/components/revamp/PrimaryButton";
 import { authAdapter, checkoutAdapter, propertyAdapter } from "@/lib/adapters";
 import { CheckoutState, PropertyDetail } from "@/lib/adapters/types";
+import { RENTALS_MOCK_MODE } from "@/lib/rentals";
 
 interface PageProps {
     params: Promise<{ slug: string }>;
@@ -22,6 +23,8 @@ export default function BookingDetailPage({ params }: PageProps) {
     const [checkoutState, setCheckoutState] = useState<CheckoutState | null>(null);
     const [showCheckoutModal, setShowCheckoutModal] = useState(false);
     const [isUnlocked, setIsUnlocked] = useState(false);
+    const [activeImageIndex, setActiveImageIndex] = useState(0);
+    const [unlocking, setUnlocking] = useState(false);
 
     useEffect(() => {
         let mounted = true;
@@ -51,6 +54,10 @@ export default function BookingDetailPage({ params }: PageProps) {
         };
     }, [slug]);
 
+    useEffect(() => {
+        setActiveImageIndex(0);
+    }, [property?.id]);
+
     const handlePayNow = async () => {
         if (property === null) return;
         const session = authAdapter.getSession();
@@ -59,13 +66,27 @@ export default function BookingDetailPage({ params }: PageProps) {
             return;
         }
 
-        const pending = await checkoutAdapter.startUnlock({
-            propertyId: property.id,
-            amount: property.unlockOffer.weeklyPassPrice,
-        });
+        setUnlocking(true);
+        try {
+            const pending = await checkoutAdapter.startUnlock({
+                propertyId: property.id,
+                amount: property.unlockOffer.weeklyPassPrice,
+            });
+            setCheckoutState(pending);
 
-        setCheckoutState(pending);
-        setShowCheckoutModal(true);
+            if (RENTALS_MOCK_MODE) {
+                setShowCheckoutModal(true);
+                return;
+            }
+
+            const resolved = await checkoutAdapter.confirmUnlock(pending.id);
+            setCheckoutState(resolved);
+            if (resolved.status === "success") {
+                setIsUnlocked(true);
+            }
+        } finally {
+            setUnlocking(false);
+        }
     };
 
     const completeCheckout = async (outcome: "success" | "failed") => {
@@ -109,11 +130,14 @@ export default function BookingDetailPage({ params }: PageProps) {
                   whatsappNumber: checkoutState.unlockedPhone,
               }
             : property.owner;
+    const galleryImages =
+        property.galleryImages && property.galleryImages.length > 0 ? property.galleryImages : [property.image];
+    const activeImage = galleryImages[Math.min(activeImageIndex, galleryImages.length - 1)] || property.image;
 
     return (
         <main className="min-h-screen bg-[#050507] pb-28 text-white md:pb-10">
             <div className="relative h-[320px] w-full md:h-[420px]">
-                <img src={property.image} alt={property.title} className="h-full w-full object-cover" />
+                <img src={activeImage} alt={property.title} className="h-full w-full object-cover" />
                 <button
                     onClick={() => router.back()}
                     className="absolute left-4 top-4 rounded-full bg-black/50 px-3 py-2 text-sm font-semibold"
@@ -121,6 +145,22 @@ export default function BookingDetailPage({ params }: PageProps) {
                     ← Back
                 </button>
             </div>
+            {galleryImages.length > 1 ? (
+                <div className="mx-auto mt-3 flex max-w-[1180px] gap-2 overflow-x-auto px-4 md:px-6 lg:px-8">
+                    {galleryImages.map((image, index) => (
+                        <button
+                            key={`${image}-${index}`}
+                            type="button"
+                            onClick={() => setActiveImageIndex(index)}
+                            className={`h-16 w-24 shrink-0 overflow-hidden rounded-lg border ${
+                                activeImageIndex === index ? "border-[#B7F041]" : "border-white/20"
+                            }`}
+                        >
+                            <img src={image} alt={`${property.title}-${index + 1}`} className="h-full w-full object-cover" />
+                        </button>
+                    ))}
+                </div>
+            ) : null}
 
             <div className="mx-auto grid max-w-[1180px] grid-cols-1 gap-6 px-4 py-6 md:grid-cols-[1.4fr_0.9fr] md:px-6 lg:px-8">
                 <section className="space-y-6">
@@ -170,11 +210,11 @@ export default function BookingDetailPage({ params }: PageProps) {
 
             <div className="fixed bottom-0 left-0 right-0 border-t border-white/10 bg-[#0c0c12] p-4 md:hidden">
                 <PrimaryButton onClick={handlePayNow} className="w-full text-lg">
-                    {isUnlocked ? "Owner Contacts Unlocked" : "Get 99 Unlimited Pass"}
+                    {unlocking ? "Unlocking..." : isUnlocked ? "Owner Contacts Unlocked" : "Get 99 Unlimited Pass"}
                 </PrimaryButton>
             </div>
 
-            {showCheckoutModal ? (
+            {RENTALS_MOCK_MODE && showCheckoutModal ? (
                 <div className="fixed inset-0 z-[120] bg-black/80 backdrop-blur-sm">
                     <div className="mx-auto mt-24 w-[92%] max-w-md rounded-2xl border border-white/20 bg-[#121218] p-5 text-white">
                         <h3 className="text-xl font-semibold">Prototype Checkout</h3>

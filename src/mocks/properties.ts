@@ -187,10 +187,13 @@ export const mockLocalities: string[] = Array.from(new Set(mockPropertyList.map(
 export const defaultFilterState: FilterState = {
     query: "",
     selectedLocalities: [],
+    selectedLocalityIds: [],
     bhk: [],
+    selectedBhkIds: [],
     budgetMin: 0,
     budgetMax: 200000,
     propertyTypes: [],
+    selectedPropertyTypeIds: [],
     moveInBy: [],
     sortBy: "recommended",
 };

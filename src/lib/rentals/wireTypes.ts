@@ -24,17 +24,21 @@ export interface RentalMasterOptionWire extends UnknownRecord {
 export interface RentalMediaWire extends UnknownRecord {
     id?: string;
     url?: string;
+    image_url?: string;
     file?: string;
     media_file?: string;
     image?: string;
     is_cover?: boolean;
     display_image?: boolean;
+    is_primary?: boolean;
+    sort_order?: number;
 }
 
 export interface RentalPropertyWire extends UnknownRecord {
     id?: string;
     property_id?: string;
     title?: string;
+    property_title?: string;
     name?: string;
     rent?: number | string;
     monthly_rent?: number | string;
@@ -50,17 +54,26 @@ export interface RentalPropertyWire extends UnknownRecord {
     locality_name?: string;
     property_type?: RentalMasterOptionWire | string;
     property_type_id?: string;
+    property_type_code?: string;
+    property_type_name?: string;
     bhk?: RentalMasterOptionWire | string;
     bhk_id?: string;
+    bhk_name?: string;
+    bhk_value?: number | string;
     furnishing?: RentalMasterOptionWire | string;
     furnishing_id?: string;
+    furnishing_name?: string;
+    furnishing_code?: string;
     availability?: RentalMasterOptionWire | string;
     availability_id?: string;
+    availability_name?: string;
+    availability_code?: string;
     built_up_area_sqft?: number | string;
     amenities?: Array<RentalMasterOptionWire | string>;
     amenity_ids?: string[] | string;
     keywords?: Array<RentalMasterOptionWire | string> | string;
     status?: string;
+    is_verified?: boolean;
     contact_phone?: string;
     images?: RentalMediaWire[];
     image_files?: RentalMediaWire[];
@@ -100,7 +113,8 @@ export interface RentalPassActivateResponseWire extends UnknownRecord {
 }
 
 export interface OwnerPropertyUpsertPayload {
-    title: string;
+    propertyTitle: string;
+    title?: string;
     propertyTypeId: string;
     cityId: string;
     localityId: string;
@@ -121,4 +135,3 @@ export interface OwnerPropertyUpsertPayload {
     clearImages?: boolean;
     clearDocuments?: boolean;
 }
-

@@ -7,7 +7,7 @@ import Chip from "@/components/revamp/Chip";
 import FilterPanel from "@/components/revamp/FilterPanel";
 import RevampPropertyCard from "@/components/revamp/PropertyCard";
 import { propertyAdapter } from "@/lib/adapters";
-import { FilterState, PropertyListItem } from "@/lib/adapters/types";
+import { FilterState, PropertyListItem, SelectOption } from "@/lib/adapters/types";
 import { defaultFilterState } from "@/mocks/properties";
 
 const PREF_FLAG = "spoto_pref_completed";
@@ -23,17 +23,22 @@ export default function SearchPage() {
     const router = useRouter();
     const searchParams = useSearchParams();
 
-    const [localities, setLocalities] = useState<string[]>([]);
+    const [localities, setLocalities] = useState<SelectOption[]>([]);
     const [filters, setFilters] = useState<FilterState>(defaultFilterState);
     const [results, setResults] = useState<PropertyListItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [showPanel, setShowPanel] = useState(false);
+    const [error, setError] = useState<string | null>(null);
 
     const runSearch = useCallback(async (nextFilters: FilterState) => {
         setLoading(true);
+        setError(null);
         try {
             const data = await propertyAdapter.searchProperties(nextFilters);
             setResults(data);
+        } catch (searchError) {
+            setResults([]);
+            setError(searchError instanceof Error ? searchError.message : "Unable to search properties");
         } finally {
             setLoading(false);
         }
@@ -55,7 +60,11 @@ export default function SearchPage() {
             const feed = await propertyAdapter.getHomeFeed();
             if (mounted === false) return;
 
-            setLocalities(feed.localities);
+            setLocalities(
+                feed.localityOptions && feed.localityOptions.length > 0
+                    ? feed.localityOptions
+                    : feed.localities.map((name) => ({ id: name, name }))
+            );
 
             if (typeof window !== "undefined") {
                 const done = window.localStorage.getItem(PREF_FLAG);
@@ -130,6 +139,11 @@ export default function SearchPage() {
                 </div>
 
                 <div className="mb-4 text-sm text-white/70">{loading ? "Searching..." : results.length + " results found"}</div>
+                {error ? (
+                    <div className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-100">
+                        {error}
+                    </div>
+                ) : null}
 
                 {loading ? (
                     <div className="rounded-2xl border border-white/10 bg-[#0f0f13] p-6 text-center text-white/70">

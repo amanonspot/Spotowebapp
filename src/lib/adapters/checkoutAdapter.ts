@@ -1,7 +1,7 @@
 import { CheckoutAdapter, CheckoutState, StartUnlockPayload } from "@/lib/adapters/types";
 import { authAdapter } from "@/lib/adapters/authAdapter";
 import { mockPropertyDetails } from "@/mocks/properties";
-import { addUnlockedTenantContact, consumeCredit, getCredits, rentalsService } from "@/lib/rentals";
+import { addUnlockedTenantContact, consumeCredit, extractErrorMessage, getCredits, RENTALS_MOCK_MODE, rentalsService } from "@/lib/rentals";
 
 const CHECKOUT_KEY = "spoto_checkout_records_v2";
 
@@ -82,43 +82,59 @@ class HybridCheckoutAdapter implements CheckoutAdapter {
 
         try {
             const response = await rentalsService.unlockPropertyContact(current.propertyId, payload);
+            const responseRecord = response as Record<string, unknown>;
+            const nested = (responseRecord.data || responseRecord.contact || {}) as Record<string, unknown>;
+
             const unlockedPhone =
                 (response.phone as string) ||
                 (response.owner_phone as string) ||
-                ((response.contact as Record<string, unknown> | undefined)?.phone as string) ||
+                (nested.phone as string) ||
                 "";
             const unlockedName =
                 (response.owner_name as string) ||
-                ((response.contact as Record<string, unknown> | undefined)?.name as string) ||
+                (nested.name as string) ||
                 "Owner";
+            const successFlag = responseRecord.success;
+
+            if (successFlag === false || !unlockedPhone) {
+                throw new Error((response.message as string) || "Unable to unlock owner contact.");
+            }
 
             const success: CheckoutState = {
                 ...current,
                 status: "success",
-                message: response.message || "Owner contact unlocked.",
-                unlockedPhone: unlockedPhone || undefined,
+                message: (response.message as string) || "Owner contact unlocked.",
+                unlockedPhone,
                 unlockedName,
                 creditsRemaining: getCredits("tenant"),
                 updatedAt: new Date().toISOString(),
             };
 
-            if (success.unlockedPhone) {
-                addUnlockedTenantContact({
-                    id: `tenant_unlock_${Date.now()}`,
-                    propertyId: current.propertyId,
-                    name: unlockedName,
-                    phone: success.unlockedPhone,
-                    source: "api",
-                    unlockedAt: success.updatedAt,
-                });
-            }
+            addUnlockedTenantContact({
+                id: `tenant_unlock_${Date.now()}`,
+                propertyId: current.propertyId,
+                name: unlockedName,
+                phone: unlockedPhone,
+                source: "api",
+                unlockedAt: success.updatedAt,
+            });
 
             saveState(success);
             return success;
-        } catch {
+        } catch (error) {
+            if (!RENTALS_MOCK_MODE) {
+                const failed: CheckoutState = {
+                    ...current,
+                    status: "failed",
+                    message: extractErrorMessage(error, "Unable to unlock owner contact."),
+                    updatedAt: new Date().toISOString(),
+                };
+                saveState(failed);
+                return failed;
+            }
+
             const credit = consumeCredit("tenant");
             const fallback = getFallbackContact(current.propertyId);
-
             if (!credit.success || !fallback) {
                 const blocked: CheckoutState = {
                     ...current,

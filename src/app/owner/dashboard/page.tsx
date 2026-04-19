@@ -139,8 +139,13 @@ export default function OwnerDashboardPage() {
 
                 <section className="mt-8">
                     <h2 className="mb-3 text-xl font-semibold">Tenant Leads</h2>
-                    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                        {dashboard.leads.map((lead) => (
+                    {dashboard.leads.length === 0 ? (
+                        <div className="rounded-2xl border border-white/10 bg-[#0f0f13] p-4 text-white/70">
+                            No leads unlocked yet.
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                            {dashboard.leads.map((lead) => (
                             <article key={lead.id} className="rounded-2xl border border-[#A67AEB]/40 bg-[#101019] p-4">
                                 <p className="text-xs text-white/70">Tenant</p>
                                 <h3 className="text-xl font-semibold">{lead.tenantName}</h3>
@@ -178,8 +183,9 @@ export default function OwnerDashboardPage() {
                                     )}
                                 </div>
                             </article>
-                        ))}
-                    </div>
+                            ))}
+                        </div>
+                    )}
                 </section>
             </div>
 

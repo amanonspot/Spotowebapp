@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { ChevronDown } from "lucide-react";
 import PrimaryButton from "@/components/revamp/PrimaryButton";
 import { OwnerListingFormInput, OwnerMastersData, SelectOption } from "@/lib/adapters/types";
 import { ownerAdapter } from "@/lib/adapters";
@@ -13,6 +14,7 @@ interface OwnerListingFormProps {
 }
 
 const emptyForm: OwnerListingFormInput = {
+    propertyTitle: "",
     title: "",
     propertyTypeId: "",
     cityId: "",
@@ -44,13 +46,41 @@ const emptyMasters: OwnerMastersData = {
     keywords: [],
 };
 
-const toKeywordOption = (value: string): SelectOption => ({
-    id: value.toLowerCase().replace(/\s+/g, "-"),
-    name: value,
-});
-
 const sanitizeNumericInput = (value: string) => value.replace(/[^\d]/g, "");
 const sanitizeKeywordInput = (value: string) => value.replace(/[^\w\s-]/g, "").slice(0, 40);
+const controlBaseClass =
+    "h-11 w-full rounded-xl border border-white/15 bg-[#0d0d14] px-3 text-sm text-white/90 outline-none transition placeholder:text-white/35 focus:border-[#A67AEB]";
+
+interface SelectInputProps {
+    value: string;
+    placeholder: string;
+    options: SelectOption[];
+    onChange: (value: string) => void;
+}
+
+function SelectInput({ value, placeholder, options, onChange }: SelectInputProps) {
+    return (
+        <div className="relative">
+            <select
+                value={value}
+                onChange={(event) => onChange(event.target.value)}
+                className={`${controlBaseClass} appearance-none pr-10`}
+                style={{ colorScheme: "dark" }}
+            >
+                <option value="">{placeholder}</option>
+                {options.map((option) => (
+                    <option key={option.id} value={option.id}>
+                        {option.name}
+                    </option>
+                ))}
+            </select>
+            <ChevronDown
+                className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/55"
+                aria-hidden="true"
+            />
+        </div>
+    );
+}
 
 export default function OwnerListingForm({ mode, propertyId, initialValue }: OwnerListingFormProps) {
     const router = useRouter();
@@ -75,6 +105,10 @@ export default function OwnerListingForm({ mode, propertyId, initialValue }: Own
             try {
                 const data = await ownerAdapter.getMasters(form.cityId || undefined);
                 if (mounted) setMasters(data);
+            } catch (loadError) {
+                if (mounted) {
+                    setError(loadError instanceof Error ? loadError.message : "Unable to load master values");
+                }
             } finally {
                 if (mounted) setBootLoading(false);
             }
@@ -96,9 +130,13 @@ export default function OwnerListingForm({ mode, propertyId, initialValue }: Own
 
     const requiredMissing = useMemo(() => {
         const required: Array<keyof OwnerListingFormInput> = [
-            "title",
+            "propertyTitle",
+            "propertyTypeId",
             "cityId",
             "localityId",
+            "bhkId",
+            "furnishingId",
+            "availabilityId",
             "rent",
             "deposit",
             "contactPhone",
@@ -165,11 +203,20 @@ export default function OwnerListingForm({ mode, propertyId, initialValue }: Own
         }
     };
 
-    const keywordOptions = useMemo(() => {
-        const seeded = masters.keywords.map((item) => item.name);
-        const merged = [...seeded, ...form.keywords].filter(Boolean);
-        return Array.from(new Set(merged)).map(toKeywordOption);
-    }, [masters.keywords, form.keywords]);
+    const keywordOptions = useMemo(() => masters.keywords, [masters.keywords]);
+
+    const defaultKeywordSet = useMemo(
+        () => new Set(masters.keywords.map((item) => item.id)),
+        [masters.keywords]
+    );
+
+    const customSelectedKeywords = useMemo(
+        () => form.keywords.filter((keyword) => !defaultKeywordSet.has(keyword)),
+        [form.keywords, defaultKeywordSet]
+    );
+
+    const sizeValue = Number(form.builtUpAreaSqft || 0);
+    const sizeProgress = Math.min(100, Math.max(0, (sizeValue / 5000) * 100));
 
     return (
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -177,66 +224,45 @@ export default function OwnerListingForm({ mode, propertyId, initialValue }: Own
                 <h2 className="text-lg font-semibold text-white">Basic Details</h2>
                 <div className="mt-3 grid gap-3 md:grid-cols-2">
                     <input
-                        value={form.title}
-                        onChange={(event) => updateField("title", event.target.value)}
+                        value={form.propertyTitle}
+                        onChange={(event) => {
+                            updateField("propertyTitle", event.target.value);
+                            updateField("title", event.target.value);
+                        }}
                         placeholder="Property title"
-                        className="rounded-xl border border-white/15 bg-[#0d0d14] px-3 py-2 text-sm outline-none focus:border-[#A67AEB]"
+                        className={controlBaseClass}
                     />
                     <input
                         value={form.contactPhone}
                         onChange={(event) => updateField("contactPhone", sanitizeNumericInput(event.target.value).slice(0, 10))}
                         placeholder="Owner phone"
                         inputMode="numeric"
-                        className="rounded-xl border border-white/15 bg-[#0d0d14] px-3 py-2 text-sm outline-none focus:border-[#A67AEB]"
+                        className={controlBaseClass}
                     />
-                    <select
+                    <SelectInput
                         value={form.cityId}
-                        onChange={(event) => updateField("cityId", event.target.value)}
-                        className="rounded-xl border border-white/15 bg-[#0d0d14] px-3 py-2 text-sm outline-none focus:border-[#A67AEB]"
-                    >
-                        <option value="">Select city</option>
-                        {masters.cities.map((option) => (
-                            <option key={option.id} value={option.id}>
-                                {option.name}
-                            </option>
-                        ))}
-                    </select>
-                    <select
+                        placeholder="Select city"
+                        options={masters.cities}
+                        onChange={(value) => updateField("cityId", value)}
+                    />
+                    <SelectInput
                         value={form.localityId}
-                        onChange={(event) => updateField("localityId", event.target.value)}
-                        className="rounded-xl border border-white/15 bg-[#0d0d14] px-3 py-2 text-sm outline-none focus:border-[#A67AEB]"
-                    >
-                        <option value="">Select locality</option>
-                        {masters.localities.map((option) => (
-                            <option key={option.id} value={option.id}>
-                                {option.name}
-                            </option>
-                        ))}
-                    </select>
-                    <select
+                        placeholder="Select locality"
+                        options={masters.localities}
+                        onChange={(value) => updateField("localityId", value)}
+                    />
+                    <SelectInput
                         value={form.propertyTypeId}
-                        onChange={(event) => updateField("propertyTypeId", event.target.value)}
-                        className="rounded-xl border border-white/15 bg-[#0d0d14] px-3 py-2 text-sm outline-none focus:border-[#A67AEB]"
-                    >
-                        <option value="">Property type</option>
-                        {masters.propertyTypes.map((option) => (
-                            <option key={option.id} value={option.id}>
-                                {option.name}
-                            </option>
-                        ))}
-                    </select>
-                    <select
+                        placeholder="Property type"
+                        options={masters.propertyTypes}
+                        onChange={(value) => updateField("propertyTypeId", value)}
+                    />
+                    <SelectInput
                         value={form.bhkId}
-                        onChange={(event) => updateField("bhkId", event.target.value)}
-                        className="rounded-xl border border-white/15 bg-[#0d0d14] px-3 py-2 text-sm outline-none focus:border-[#A67AEB]"
-                    >
-                        <option value="">BHK type</option>
-                        {masters.bhkTypes.map((option) => (
-                            <option key={option.id} value={option.id}>
-                                {option.name}
-                            </option>
-                        ))}
-                    </select>
+                        placeholder="BHK type"
+                        options={masters.bhkTypes}
+                        onChange={(value) => updateField("bhkId", value)}
+                    />
                 </div>
             </section>
 
@@ -248,54 +274,45 @@ export default function OwnerListingForm({ mode, propertyId, initialValue }: Own
                         onChange={(event) => updateField("rent", sanitizeNumericInput(event.target.value))}
                         inputMode="numeric"
                         placeholder="Monthly rent"
-                        className="rounded-xl border border-white/15 bg-[#0d0d14] px-3 py-2 text-sm outline-none focus:border-[#A67AEB]"
+                        className={controlBaseClass}
                     />
                     <input
                         value={form.deposit}
                         onChange={(event) => updateField("deposit", sanitizeNumericInput(event.target.value))}
                         inputMode="numeric"
                         placeholder="Security deposit"
-                        className="rounded-xl border border-white/15 bg-[#0d0d14] px-3 py-2 text-sm outline-none focus:border-[#A67AEB]"
+                        className={controlBaseClass}
                     />
                     <div className="rounded-xl border border-white/15 bg-[#0d0d14] px-3 py-2">
                         <div className="mb-2 flex items-center justify-between text-xs text-white/70">
                             <span>Property size</span>
-                            <span>{form.builtUpAreaSqft || "0"} sq ft</span>
+                            <span>{sizeValue.toLocaleString("en-IN")} sq ft</span>
                         </div>
                         <input
                             type="range"
                             min={0}
                             max={5000}
                             step={10}
-                            value={Number(form.builtUpAreaSqft || 0)}
+                            value={sizeValue}
                             onChange={(event) => updateField("builtUpAreaSqft", sanitizeNumericInput(event.target.value))}
-                            className="w-full accent-[#B7F041]"
+                            className="h-2 w-full cursor-pointer appearance-none rounded-full bg-white/30 accent-[#B7F041]"
+                            style={{
+                                background: `linear-gradient(90deg, #B7F041 ${sizeProgress}%, rgba(255,255,255,0.3) ${sizeProgress}%)`,
+                            }}
                         />
                     </div>
-                    <select
+                    <SelectInput
                         value={form.availabilityId}
-                        onChange={(event) => updateField("availabilityId", event.target.value)}
-                        className="rounded-xl border border-white/15 bg-[#0d0d14] px-3 py-2 text-sm outline-none focus:border-[#A67AEB]"
-                    >
-                        <option value="">Availability</option>
-                        {masters.availabilityTypes.map((option) => (
-                            <option key={option.id} value={option.id}>
-                                {option.name}
-                            </option>
-                        ))}
-                    </select>
-                    <select
+                        placeholder="Availability"
+                        options={masters.availabilityTypes}
+                        onChange={(value) => updateField("availabilityId", value)}
+                    />
+                    <SelectInput
                         value={form.furnishingId}
-                        onChange={(event) => updateField("furnishingId", event.target.value)}
-                        className="rounded-xl border border-white/15 bg-[#0d0d14] px-3 py-2 text-sm outline-none focus:border-[#A67AEB]"
-                    >
-                        <option value="">Furnishing</option>
-                        {masters.furnishingTypes.map((option) => (
-                            <option key={option.id} value={option.id}>
-                                {option.name}
-                            </option>
-                        ))}
-                    </select>
+                        placeholder="Furnishing"
+                        options={masters.furnishingTypes}
+                        onChange={(value) => updateField("furnishingId", value)}
+                    />
                 </div>
             </section>
 
@@ -306,14 +323,14 @@ export default function OwnerListingForm({ mode, propertyId, initialValue }: Own
                         value={form.addressLine}
                         onChange={(event) => updateField("addressLine", event.target.value)}
                         placeholder="Flat, street, area"
-                        className="w-full rounded-xl border border-white/15 bg-[#0d0d14] px-3 py-2 text-sm outline-none focus:border-[#A67AEB]"
+                        className={controlBaseClass}
                     />
                     <textarea
                         value={form.description}
                         onChange={(event) => updateField("description", event.target.value)}
                         placeholder="Describe your property"
                         rows={4}
-                        className="w-full rounded-xl border border-white/15 bg-[#0d0d14] px-3 py-2 text-sm outline-none focus:border-[#A67AEB]"
+                        className="w-full rounded-xl border border-white/15 bg-[#0d0d14] px-3 py-2 text-sm text-white/90 outline-none transition placeholder:text-white/35 focus:border-[#A67AEB]"
                     />
                 </div>
             </section>
@@ -342,7 +359,7 @@ export default function OwnerListingForm({ mode, propertyId, initialValue }: Own
 
                 <div className="mt-4 flex flex-wrap gap-2">
                     {keywordOptions.map((option) => {
-                        const selected = form.keywords.includes(option.name);
+                        const selected = form.keywords.includes(option.id);
                         return (
                             <button
                                 key={option.id}
@@ -351,8 +368,8 @@ export default function OwnerListingForm({ mode, propertyId, initialValue }: Own
                                     updateField(
                                         "keywords",
                                         selected
-                                            ? form.keywords.filter((item) => item !== option.name)
-                                            : [...form.keywords, option.name]
+                                            ? form.keywords.filter((item) => item !== option.id)
+                                            : [...form.keywords, option.id]
                                     )
                                 }
                                 className={`rounded-full border px-3 py-1 text-xs transition ${
@@ -373,20 +390,20 @@ export default function OwnerListingForm({ mode, propertyId, initialValue }: Own
                         onChange={(event) => setCustomKeyword(sanitizeKeywordInput(event.target.value))}
                         placeholder="Add custom keyword"
                         maxLength={40}
-                        className="flex-1 rounded-xl border border-white/15 bg-[#0d0d14] px-3 py-2 text-sm outline-none focus:border-[#A67AEB]"
+                        className={`${controlBaseClass} flex-1`}
                     />
                     <button
                         type="button"
                         onClick={addCustomKeyword}
-                        className="rounded-xl bg-white px-3 py-2 text-sm font-semibold text-black hover:bg-white/90"
+                        className="h-11 rounded-xl bg-white px-4 text-sm font-semibold text-black transition hover:bg-white/90 active:scale-[0.99]"
                     >
                         Add
                     </button>
                 </div>
 
-                {form.keywords.length > 0 && (
+                {customSelectedKeywords.length > 0 && (
                     <div className="mt-3 flex flex-wrap gap-2">
-                        {form.keywords.map((keyword) => (
+                        {customSelectedKeywords.map((keyword) => (
                             <span
                                 key={keyword}
                                 className="group inline-flex items-center rounded-full border border-[#A67AEB]/40 bg-[#A67AEB]/10 px-3 py-1 text-xs text-[#E6DAFF]"
