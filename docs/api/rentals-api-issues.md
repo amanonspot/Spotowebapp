@@ -1,71 +1,80 @@
-# Rentals API Integration Issues and Clarifications
+# Rentals API Issues (Frontend Audit)
 
-## Malformed or inconsistent endpoints in collection
+## 1) Malformed Endpoints in Collection Samples
 1. `DELETE api/rental/masters/property-types/delete/`
-- Missing `{{baseUrl}}` prefix and leading slash.
-- Cannot be consumed as-is in frontend tooling.
+- Missing base-url variable and leading slash.
+- Not consumable as-is by frontend tooling.
 
 2. `DELETE /api/rental/masters/bhk-types/delete/?bhk_id`
-- Uses root-relative URL while other requests use `{{baseUrl}}/...`.
-- Needs consistent canonical URL from backend.
+- Inconsistent formatting vs other collection entries using full base path pattern.
+- Needs one canonical style from backend docs/collection.
 
-3. `GET /api/rental/masters/keywords/` includes raw OTP-like request body in collection sample
-- GET with unrelated raw body payload likely a Postman artifact.
-- Frontend ignores body for this GET call.
+## 2) Localhost-Hardcoded Endpoints
+1. Legacy non-rentals sample detected in collection:
+- `http://127.0.0.1:8000/api/event/...`
+- Not used by rentals integration and must not be used in deploy config.
 
-## Localhost-hardcoded endpoints
-1. Non-rentals legacy example present in collection:
-- `http://127.0.0.1:8000/api/event/listing...`
-- Not used for Rentals integration and should not be used in production frontend.
+## 3) Missing / Inconsistent Env Dependencies
+1. Multiple frontend env keys exist:
+- `NEXT_PUBLIC_API_BASE_URL` (preferred)
+- `NEXT_PUBLIC_API_URL` (legacy fallback)
 
-## Missing / conflicting env dependencies
-1. Codebase currently has mixed usage:
-- `NEXT_PUBLIC_API_BASE_URL` (new preferred)
-- `NEXT_PUBLIC_API_URL` (legacy)
-- hardcoded production URL fallback in existing client/config.
+2. Required deploy action:
+- Ensure Netlify/production defines `NEXT_PUBLIC_API_BASE_URL`.
+- Keep legacy fallback only for backward compatibility during migration.
 
-2. Action taken in integration:
-- Prefer `NEXT_PUBLIC_API_BASE_URL`.
-- Keep `NEXT_PUBLIC_API_URL` as backward-compatible fallback.
-- Keep production URL fallback only as final safety.
-
-## Ambiguous request/response contracts (needs backend confirmation)
+## 4) Ambiguous Request / Response Fields
 1. `POST /api/rental/properties/get-contact/?property_id=...`
-- Exact success payload shape unclear (owner contact object vs message wrapper).
-- Error payload for “credits exhausted/pass required” is not documented.
+- Exact error envelope shape on exhausted free unlocks varies by server path (`402` + body vs success:false paywall envelope).
+- Frontend now handles both patterns, but backend should standardize one contract.
 
 2. `POST /api/rental/passes/activate/`
-- Response shape for order/session/redirect not documented in collection examples.
-- Frontend keeps adapter-level provisional mapping and resilient fallback.
+- Contract-critical fields (`razorpay_order_id`, `razorpay_key_id`, `amount`, `currency`) must always be present for checkout.
+- Any optional/nullable behavior should be explicitly documented.
 
-3. `GET /api/rental/properties/` and `GET ...?property_id=...`
-- No saved examples for list/detail shape.
-- Potential field-name variance (`id` vs `property_id`, nested city/locality/media forms).
-- Frontend uses normalizers with defensive fallback fields.
+3. `GET /api/rental/properties/` and `GET /api/rental/properties/detail/`
+- Field aliases can vary (`title` vs `property_title`, `amenities[]` vs `amenity_ids[]`, `keywords[]` vs `keyword_ids[]`).
+- Frontend normalizes variants, but backend should provide one canonical shape.
 
-4. `GET /api/rental/my/properties/`
-- Listing status fields and media/document arrays are not documented in examples.
-- Dashboard/edit flow relies on provisional wire types + normalizers.
+4. Owner property list payload shape
+- Some records may omit display-friendly labels while returning ids only.
+- Frontend resolves using masters, but backend docs should define which display fields are guaranteed.
 
-5. `POST /api/rental/my/properties/create/` vs `POST /api/rental/my/properties/?property_id=...`
-- Update endpoint is POST + query id (not PATCH/PUT), confirmed from collection structure.
-- Need backend confirmation on which fields are required for partial update and file replacement semantics.
+## 5) Endpoints Requiring Backend Clarification
+1. Owner contacts listing endpoint
+- No rentals endpoint currently returns all unlocked tenant contacts for owner dashboard/contacts.
+- Frontend currently uses local unlock state for owner contacts UI only.
 
-## Endpoints requiring backend clarification before full UI replacement
-1. Contact unlock and credit accounting source of truth
-- Need backend contract for free-credit count, deduction event, and unlock entitlement state.
-- Current frontend keeps a deterministic local fallback ledger in mock/failure path.
+2. Approval visibility semantics
+- Tenant visibility appears tied to verification + active status.
+- Backend should confirm final tenant-list inclusion rules explicitly for newly created owner listings.
 
-2. Owner contacts list endpoint
-- No dedicated endpoint in Rentals collection to fetch all unlocked tenant contacts for owner.
-- Current owner contacts view is derived from local unlock state (integration-ready placeholder).
+3. Payment activation lifecycle
+- Webhook-based final pass activation is backend-authoritative.
+- Backend should document a polling/status endpoint contract if frontend must reflect completion state.
 
-3. Master list response schemas
-- City/locality/property-type/bhk/furnishing/availability/amenity/keyword object keys not documented.
-- Normalizers currently support common key variants and fallback to mock labels.
+## 6) Frontend-Detected Integration Risks (Now Mitigated in Code)
+1. Silent API→mock masking in real mode.
+- Fixed: real mode now throws explicit errors, mock fallback only in demo mode.
 
-## Integration assumptions (explicit)
-1. Login/User APIs are treated as shared dependencies, not Rentals inventory.
-2. Missing response examples are handled with provisional wire types + adapter normalization.
-3. UI remains functional even when backend response shape differs; errors are surfaced and fallbacks retained.
+2. Synthetic create/update success summaries in real mode.
+- Fixed: create/update now require backend truth/refetch confirmation.
 
+3. Inconsistent auth application on public endpoints.
+- Fixed: public rentals endpoints use `skipAuth`; protected endpoints use Bearer token.
+
+## 7) Backend Issues for Backend Team
+1. Standardize one response envelope per endpoint family:
+- success: `{ success: true, data: ... }`
+- failure: `{ error: \"...\" }` or documented structured equivalent
+
+2. Confirm and lock canonical field names:
+- title field (`title` only vs dual support with `property_title`)
+- amenities/keywords representation consistency
+
+3. Provide owner-contacts endpoint if owner contacts should be backend-source-of-truth.
+
+4. Document hard validation behavior for:
+- `document_type` + `document_file` pairing
+- `clear_images` / `clear_documents` update semantics
+- update partial field clearing behavior (e.g., empty string vs null)

@@ -39,7 +39,7 @@ const emptyForm: OwnerListingFormInput = {
     contactPhone: "",
     amenityIds: [],
     keywords: [],
-    documentType: "electricity_bill",
+    documentType: "",
     imageFiles: [],
     documentFile: null,
 };
@@ -671,7 +671,13 @@ export default function OwnerListingWizard() {
                                 <input
                                     type="file"
                                     accept=".pdf,image/jpeg,image/png,image/jpg"
-                                    onChange={(event) => updateField("documentFile", (event.target.files || [])[0] || null)}
+                                    onChange={(event) => {
+                                        const next = (event.target.files || [])[0] || null;
+                                        updateField("documentFile", next);
+                                        if (next && !form.documentType) {
+                                            updateField("documentType", "electricity_bill");
+                                        }
+                                    }}
                                     className="hidden"
                                 />
                             </label>

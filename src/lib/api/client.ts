@@ -38,7 +38,10 @@ export interface ApiError extends Error {
     status?: number;
     errors?: Record<string, string[]>;
     unauthorized?: boolean;
+    data?: unknown;
 }
+
+type RequestConfig = AxiosRequestConfig & { skipAuth?: boolean };
 
 export const clearCache = (url?: string) => {
     if (!url) {
@@ -60,8 +63,9 @@ const apiClient: AxiosInstance = axios.create({
 });
 
 apiClient.interceptors.request.use((config) => {
+    const skipAuth = Boolean((config as RequestConfig).skipAuth);
     const token = getAccessToken();
-    if (token) {
+    if (!skipAuth && token) {
         config.headers = config.headers || {};
         config.headers.Authorization = `Bearer ${token}`;
     }
@@ -86,7 +90,7 @@ export const apiRequest = async <T = unknown>(
     method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
     url: string,
     data?: unknown,
-    config?: AxiosRequestConfig
+    config?: RequestConfig
 ): Promise<T> => {
     const cacheKey = method === "GET" ? `${method}:${url}:${JSON.stringify(config?.params || {})}` : null;
     const now = Date.now();
@@ -121,6 +125,7 @@ export const apiRequest = async <T = unknown>(
         apiError.unauthorized = unknownError.response?.status === 401;
 
         const payload = unknownError.response?.data;
+        apiError.data = payload;
         if (payload && typeof payload === "object") {
             const errors = (payload as Record<string, unknown>).errors;
             if (errors && typeof errors === "object") {
@@ -133,15 +138,15 @@ export const apiRequest = async <T = unknown>(
 };
 
 export const api = {
-    get: <T = unknown>(url: string, config?: AxiosRequestConfig) =>
+    get: <T = unknown>(url: string, config?: RequestConfig) =>
         apiRequest<T>("GET", url, undefined, config),
-    post: <T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig) =>
+    post: <T = unknown>(url: string, data?: unknown, config?: RequestConfig) =>
         apiRequest<T>("POST", url, data, config),
-    put: <T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig) =>
+    put: <T = unknown>(url: string, data?: unknown, config?: RequestConfig) =>
         apiRequest<T>("PUT", url, data, config),
-    patch: <T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig) =>
+    patch: <T = unknown>(url: string, data?: unknown, config?: RequestConfig) =>
         apiRequest<T>("PATCH", url, data, config),
-    delete: <T = unknown>(url: string, config?: AxiosRequestConfig) =>
+    delete: <T = unknown>(url: string, config?: RequestConfig) =>
         apiRequest<T>("DELETE", url, undefined, config),
 };
 

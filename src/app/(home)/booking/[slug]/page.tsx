@@ -26,6 +26,57 @@ export default function BookingDetailPage({ params }: PageProps) {
     const [activeImageIndex, setActiveImageIndex] = useState(0);
     const [unlocking, setUnlocking] = useState(false);
 
+    const openRazorpayCheckout = async (state: CheckoutState) => {
+        if (!state.payment) return;
+        if (typeof window === "undefined") return;
+
+        if (!(window as unknown as { Razorpay?: unknown }).Razorpay) {
+            await new Promise<void>((resolve, reject) => {
+                const existing = document.querySelector<HTMLScriptElement>('script[src="https://checkout.razorpay.com/v1/checkout.js"]');
+                if (existing) {
+                    resolve();
+                    return;
+                }
+                const script = document.createElement("script");
+                script.src = "https://checkout.razorpay.com/v1/checkout.js";
+                script.async = true;
+                script.onload = () => resolve();
+                script.onerror = () => reject(new Error("Unable to load Razorpay checkout script."));
+                document.body.appendChild(script);
+            });
+        }
+
+        const RazorpayCtor = (window as unknown as { Razorpay?: new (options: Record<string, unknown>) => { open: () => void } })
+            .Razorpay;
+
+        if (!RazorpayCtor) {
+            throw new Error("Razorpay checkout is unavailable.");
+        }
+
+        const razorpay = new RazorpayCtor({
+            key: state.payment.razorpayKeyId,
+            order_id: state.payment.razorpayOrderId,
+            amount: state.payment.amount,
+            currency: state.payment.currency,
+            name: "SPOTO",
+            description: "Rental pass purchase",
+            handler: () => {
+                setCheckoutState((prev) =>
+                    prev
+                        ? {
+                              ...prev,
+                              status: "pending",
+                              message: "Payment received. Your pass will activate shortly.",
+                              updatedAt: new Date().toISOString(),
+                          }
+                        : prev
+                );
+            },
+            theme: { color: "#A67AEB" },
+        });
+        razorpay.open();
+    };
+
     useEffect(() => {
         let mounted = true;
 
@@ -84,6 +135,29 @@ export default function BookingDetailPage({ params }: PageProps) {
             if (resolved.status === "success") {
                 setIsUnlocked(true);
             }
+        } finally {
+            setUnlocking(false);
+        }
+    };
+
+    const handleActivatePass = async (passType: "one_day" | "weekly") => {
+        if (!checkoutState) return;
+        setUnlocking(true);
+        try {
+            const initiated = await checkoutAdapter.activatePass(checkoutState.id, passType);
+            setCheckoutState(initiated);
+            await openRazorpayCheckout(initiated);
+        } catch (passError) {
+            setCheckoutState((prev) =>
+                prev
+                    ? {
+                          ...prev,
+                          status: "failed",
+                          message: passError instanceof Error ? passError.message : "Unable to initiate pass payment.",
+                          updatedAt: new Date().toISOString(),
+                      }
+                    : prev
+            );
         } finally {
             setUnlocking(false);
         }
@@ -204,7 +278,12 @@ export default function BookingDetailPage({ params }: PageProps) {
 
                 <aside className="space-y-4 md:sticky md:top-4 md:h-fit">
                     <OwnerCard owner={effectiveOwner} isUnlocked={isUnlocked} />
-                    <UnlockCard offer={property.unlockOffer} checkoutState={checkoutState} onPayNow={handlePayNow} />
+                    <UnlockCard
+                        offer={property.unlockOffer}
+                        checkoutState={checkoutState}
+                        onPayNow={handlePayNow}
+                        onActivatePass={handleActivatePass}
+                    />
                 </aside>
             </div>
 

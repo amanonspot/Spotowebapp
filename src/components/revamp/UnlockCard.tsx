@@ -8,9 +8,11 @@ interface UnlockCardProps {
     offer: UnlockOffer;
     checkoutState: CheckoutState | null;
     onPayNow: () => void;
+    onActivatePass?: (passType: "one_day" | "weekly") => void;
 }
 
-export default function UnlockCard({ offer, checkoutState, onPayNow }: UnlockCardProps) {
+export default function UnlockCard({ offer, checkoutState, onPayNow, onActivatePass }: UnlockCardProps) {
+    const paywall = checkoutState?.status === "paywall" ? checkoutState.paywall : undefined;
     return (
         <section className="overflow-hidden rounded-2xl border border-white/20 bg-[#111116]">
             <div className="bg-[#2A2A2A] px-4 py-3 text-2xl font-bold text-[#B7F041]">{offer.headline}</div>
@@ -38,6 +40,25 @@ export default function UnlockCard({ offer, checkoutState, onPayNow }: UnlockCar
                     {checkoutState.message}
                 </div>
             )}
+
+            {paywall ? (
+                <div className="grid gap-2 px-5 pt-3">
+                    <button
+                        type="button"
+                        onClick={() => onActivatePass?.("one_day")}
+                        className="rounded-xl border border-[#B7F041]/40 bg-[#0d0d14] px-4 py-2 text-sm font-semibold text-[#DFF8A2]"
+                    >
+                        Get One-Day Pass · ₹{paywall.oneDay.price}
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => onActivatePass?.("weekly")}
+                        className="rounded-xl border border-[#A67AEB]/40 bg-[#0d0d14] px-4 py-2 text-sm font-semibold text-[#E9DCFF]"
+                    >
+                        Get Weekly Pass · ₹{paywall.weekly.price}
+                    </button>
+                </div>
+            ) : null}
 
             <div className="p-5">
                 <PrimaryButton onClick={onPayNow} className="w-full text-lg">

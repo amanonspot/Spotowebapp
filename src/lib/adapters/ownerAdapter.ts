@@ -16,14 +16,15 @@ import {
     getUnlockedOwnerContacts,
     isUuidLike,
     normalizeMasterOptions,
-    normalizePropertyDetail,
     normalizePropertyList,
     RENTALS_MOCK_MODE,
     rentalsService,
     toMasterSelectOption,
+    UnknownRecord,
     WireApiEnvelope,
-    RentalMasterOptionWire,
-    RentalPropertyWire,
+    RentalMasterOptionDto,
+    RentalPropertyDto,
+    OwnerPropertyUpsertPayload,
 } from "@/lib/rentals";
 
 const OWNER_LEADS_KEY = "spoto_owner_leads_v1";
@@ -45,7 +46,7 @@ const defaultFormInput: OwnerListingFormInput = {
     contactPhone: "",
     amenityIds: [],
     keywords: [],
-    documentType: "electricity_bill",
+    documentType: "",
     imageFiles: [],
     documentFile: null,
 };
@@ -71,6 +72,19 @@ const defaultLeads: OwnerLeadCard[] = RENTALS_MOCK_MODE
           },
       ]
     : [];
+
+const asRecord = (value: unknown): UnknownRecord | null =>
+    value !== null && typeof value === "object" ? (value as UnknownRecord) : null;
+
+const asArray = <T = unknown>(value: unknown): T[] => (Array.isArray(value) ? (value as T[]) : []);
+
+const firstString = (...values: unknown[]): string => {
+    for (const value of values) {
+        if (typeof value === "string" && value.trim()) return value.trim();
+        if (typeof value === "number" && Number.isFinite(value)) return String(value);
+    }
+    return "";
+};
 
 const isBrowser = () => typeof window !== "undefined";
 
@@ -107,21 +121,21 @@ const defaultMasters = (): OwnerMastersData => ({
     keywords: fallbackOptions(["Near Metro", "Tech Park", "Road Facing"]),
 });
 
-const unwrapToList = (payload: WireApiEnvelope<unknown>): RentalPropertyWire[] => {
-    const envelope = payload as Record<string, unknown>;
-    const data = Array.isArray(payload)
-        ? payload
-        : Array.isArray(envelope.data)
-        ? envelope.data
-        : Array.isArray(envelope.results)
-        ? envelope.results
-        : Array.isArray(envelope.items)
-        ? envelope.items
-        : envelope.data && typeof envelope.data === "object"
-        ? [envelope.data]
-        : [];
+const unwrapData = (payload: WireApiEnvelope<unknown>) => {
+    const record = asRecord(payload);
+    if (!record) return payload;
+    if (record.data !== undefined) return record.data;
+    if (record.results !== undefined) return record.results;
+    if (record.items !== undefined) return record.items;
+    return payload;
+};
 
-    return data as RentalPropertyWire[];
+const unwrapToList = (payload: WireApiEnvelope<unknown>): RentalPropertyDto[] => {
+    const data = unwrapData(payload);
+    if (Array.isArray(data)) return data as RentalPropertyDto[];
+    const record = asRecord(data);
+    if (record) return [record as RentalPropertyDto];
+    return [];
 };
 
 const toMap = (options: SelectOption[]): Record<string, string> =>
@@ -137,11 +151,11 @@ const toToken = (value: string) =>
         .replace(/\s+/g, " ")
         .trim();
 
-const toIdByTokenMap = (wires: RentalMasterOptionWire[]): Record<string, string> =>
+const toIdByTokenMap = (wires: RentalMasterOptionDto[]): Record<string, string> =>
     wires.reduce<Record<string, string>>((acc, wire) => {
-        const id = `${wire.id || wire.uuid || ""}`.trim();
+        const id = `${wire.id || ""}`.trim();
         if (!id) return acc;
-        const tokens = [wire.name, wire.label, wire.code, `${wire.value || ""}`]
+        const tokens = [wire.name, wire.code, `${wire.bhk_value || ""}`]
             .map((value) => toToken(`${value || ""}`))
             .filter(Boolean);
         tokens.forEach((token) => {
@@ -154,21 +168,21 @@ const buildNormalizationContext = async (payload: WireApiEnvelope<unknown>) => {
     const wires = unwrapToList(payload);
     const cityIds = new Set<string>();
     wires.forEach((wire) => {
-        const cityId = `${wire.city_id || wire.city || ""}`.trim();
+        const cityId = `${wire.city_id || ""}`.trim();
         if (isUuidLike(cityId)) cityIds.add(cityId);
     });
 
     const [citiesRes, amenitiesRes, keywordsRes, localitiesRes, propertyTypesRes, bhkRes, furnishingRes, availabilityRes] =
         await Promise.allSettled([
-        rentalsService.listCities(),
-        rentalsService.listAmenities(),
-        rentalsService.listKeywords(),
-        Promise.all(Array.from(cityIds).map((cityId) => rentalsService.listLocalities(cityId))),
-        rentalsService.listPropertyTypes(),
-        rentalsService.listBhkTypes(),
-        rentalsService.listFurnishingTypes(),
-        rentalsService.listAvailabilityTypes(),
-    ]);
+            rentalsService.listCities(),
+            rentalsService.listAmenities(),
+            rentalsService.listKeywords(),
+            Promise.all(Array.from(cityIds).map((cityId) => rentalsService.listLocalities(cityId))),
+            rentalsService.listPropertyTypes(),
+            rentalsService.listBhkTypes(),
+            rentalsService.listFurnishingTypes(),
+            rentalsService.listAvailabilityTypes(),
+        ]);
 
     const propertyTypeWires =
         propertyTypesRes.status === "fulfilled" ? normalizeMasterOptions(propertyTypesRes.value) : [];
@@ -218,11 +232,10 @@ const toSummary = (listing: ReturnType<typeof normalizePropertyList>[number]): O
     updatedAt: new Date().toISOString(),
 });
 
-const titleFromInput = (input: OwnerListingFormInput) => input.propertyTitle.trim() || input.title?.trim() || "";
+const titleFromInput = (input: OwnerListingFormInput) => input.propertyTitle.trim();
 
-const toUpsertPayload = (input: OwnerListingFormInput) => ({
+const toUpsertPayload = (input: OwnerListingFormInput): OwnerPropertyUpsertPayload => ({
     propertyTitle: titleFromInput(input),
-    title: titleFromInput(input),
     propertyTypeId: input.propertyTypeId,
     cityId: input.cityId,
     localityId: input.localityId,
@@ -235,14 +248,105 @@ const toUpsertPayload = (input: OwnerListingFormInput) => ({
     addressLine: input.addressLine.trim(),
     description: input.description.trim(),
     contactPhone: input.contactPhone.trim(),
-    amenityIds: input.amenityIds,
-    keywords: input.keywords,
-    documentType: input.documentType,
+    amenityIds: input.amenityIds.filter((item) => isUuidLike(item)),
+    keywordIds: input.keywords.filter((item) => isUuidLike(item)),
+    documentType: input.documentType || undefined,
     imageFiles: input.imageFiles,
     documentFile: input.documentFile,
     clearImages: input.clearImages,
     clearDocuments: input.clearDocuments,
 });
+
+const toComparableString = (value: unknown) => JSON.stringify(value ?? null);
+
+const buildChangedKeys = (
+    current: OwnerPropertyUpsertPayload,
+    previous: OwnerPropertyUpsertPayload
+): Set<keyof OwnerPropertyUpsertPayload> => {
+    const changed = new Set<keyof OwnerPropertyUpsertPayload>();
+    (Object.keys(current) as Array<keyof OwnerPropertyUpsertPayload>).forEach((key) => {
+        if (toComparableString(current[key]) !== toComparableString(previous[key])) {
+            changed.add(key);
+        }
+    });
+    return changed;
+};
+
+const toPayloadFromWire = (wire: RentalPropertyDto): OwnerPropertyUpsertPayload => ({
+    propertyTitle: firstString(wire.title, wire.property_title),
+    propertyTypeId: firstString(wire.property_type_id),
+    cityId: firstString(wire.city_id),
+    localityId: firstString(wire.locality_id),
+    bhkId: firstString(wire.bhk_id),
+    furnishingId: firstString(wire.furnishing_id),
+    availabilityId: firstString(wire.availability_id),
+    rent: Number(wire.rent || 0),
+    deposit: Number(wire.deposit || 0),
+    builtUpAreaSqft: Number(wire.built_up_area_sqft || 0),
+    addressLine: firstString(wire.address_line),
+    description: firstString(wire.description),
+    contactPhone: firstString(wire.contact_phone),
+    amenityIds: (() => {
+        const fromObjects = asArray<RentalMasterOptionDto>(wire.amenities)
+            .map((item) => firstString(item.id))
+            .filter(Boolean);
+        if (fromObjects.length > 0) return fromObjects;
+        return asArray<string>(wire.amenity_ids).filter(Boolean);
+    })(),
+    keywordIds: (() => {
+        const fromKeywords = asArray<string | RentalMasterOptionDto>(wire.keywords)
+            .map((item) => (typeof item === "string" ? item : firstString(item.id)))
+            .filter((item) => isUuidLike(item));
+        if (fromKeywords.length > 0) return fromKeywords;
+        return asArray<string>(wire.keyword_ids).filter((item) => isUuidLike(item));
+    })(),
+    documentType: undefined,
+    imageFiles: [],
+    documentFile: null,
+    clearImages: false,
+    clearDocuments: false,
+});
+
+const toFormFromWire = (wire: RentalPropertyDto): OwnerListingFormInput => ({
+    ...defaultFormInput,
+    propertyTitle: firstString(wire.title, wire.property_title),
+    title: firstString(wire.title, wire.property_title),
+    propertyTypeId: firstString(wire.property_type_id),
+    cityId: firstString(wire.city_id),
+    localityId: firstString(wire.locality_id),
+    bhkId: firstString(wire.bhk_id),
+    furnishingId: firstString(wire.furnishing_id),
+    availabilityId: firstString(wire.availability_id),
+    rent: firstString(wire.rent),
+    deposit: firstString(wire.deposit),
+    builtUpAreaSqft: firstString(wire.built_up_area_sqft),
+    addressLine: firstString(wire.address_line),
+    description: firstString(wire.description),
+    contactPhone: firstString(wire.contact_phone).replace(/\D/g, "").slice(-10),
+    amenityIds: (() => {
+        const fromObjects = asArray<RentalMasterOptionDto>(wire.amenities)
+            .map((item) => firstString(item.id))
+            .filter(Boolean);
+        if (fromObjects.length > 0) return fromObjects;
+        return asArray<string>(wire.amenity_ids).filter(Boolean);
+    })(),
+    keywords: (() => {
+        const fromKeywords = asArray<string | RentalMasterOptionDto>(wire.keywords)
+            .map((item) => (typeof item === "string" ? item : firstString(item.id)))
+            .filter(Boolean);
+        if (fromKeywords.length > 0) return fromKeywords;
+        return asArray<string>(wire.keyword_ids).filter(Boolean);
+    })(),
+});
+
+const getCreatedPropertyMeta = (
+    payload: WireApiEnvelope<unknown>
+): { propertyId: string; isVerified: boolean | null } => {
+    const data = asRecord(unwrapData(payload));
+    const propertyId = firstString(data?.property_id, data?.id);
+    const isVerified = typeof data?.is_verified === "boolean" ? data.is_verified : null;
+    return { propertyId, isVerified };
+};
 
 class HybridOwnerAdapter implements OwnerListingAdapter {
     async getOwnerEntryRoute(): Promise<"/owner/dashboard" | "/owner/list-property"> {
@@ -324,26 +428,13 @@ class HybridOwnerAdapter implements OwnerListingAdapter {
 
     async getPropertyForEdit(id: string): Promise<OwnerListingFormInput> {
         try {
-            const detailResponse = await rentalsService.getPropertyDetail(id);
-            const context = await buildNormalizationContext(detailResponse);
-            const detail = normalizePropertyDetail(detailResponse, id, { fallbackToMock: false, ...context });
-            return {
-                ...defaultFormInput,
-                propertyTitle: detail.propertyTitle || detail.title,
-                title: detail.propertyTitle || detail.title,
-                propertyTypeId: detail.propertyTypeId || "",
-                cityId: detail.cityId || "",
-                localityId: detail.localityId || "",
-                bhkId: detail.bhkId || "",
-                furnishingId: detail.furnishingId || "",
-                availabilityId: detail.availabilityId || "",
-                rent: String(detail.pricePerMonth),
-                deposit: String(detail.deposit),
-                description: detail.description,
-                contactPhone: detail.owner.whatsappNumber.replace(/\D/g, "").slice(-10),
-                keywords: [...detail.highlights],
-                amenityIds: detail.amenityIds && detail.amenityIds.length > 0 ? [...detail.amenityIds] : [...detail.amenities],
-            };
+            const response = await rentalsService.getOwnerProperties();
+            const wires = unwrapToList(response);
+            const wire = wires.find((item) => firstString(item.id, item.property_id) === id);
+            if (!wire) {
+                throw new Error("Property not found in owner listings.");
+            }
+            return toFormFromWire(wire);
         } catch (error) {
             if (RENTALS_MOCK_MODE) return defaultFormInput;
             throw new Error(extractErrorMessage(error, "Unable to load listing for edit"));
@@ -351,15 +442,23 @@ class HybridOwnerAdapter implements OwnerListingAdapter {
     }
 
     async createProperty(input: OwnerListingFormInput): Promise<OwnerListingSummary> {
+        if (titleFromInput(input).length === 0) {
+            throw new Error("Property title is required");
+        }
+
         try {
             const response = await rentalsService.createOwnerProperty(toUpsertPayload(input));
-            const context = await buildNormalizationContext(response);
-            const parsed = normalizePropertyList(response, { fallbackToMock: false, ...context })[0];
-            if (!parsed) throw new Error("Unable to parse created listing");
-            return toSummary(parsed);
+            const { propertyId } = getCreatedPropertyMeta(response);
+            const dashboard = await this.getDashboard();
+            const created = dashboard.listings.find((item) => item.id === propertyId);
+            if (created) return created;
+            if (!propertyId) {
+                throw new Error("Create succeeded but property_id was missing in backend response.");
+            }
+            throw new Error("Create succeeded but listing was not returned by owner dashboard yet. Please refresh.");
         } catch (error) {
             if (RENTALS_MOCK_MODE) {
-                const fallbackSummary: OwnerListingSummary = {
+                return {
                     id: `owner-${Date.now()}`,
                     title: titleFromInput(input),
                     locality: input.localityId || "Bengaluru",
@@ -370,23 +469,42 @@ class HybridOwnerAdapter implements OwnerListingAdapter {
                     image: mockPropertyList[0]?.image || "",
                     updatedAt: new Date().toISOString(),
                 };
-                return fallbackSummary;
-            }
-
-            if (titleFromInput(input).length === 0) {
-                throw new Error("Property title is required");
             }
             throw new Error(extractErrorMessage(error, "Unable to publish listing"));
         }
     }
 
     async updateProperty(id: string, input: OwnerListingFormInput): Promise<OwnerListingSummary> {
+        if (titleFromInput(input).length === 0) {
+            throw new Error("Property title is required");
+        }
+
         try {
-            const response = await rentalsService.updateOwnerProperty(id, toUpsertPayload(input));
-            const context = await buildNormalizationContext(response);
-            const parsed = normalizePropertyList(response, { fallbackToMock: false, ...context })[0];
-            if (!parsed) throw new Error("Unable to parse updated listing");
-            return toSummary(parsed);
+            const response = await rentalsService.getOwnerProperties();
+            const wires = unwrapToList(response);
+            const wire = wires.find((item) => firstString(item.id, item.property_id) === id);
+            if (!wire) {
+                throw new Error("Property not found for update.");
+            }
+
+            const previous = toPayloadFromWire(wire);
+            const current = toUpsertPayload(input);
+            const changedKeys = buildChangedKeys(current, previous);
+
+            if ((input.imageFiles?.length || 0) > 0) changedKeys.add("imageFiles");
+            if (input.documentFile) changedKeys.add("documentFile");
+            if (input.clearImages) changedKeys.add("clearImages");
+            if (input.clearDocuments) changedKeys.add("clearDocuments");
+
+            if (changedKeys.size === 0) {
+                throw new Error("No changes to update.");
+            }
+
+            await rentalsService.updateOwnerProperty(id, current, changedKeys);
+            const dashboard = await this.getDashboard();
+            const updated = dashboard.listings.find((item) => item.id === id);
+            if (updated) return updated;
+            throw new Error("Update succeeded but refreshed owner dashboard did not return this listing.");
         } catch (error) {
             if (RENTALS_MOCK_MODE) {
                 return {
@@ -400,9 +518,6 @@ class HybridOwnerAdapter implements OwnerListingAdapter {
                     image: mockPropertyList[0]?.image || "",
                     updatedAt: new Date().toISOString(),
                 };
-            }
-            if (titleFromInput(input).length === 0) {
-                throw new Error("Property title is required");
             }
             throw new Error(extractErrorMessage(error, "Unable to update listing"));
         }

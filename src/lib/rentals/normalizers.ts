@@ -8,7 +8,12 @@ import {
 } from "@/lib/adapters/types";
 import { mockPropertyDetails, mockPropertyList } from "@/mocks/properties";
 import { isUuidLike } from "@/lib/rentals/runtime";
-import { RentalMasterOptionWire, RentalPropertyWire, UnknownRecord, WireApiEnvelope } from "@/lib/rentals/wireTypes";
+import {
+    RentalMasterOptionDto,
+    RentalPropertyDto,
+    UnknownRecord,
+    WireApiEnvelope,
+} from "@/lib/rentals/wireTypes";
 
 type NormalizerContext = {
     cityNameById?: Record<string, string>;
@@ -25,12 +30,52 @@ type NormalizerOptions = NormalizerContext & {
     fallbackToMock?: boolean;
 };
 
+const DEFAULT_UNLOCK_OFFER: PropertyDetail["unlockOffer"] = {
+    weeklyPassPrice: 249,
+    headline: "Get Direct Owner's Contacts",
+    subHeadline: "Unlock verified owner details",
+    bullets: ["Direct Owner Contact", "Exact map location", "Unlimited contacts for 7 days", "No brokerage"],
+    ctaLabel: "SPOTO Weekly Pass - ₹249*",
+};
+
 const asRecord = (value: unknown): UnknownRecord | null =>
     value !== null && typeof value === "object" ? (value as UnknownRecord) : null;
 
-const asArray = <T = unknown>(value: unknown): T[] => {
-    if (Array.isArray(value)) return value as T[];
-    return [];
+const asArray = <T = unknown>(value: unknown): T[] => (Array.isArray(value) ? (value as T[]) : []);
+
+const unwrapData = (value: unknown): unknown => {
+    const record = asRecord(value);
+    if (!record) return value;
+    if (record.data !== undefined) return record.data;
+    if (record.results !== undefined) return record.results;
+    if (record.items !== undefined) return record.items;
+    return value;
+};
+
+const stringOrFallback = (value: unknown, fallback = ""): string => {
+    if (typeof value === "string") {
+        const next = value.trim();
+        if (next) return next;
+    }
+    if (typeof value === "number" && Number.isFinite(value)) return String(value);
+    return fallback;
+};
+
+const firstString = (...values: unknown[]): string => {
+    for (const value of values) {
+        const next = stringOrFallback(value);
+        if (next) return next;
+    }
+    return "";
+};
+
+const numberOrFallback = (value: unknown, fallback = 0): number => {
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+    if (typeof value === "string") {
+        const parsed = Number(value);
+        if (Number.isFinite(parsed)) return parsed;
+    }
+    return fallback;
 };
 
 const normalizeToken = (value: unknown) =>
@@ -47,50 +92,6 @@ const resolveIdFromMasterMap = (value: unknown, map?: Record<string, string>): s
     return map[token] || "";
 };
 
-const DEFAULT_UNLOCK_OFFER: PropertyDetail["unlockOffer"] = {
-    weeklyPassPrice: 249,
-    headline: "Get Direct Owner's Contacts",
-    subHeadline: "Unlock verified owner details",
-    bullets: ["Direct Owner Contact", "Exact map location", "No brokerage"],
-    ctaLabel: "Get 99 Unlimited Pass",
-};
-
-const unwrapData = (value: unknown): unknown => {
-    const record = asRecord(value);
-    if (!record) return value;
-    if (record.data !== undefined) return record.data;
-    if (record.results !== undefined) return record.results;
-    if (record.items !== undefined) return record.items;
-    if (record.property !== undefined) return record.property;
-    return value;
-};
-
-const stringOrFallback = (value: unknown, fallback = ""): string => {
-    if (typeof value === "string") {
-        const trimmed = value.trim();
-        if (trimmed.length > 0) return trimmed;
-    }
-    if (typeof value === "number" && Number.isFinite(value)) return String(value);
-    return fallback;
-};
-
-const numberOrFallback = (value: unknown, fallback = 0): number => {
-    if (typeof value === "number" && Number.isFinite(value)) return value;
-    if (typeof value === "string") {
-        const parsed = Number(value);
-        if (Number.isFinite(parsed)) return parsed;
-    }
-    return fallback;
-};
-
-const firstString = (...values: unknown[]): string => {
-    for (const value of values) {
-        const normalized = stringOrFallback(value);
-        if (normalized) return normalized;
-    }
-    return "";
-};
-
 const readMasterName = (value: unknown, fallback = ""): string => {
     if (typeof value === "string") return stringOrFallback(value, fallback);
     const record = asRecord(value);
@@ -105,31 +106,18 @@ const readMasterId = (value: unknown): string => {
     return firstString(record.id, record.uuid);
 };
 
-const toBhk = (wire: RentalPropertyWire): BHKOption => {
-    const code = firstString(
-        readMasterName(wire.bhk),
-        wire.bhk_name,
-        wire.bhk_id,
-        wire.bhk_value
-    )
-        .toLowerCase()
-        .replace(/\s+/g, "_");
-
-    if (code.includes("3_bhk") || code.includes("3bhk")) return "3_bhk";
-    if (code.includes("2_bhk") || code.includes("2bhk")) return "2_bhk";
-    if (code.includes("1_rk") || code.includes("studio")) return "1_rk";
+const toBhk = (wire: RentalPropertyDto): BHKOption => {
+    const code = firstString(wire.bhk_name, wire.bhk_value, wire.bhk_id).toLowerCase();
+    if (code.includes("3")) return "3_bhk";
+    if (code.includes("2")) return "2_bhk";
+    if (code.includes("rk") || code.includes("studio")) return "1_rk";
     return "1_bhk";
 };
 
-const resolvePropertyTypeCode = (wire: RentalPropertyWire): string => {
-    return firstString(
-        wire.property_type_code,
-        readMasterName(wire.property_type),
-        wire.property_type_name
-    ).toLowerCase();
-};
+const resolvePropertyTypeCode = (wire: RentalPropertyDto): string =>
+    firstString(wire.property_type_code, wire.property_type_name).toLowerCase();
 
-const toPropertyTypes = (wire: RentalPropertyWire): PropertyType[] => {
+const toPropertyTypes = (wire: RentalPropertyDto): PropertyType[] => {
     const raw = resolvePropertyTypeCode(wire);
     const types = new Set<PropertyType>();
     if (raw.includes("pg")) types.add("pg");
@@ -141,67 +129,56 @@ const toPropertyTypes = (wire: RentalPropertyWire): PropertyType[] => {
     return Array.from(types);
 };
 
-const toMoveInOptions = (wire: RentalPropertyWire): MoveInOption[] => {
-    const raw = firstString(
-        readMasterName(wire.availability),
-        wire.availability_name,
-        wire.availability_code
-    ).toLowerCase();
+const toMoveInOptions = (wire: RentalPropertyDto): MoveInOption[] => {
+    const raw = firstString(wire.availability_name, wire.availability_code).toLowerCase();
     if (raw.includes("15")) return ["15_days"];
     if (raw.includes("30")) return ["30_days"];
     return ["immediately"];
 };
 
-const toStatus = (wire: RentalPropertyWire): string =>
-    firstString(wire.status, wire.is_verified === true ? "verified" : wire.is_verified === false ? "unverified" : "");
+const toStatus = (wire: RentalPropertyDto): string => {
+    const explicit = firstString((wire as UnknownRecord).status);
+    if (explicit) return explicit;
+    if (wire.is_active === false) return "inactive";
+    if (wire.is_verified === true) return "verified";
+    if (wire.is_verified === false) return "pending_review";
+    return "";
+};
 
-const resolvePropertyTypeId = (wire: RentalPropertyWire, options: NormalizerContext): string =>
+const resolvePropertyTypeId = (wire: RentalPropertyDto, options: NormalizerContext): string =>
     firstString(
         wire.property_type_id,
-        readMasterId(wire.property_type),
         resolveIdFromMasterMap(wire.property_type_code, options.propertyTypeIdByToken),
-        resolveIdFromMasterMap(wire.property_type_name, options.propertyTypeIdByToken),
-        resolveIdFromMasterMap(readMasterName(wire.property_type), options.propertyTypeIdByToken)
+        resolveIdFromMasterMap(wire.property_type_name, options.propertyTypeIdByToken)
     );
 
-const resolveBhkId = (wire: RentalPropertyWire, options: NormalizerContext): string =>
+const resolveBhkId = (wire: RentalPropertyDto, options: NormalizerContext): string =>
     firstString(
         wire.bhk_id,
-        readMasterId(wire.bhk),
         resolveIdFromMasterMap(wire.bhk_name, options.bhkIdByToken),
-        resolveIdFromMasterMap(wire.bhk_value, options.bhkIdByToken),
-        resolveIdFromMasterMap(readMasterName(wire.bhk), options.bhkIdByToken)
+        resolveIdFromMasterMap(wire.bhk_value, options.bhkIdByToken)
     );
 
-const resolveFurnishingId = (wire: RentalPropertyWire, options: NormalizerContext): string =>
+const resolveFurnishingId = (wire: RentalPropertyDto, options: NormalizerContext): string =>
     firstString(
         wire.furnishing_id,
-        readMasterId(wire.furnishing),
         resolveIdFromMasterMap(wire.furnishing_code, options.furnishingIdByToken),
-        resolveIdFromMasterMap(wire.furnishing_name, options.furnishingIdByToken),
-        resolveIdFromMasterMap(readMasterName(wire.furnishing), options.furnishingIdByToken)
+        resolveIdFromMasterMap(wire.furnishing_name, options.furnishingIdByToken)
     );
 
-const resolveAvailabilityId = (wire: RentalPropertyWire, options: NormalizerContext): string =>
+const resolveAvailabilityId = (wire: RentalPropertyDto, options: NormalizerContext): string =>
     firstString(
         wire.availability_id,
-        readMasterId(wire.availability),
         resolveIdFromMasterMap(wire.availability_code, options.availabilityIdByToken),
-        resolveIdFromMasterMap(wire.availability_name, options.availabilityIdByToken),
-        resolveIdFromMasterMap(readMasterName(wire.availability), options.availabilityIdByToken)
+        resolveIdFromMasterMap(wire.availability_name, options.availabilityIdByToken)
     );
 
-const toImageCandidates = (wire: RentalPropertyWire): Array<{ url: string; isPrimary: boolean; sortOrder: number }> => {
-    const mediaCandidates = [
-        ...asArray<UnknownRecord>(wire.images),
-        ...asArray<UnknownRecord>(wire.media),
-        ...asArray<UnknownRecord>(wire.image_files),
-    ];
-
+const toImageCandidates = (wire: RentalPropertyDto): Array<{ url: string; isPrimary: boolean; sortOrder: number }> => {
+    const mediaCandidates = asArray<UnknownRecord>(wire.images);
     return mediaCandidates
         .map((candidate, index) => ({
-            url: firstString(candidate.image_url, candidate.url, candidate.file, candidate.media_file, candidate.image),
-            isPrimary: Boolean(candidate.is_primary || candidate.is_cover || candidate.display_image),
+            url: firstString(candidate.image_url, candidate.url),
+            isPrimary: Boolean(candidate.is_primary),
             sortOrder: numberOrFallback(candidate.sort_order, index),
         }))
         .filter((item) => Boolean(item.url))
@@ -211,87 +188,67 @@ const toImageCandidates = (wire: RentalPropertyWire): Array<{ url: string; isPri
         });
 };
 
-const normalizeAmenities = (wire: RentalPropertyWire, options: NormalizerContext): string[] => {
-    const source = asArray<RentalMasterOptionWire | string>(wire.amenities);
-    if (source.length === 0) return [];
-    return source
+const normalizeAmenities = (wire: RentalPropertyDto, options: NormalizerContext): string[] => {
+    const source = asArray<RentalMasterOptionDto | string>(wire.amenities);
+    const fromAmenities = source
         .map((item) => {
-            if (typeof item !== "string") return readMasterName(item);
-            if (isUuidLike(item)) return options.amenityNameById?.[item] || "";
-            return item;
+            if (typeof item === "string") {
+                if (isUuidLike(item)) return options.amenityNameById?.[item] || "";
+                return item;
+            }
+            return firstString(item.name);
         })
+        .filter(Boolean);
+    if (fromAmenities.length > 0) return fromAmenities;
+
+    return asArray<string>(wire.amenity_ids)
+        .map((amenityId) => options.amenityNameById?.[amenityId] || "")
         .filter(Boolean);
 };
 
-const normalizeAmenityIds = (wire: RentalPropertyWire): string[] => {
-    const source = asArray<RentalMasterOptionWire | string>(wire.amenities);
-    if (source.length > 0) {
-        return source
-            .map((item) => {
-                if (typeof item === "string" && isUuidLike(item)) return item;
-                if (typeof item === "string") return "";
-                return firstString(item.id, item.uuid);
-            })
+const normalizeAmenityIds = (wire: RentalPropertyDto): string[] =>
+    (() => {
+        const fromObjects = asArray<RentalMasterOptionDto>(wire.amenities)
+            .map((item) => firstString(item.id))
             .filter(Boolean);
-    }
+        if (fromObjects.length > 0) return fromObjects;
+        return asArray<string>(wire.amenity_ids).filter(Boolean);
+    })();
 
-    if (Array.isArray(wire.amenity_ids)) {
-        return wire.amenity_ids.map((item) => `${item}`.trim()).filter(Boolean);
-    }
-
-    if (typeof wire.amenity_ids === "string") {
-        return wire.amenity_ids.split(",").map((item) => item.trim()).filter(Boolean);
-    }
-
-    return [];
-};
-
-const normalizeKeywords = (wire: RentalPropertyWire, options: NormalizerContext): string[] => {
-    const value = wire.keywords;
-    if (Array.isArray(value)) {
-        return value
-            .map((item) => {
-                if (typeof item !== "string") return readMasterName(item);
+const normalizeKeywords = (wire: RentalPropertyDto, options: NormalizerContext): string[] => {
+    const raw = asArray<string | RentalMasterOptionDto>(wire.keywords);
+    const fromKeywords = raw
+        .map((item) => {
+            if (typeof item === "string") {
                 if (isUuidLike(item)) return options.keywordNameById?.[item] || "";
                 return item;
-            })
-            .filter(Boolean);
-    }
-
-    if (typeof value === "string") {
-        return value
-            .split(",")
-            .map((token) => token.trim())
-            .map((token) => (isUuidLike(token) ? options.keywordNameById?.[token] || "" : token))
-            .filter(Boolean);
-    }
-
-    return [];
+            }
+            return firstString(item.name, options.keywordNameById?.[firstString(item.id)] || "");
+        })
+        .filter(Boolean);
+    if (fromKeywords.length > 0) return fromKeywords;
+    return asArray<string>(wire.keyword_ids)
+        .map((keywordId) => options.keywordNameById?.[keywordId] || "")
+        .filter(Boolean);
 };
 
-const normalizeKeywordIds = (wire: RentalPropertyWire): string[] => {
-    const value = wire.keywords;
-    if (Array.isArray(value)) {
-        return value
-            .map((item) => {
-                if (typeof item === "string" && isUuidLike(item)) return item;
-                if (typeof item === "string") return "";
-                return firstString(item.id, item.uuid);
-            })
-            .filter(Boolean);
-    }
-    return [];
+const normalizeKeywordIds = (wire: RentalPropertyDto): string[] => {
+    const fromKeywords = asArray<string | RentalMasterOptionDto>(wire.keywords)
+        .map((item) => (typeof item === "string" ? item : firstString(item.id)))
+        .filter((item) => isUuidLike(item));
+    if (fromKeywords.length > 0) return fromKeywords;
+    return asArray<string>(wire.keyword_ids).filter((item) => isUuidLike(item));
 };
 
 const maskPhone = (phone: string) => {
     const digits = phone.replace(/\D/g, "");
-    if (digits.length < 6) return phone;
+    if (digits.length < 6) return phone || "Contact locked";
     const prefix = digits.slice(0, 2);
     const suffix = digits.slice(-4);
     return `+${prefix}-${"X".repeat(Math.max(0, digits.length - 6))}${suffix}`;
 };
 
-const normalizeOwner = (wire: RentalPropertyWire): OwnerContact => {
+const normalizeOwner = (wire: RentalPropertyDto): OwnerContact => {
     const ownerName = firstString((wire as UnknownRecord).owner_name, (wire as UnknownRecord).contact_name, "Owner");
     const phone = firstString(wire.contact_phone, (wire as UnknownRecord).owner_phone);
     return {
@@ -301,110 +258,126 @@ const normalizeOwner = (wire: RentalPropertyWire): OwnerContact => {
     };
 };
 
-const resolveCity = (wire: RentalPropertyWire, options: NormalizerContext): { cityId: string; cityName: string } => {
-    const rawCity = typeof wire.city === "string" ? wire.city.trim() : "";
-    const cityId = firstString(
-        wire.city_id,
-        readMasterId(wire.city),
-        rawCity && isUuidLike(rawCity) ? rawCity : ""
-    );
+const resolveCity = (wire: RentalPropertyDto, options: NormalizerContext): { cityId: string; cityName: string } => {
+    const rawCity = typeof (wire as UnknownRecord).city === "string" ? String((wire as UnknownRecord).city).trim() : "";
+    const cityId = firstString(wire.city_id, readMasterId((wire as UnknownRecord).city), rawCity && isUuidLike(rawCity) ? rawCity : "");
     const cityName = firstString(
         wire.city_name,
         cityId ? options.cityNameById?.[cityId] : "",
         rawCity && !isUuidLike(rawCity) ? rawCity : "",
-        !rawCity ? readMasterName(wire.city) : ""
+        !rawCity ? readMasterName((wire as UnknownRecord).city) : ""
     );
     return { cityId, cityName };
 };
 
-const resolveLocality = (wire: RentalPropertyWire, options: NormalizerContext): { localityId: string; localityName: string } => {
-    const rawLocality = typeof wire.locality === "string" ? wire.locality.trim() : "";
+const resolveLocality = (wire: RentalPropertyDto, options: NormalizerContext): { localityId: string; localityName: string } => {
+    const rawLocality =
+        typeof (wire as UnknownRecord).locality === "string" ? String((wire as UnknownRecord).locality).trim() : "";
     const localityId = firstString(
         wire.locality_id,
-        readMasterId(wire.locality),
+        readMasterId((wire as UnknownRecord).locality),
         rawLocality && isUuidLike(rawLocality) ? rawLocality : ""
     );
     const localityName = firstString(
         wire.locality_name,
         localityId ? options.localityNameById?.[localityId] : "",
         rawLocality && !isUuidLike(rawLocality) ? rawLocality : "",
-        !rawLocality ? readMasterName(wire.locality) : ""
+        !rawLocality ? readMasterName((wire as UnknownRecord).locality) : ""
     );
     return { localityId, localityName };
 };
 
-export const normalizeMasterOptions = (payload: WireApiEnvelope<unknown>): RentalMasterOptionWire[] => {
+export const normalizeMasterOptions = (payload: WireApiEnvelope<unknown>): RentalMasterOptionDto[] => {
     const unwrapped = unwrapData(payload);
-    if (Array.isArray(unwrapped)) return unwrapped as RentalMasterOptionWire[];
-    return [];
+    const list = asArray<UnknownRecord>(unwrapped);
+    return list.reduce<RentalMasterOptionDto[]>((acc, item) => {
+            const id = firstString(item.id, item.uuid);
+            const name = firstString(item.name, item.label, item.code, item.value);
+            if (!id || !name) return acc;
+            acc.push({
+                id,
+                name,
+                code: firstString(item.code),
+                is_active: typeof item.is_active === "boolean" ? item.is_active : undefined,
+                sort_order: typeof item.sort_order === "number" ? item.sort_order : undefined,
+                state: firstString(item.state),
+                country: firstString(item.country),
+                city_id: firstString(item.city_id),
+                city_name: firstString(item.city_name),
+                bhk_value: typeof item.bhk_value === "number" ? item.bhk_value : undefined,
+            } satisfies RentalMasterOptionDto);
+            return acc;
+        }, []);
 };
 
 export const normalizePropertyList = (payload: WireApiEnvelope<unknown>, options?: NormalizerOptions): PropertyListItem[] => {
-    const fallbackToMock = options?.fallbackToMock ?? true;
+    const fallbackToMock = options?.fallbackToMock ?? false;
     const unwrapped = unwrapData(payload);
     const rawList = Array.isArray(unwrapped)
-        ? (unwrapped as RentalPropertyWire[])
+        ? (unwrapped as RentalPropertyDto[])
         : asRecord(unwrapped)
-        ? [unwrapped as RentalPropertyWire]
+        ? [unwrapped as RentalPropertyDto]
         : [];
 
     if (rawList.length === 0) return fallbackToMock ? mockPropertyList : [];
 
     return rawList.reduce<PropertyListItem[]>((acc, wire, index) => {
-            const fallback = fallbackToMock ? mockPropertyList[index % mockPropertyList.length] : null;
-            const id = firstString(wire.id, wire.property_id, fallback?.id);
-            if (!id) return acc;
+        const fallback = fallbackToMock ? mockPropertyList[index % mockPropertyList.length] : null;
+        const id = firstString(wire.id, wire.property_id, fallback?.id);
+        if (!id) return acc;
 
-            const propertyTitle = firstString(wire.property_title, wire.title, wire.name, fallback?.title || "");
-            const { cityId, cityName } = resolveCity(wire, options || {});
-            const { localityId, localityName } = resolveLocality(wire, options || {});
-            const pricePerMonth = numberOrFallback(firstString(wire.rent, wire.monthly_rent), fallback?.pricePerMonth || 0);
-            const deposit = numberOrFallback(firstString(wire.deposit, wire.security_deposit), fallback?.deposit || 0);
-            const furnishingName = firstString(readMasterName(wire.furnishing), wire.furnishing_name, wire.furnishing_code).toLowerCase();
-            const furnished = furnishingName.includes("full") || furnishingName.includes("semi") ? true : fallback?.furnished || false;
-            const images = toImageCandidates(wire).map((item) => item.url);
-            const primaryImage = firstString(wire.display_image, images[0], fallback?.image || "");
-            const bhk = toBhk(wire);
-            const propertyTypes = toPropertyTypes(wire);
-            const moveInOptions = toMoveInOptions(wire);
-            const keywords = normalizeKeywords(wire, options || {});
-            const amenities = normalizeAmenities(wire, options || {});
-            const status = toStatus(wire);
+        const propertyTitle = firstString(wire.title, wire.property_title, fallback?.title || "");
+        const { cityId, cityName } = resolveCity(wire, options || {});
+        const { localityId, localityName } = resolveLocality(wire, options || {});
+        const pricePerMonth = numberOrFallback(wire.rent, fallback?.pricePerMonth || 0);
+        const deposit = numberOrFallback(wire.deposit, fallback?.deposit || 0);
+        const furnishingName = firstString(wire.furnishing_name, wire.furnishing_code).toLowerCase();
+        const furnished = furnishingName.includes("full") || furnishingName.includes("semi") ? true : fallback?.furnished || false;
+        const images = toImageCandidates(wire).map((item) => item.url);
+        const primaryImage = firstString(images[0], fallback?.image || "");
+        const bhk = toBhk(wire);
+        const propertyTypes = toPropertyTypes(wire);
+        const moveInOptions = toMoveInOptions(wire);
+        const keywords = normalizeKeywords(wire, options || {});
+        const amenities = normalizeAmenities(wire, options || {});
+        const status = toStatus(wire);
 
-            acc.push({
-                ...(fallback ? fallback : {}),
-                id,
-                title: propertyTitle,
-                propertyTitle,
-                locality: localityName || fallback?.locality || "",
-                localityId,
-                city: cityName || fallback?.city || "",
-                cityId,
-                pricePerMonth,
-                deposit,
-                furnished,
-                image: primaryImage,
-                galleryImages: images.length > 0 ? images : primaryImage ? [primaryImage] : [],
-                bhk,
-                bhkId: resolveBhkId(wire, options || {}),
-                propertyTypes,
-                propertyTypeId: resolvePropertyTypeId(wire, options || {}),
-                furnishingId: resolveFurnishingId(wire, options || {}),
-                availabilityId: resolveAvailabilityId(wire, options || {}),
-                status,
-                isVerified: typeof wire.is_verified === "boolean" ? wire.is_verified : undefined,
-                moveInOptions,
-                badges: keywords.length > 0 ? keywords.slice(0, 2) : fallback?.badges || [],
-                features: amenities.length > 0 ? amenities.slice(0, 2) : fallback?.features || [],
-            } satisfies PropertyListItem);
-            return acc;
-        }, []);
+        acc.push({
+            ...(fallback ? fallback : {}),
+            id,
+            title: propertyTitle,
+            propertyTitle,
+            locality: localityName || fallback?.locality || "",
+            localityId,
+            city: cityName || fallback?.city || "",
+            cityId,
+            pricePerMonth,
+            deposit,
+            furnished,
+            image: primaryImage,
+            galleryImages: images.length > 0 ? images : primaryImage ? [primaryImage] : [],
+            bhk,
+            bhkId: resolveBhkId(wire, options || {}),
+            propertyTypes,
+            propertyTypeId: resolvePropertyTypeId(wire, options || {}),
+            furnishingId: resolveFurnishingId(wire, options || {}),
+            availabilityId: resolveAvailabilityId(wire, options || {}),
+            status,
+            isVerified: typeof wire.is_verified === "boolean" ? wire.is_verified : undefined,
+            isActive: typeof wire.is_active === "boolean" ? wire.is_active : undefined,
+            moveInOptions,
+            badges: keywords.length > 0 ? keywords.slice(0, 2) : fallback?.badges || [],
+            features: amenities.length > 0 ? amenities.slice(0, 2) : fallback?.features || [],
+        } satisfies PropertyListItem);
+
+        return acc;
+    }, []);
 };
 
-const findWireProperty = (payload: WireApiEnvelope<unknown>, propertyId: string): RentalPropertyWire | null => {
+const findWireProperty = (payload: WireApiEnvelope<unknown>, propertyId: string): RentalPropertyDto | null => {
     const unwrapped = unwrapData(payload);
     if (Array.isArray(unwrapped)) {
-        const found = (unwrapped as RentalPropertyWire[]).find((item) =>
+        const found = (unwrapped as RentalPropertyDto[]).find((item) =>
             [item.id, item.property_id].some((id) => String(id ?? "") === propertyId)
         );
         return found || null;
@@ -414,10 +387,10 @@ const findWireProperty = (payload: WireApiEnvelope<unknown>, propertyId: string)
     if (!record) return null;
 
     if (record.property && asRecord(record.property)) {
-        return record.property as RentalPropertyWire;
+        return record.property as RentalPropertyDto;
     }
 
-    return record as RentalPropertyWire;
+    return record as RentalPropertyDto;
 };
 
 export const normalizePropertyDetail = (
@@ -425,7 +398,7 @@ export const normalizePropertyDetail = (
     propertyId: string,
     options?: NormalizerOptions
 ): PropertyDetail => {
-    const fallbackToMock = options?.fallbackToMock ?? true;
+    const fallbackToMock = options?.fallbackToMock ?? false;
     const fallback = fallbackToMock ? mockPropertyDetails.find((item) => item.id === propertyId) ?? mockPropertyDetails[0] : null;
     const wire = findWireProperty(payload, propertyId);
 
@@ -452,11 +425,7 @@ export const normalizePropertyDetail = (
             mapPreviewSubLabel: "",
             amenities: [],
             highlights: [],
-            owner: {
-                ownerName: "Owner",
-                maskedPhone: "Contact locked",
-                whatsappNumber: "",
-            },
+            owner: { ownerName: "Owner", maskedPhone: "Contact locked", whatsappNumber: "" },
             unlockOffer: DEFAULT_UNLOCK_OFFER,
         };
     }
@@ -493,11 +462,7 @@ export const normalizePropertyDetail = (
               mapPreviewSubLabel: "",
               amenities: [] as string[],
               highlights: [] as string[],
-              owner: {
-                  ownerName: "Owner",
-                  maskedPhone: "Contact locked",
-                  whatsappNumber: "",
-              },
+              owner: { ownerName: "Owner", maskedPhone: "Contact locked", whatsappNumber: "" },
               unlockOffer: DEFAULT_UNLOCK_OFFER,
           };
 
@@ -505,8 +470,16 @@ export const normalizePropertyDetail = (
         ...detailBase,
         ...listBase,
         description: firstString(wire.description, detailBase.description, ""),
-        mapPreviewLabel: firstString((wire as UnknownRecord).map_preview_label, detailBase.mapPreviewLabel, ""),
-        mapPreviewSubLabel: firstString((wire as UnknownRecord).map_preview_sub_label, detailBase.mapPreviewSubLabel, ""),
+        mapPreviewLabel: firstString(
+            (wire as UnknownRecord).map_preview_label,
+            `${listBase.locality}, ${listBase.city}`,
+            detailBase.mapPreviewLabel
+        ),
+        mapPreviewSubLabel: firstString(
+            (wire as UnknownRecord).map_preview_sub_label,
+            "Unlock map + direct call with Weekly Pass",
+            detailBase.mapPreviewSubLabel
+        ),
         amenities: amenities.length > 0 ? amenities : detailBase.amenities,
         amenityIds,
         highlights: keywordHighlights.length > 0 ? keywordHighlights : detailBase.highlights,
@@ -518,19 +491,21 @@ export const normalizePropertyDetail = (
 export const normalizeLocalitiesFromProperties = (items: PropertyListItem[]): string[] =>
     Array.from(new Set(items.map((item) => item.locality).filter(Boolean))).sort((a, b) => a.localeCompare(b));
 
-export const toMasterSelectOption = (wire: RentalMasterOptionWire): { id: string; name: string } => ({
-    id: firstString(wire.id, wire.uuid, String(wire.value ?? "")),
-    name: firstString(wire.name, wire.label, wire.code, String(wire.value ?? "")),
+export const toMasterSelectOption = (wire: RentalMasterOptionDto): { id: string; name: string } => ({
+    id: firstString(wire.id, wire.code),
+    name: firstString(wire.name, wire.code),
 });
 
 export const extractErrorMessage = (error: unknown, fallback = "Something went wrong"): string => {
+    if (error instanceof Error && error.message.trim()) return error.message.trim();
     const record = asRecord(error);
     if (!record) return fallback;
-    const message = firstString(
-        record.message,
-        (record as UnknownRecord).detail,
-        (record as UnknownRecord).error,
-        (record as UnknownRecord).non_field_errors
-    );
-    return message || fallback;
+    const message = firstString(record.message, record.error, record.detail, record.non_field_errors);
+    if (message) return message;
+    const data = asRecord(record.data);
+    if (data) {
+        const nested = firstString(data.message, data.error, data.detail);
+        if (nested) return nested;
+    }
+    return fallback;
 };

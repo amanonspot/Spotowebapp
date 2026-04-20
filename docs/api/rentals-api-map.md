@@ -1,239 +1,227 @@
-# Rentals API Map (Tenant + Owner)
+# Rentals API Map (Contract-First, Backend-Truthful)
 
-## Scope and Baseline
-- **Frontend baseline kept:** existing tenant routes remain primary UI baseline.
-- **Owner module added under:** `/owner`, `/owner/list-property`, `/owner/dashboard`, `/owner/property/[id]/edit`.
-- **Shared dependencies (out of Rentals inventory):**
-1. Login API
-2. User API
+## Runtime Baseline
+- Real API mode: `NEXT_PUBLIC_RENTALS_MOCK_MODE=false`
+- Demo mode: explicit opt-in only (`true`), isolated from real API behavior
+- Base URL: `NEXT_PUBLIC_API_BASE_URL` (legacy fallback: `NEXT_PUBLIC_API_URL`)
 
-## Environment
-- `NEXT_PUBLIC_API_BASE_URL` (primary)
-- `NEXT_PUBLIC_API_URL` (legacy fallback)
-
-## Contract Notes
-- Postman collection has Rentals endpoints but **no saved response examples**.
-- Integration uses provisional wire types + normalizers and defensive fallbacks.
-- Mock data remains active only where backend shape/endpoint is missing or ambiguous.
-
-## Create vs Update (Owner) Behavior (explicit verification)
-- **Create property:** `POST /api/rental/my/properties/create/` with multipart form-data (full listing payload).
-- **Update property:** `POST /api/rental/my/properties/?property_id={id}` with multipart form-data (partial/update-style payload supported by backend contract sample, including `clear_images`, `clear_documents`).
-- Update is not `PATCH/PUT` in current collection; frontend must call the **POST + property_id query** endpoint for edits.
+## Shared Auth Dependency (outside Rentals domain inventory)
+- `POST /api/login/`
+- `POST /api/verify-otp/`
+- Protected rentals endpoints use `Authorization: Bearer <access_token>`
+- Public rentals endpoints are sent with `skipAuth=true`
 
 ---
 
 ## Tenant Flows
 
-### 1) Login (shared dependency)
-- **Screen:** `/auth/login`
-- **Endpoint:** `/api/login/`
-- **Method:** `POST`
-- **Auth:** No
-- **Body:** `phone`
-- **Query:** none
-- **Expected response fields:** `message`, optional identifiers
-- **Loading/Error/Empty:** loading spinner on send, inline OTP-send error
-- **Mock replacement:** **Yes** (replaced where reachable; fallback remains)
+### Home Feed (`/`)
+- Endpoint: `GET /api/rental/properties/`
+- Auth: No
+- Query params: none
+- Request body: none
+- Response fields consumed:
+  - `id`, `title`
+  - `rent`, `deposit`
+  - `city_id`, `city_name`, `locality_id`, `locality_name`
+  - `property_type_id/name/code`, `bhk_id/name`, `furnishing_id/name`, `availability_id/name`
+  - `images[].image_url`, `images[].is_primary`, `images[].sort_order`
+  - `amenities[]` or `amenity_ids[]`
+  - `keywords[]` or `keyword_ids[]`
+  - `is_verified`, `is_active`, `status` (if present)
+- Loading / Error / Empty:
+  - loading list placeholders
+  - explicit API error state
+  - explicit empty state
+- Mock replacement:
+  - real mode: not used
+  - demo mode: enabled
 
-### 2) OTP verify (shared dependency)
-- **Screen:** `/auth/login` OTP state + `/auth/otp`
-- **Endpoint:** `/api/verify-otp/`
-- **Method:** `POST`
-- **Auth:** No
-- **Body:** `phone`, `otp`
-- **Query:** none
-- **Expected response fields:** `access`, `refresh`, `user_id`, `message`
-- **Loading/Error/Empty:** verify loading, invalid OTP inline error
-- **Mock replacement:** **Yes** (fallback `0000` in mock mode)
+### Search (`/search`)
+- Endpoint: `GET /api/rental/properties/`
+- Auth: No
+- Query params:
+  - `city_id`
+  - `locality_id`
+  - `property_type_id`
+  - `bhk_id`
+  - `rent_min`
+  - `rent_max`
+  - repeatable `amenity_ids`
+  - `keywords` as JSON-string array
+- Request body: none
+- Response fields consumed: same as home feed
+- Loading / Error / Empty:
+  - searching state
+  - explicit API error
+  - explicit no-results state
+- Mock replacement:
+  - real mode: not used
+  - demo mode: enabled
 
-### 3) Home feed (rentals cards)
-- **Screen:** `/`
-- **Endpoint(s):**
-1. `/api/rental/properties/`
-2. `/api/rental/masters/localities/` (optional enrichment)
-- **Method:** `GET`
-- **Auth:** No (listing endpoint appears public)
-- **Body:** none
-- **Query:** optional filters unsupported on home by default
-- **Expected response fields (normalized):**
-1. `id/property_id`
-2. `title`
-3. `rent`
-4. `deposit`
-5. `city/locality`
-6. `image/display_image/images[]`
-- **Loading/Error/Empty:** skeleton/loading card, error banner, empty-state card
-- **Mock replacement:** **Partial now** (API first, mock fallback)
+### Property Detail (`/booking/[slug]`)
+- Endpoint: `GET /api/rental/properties/detail/?property_id=<uuid>`
+- Auth: No
+- Query params: `property_id`
+- Request body: none
+- Response fields consumed:
+  - full property DTO + gallery + owner metadata
+  - `description`, `amenities`, `keywords`
+- Loading / Error / Empty:
+  - loading state
+  - explicit not-found/error state
+  - empty gallery state if backend returns no images
+- Mock replacement:
+  - real mode: not used
+  - demo mode: enabled
 
-### 4) Search + filter
-- **Screen:** `/search`
-- **Endpoint:** `/api/rental/properties/`
-- **Method:** `GET`
-- **Auth:** No
-- **Body:** none
-- **Query params (mapped):**
-1. `city_id`
-2. `locality_id`
-3. `property_type_id`
-4. `bhk_id`
-5. `rent_min`
-6. `rent_max`
-7. `amenity_ids`
-8. `keywords`
-- **Expected response fields:** rental list records (normalized to `PropertyListItem`)
-- **Loading/Error/Empty:** searching state, retry on error, empty result message
-- **Mock replacement:** **Partial now** (API first, mock fallback)
+### Unlock Contact (from detail page)
+- Endpoint: `POST /api/rental/properties/get-contact/?property_id=<uuid>`
+- Method: POST JSON
+- Auth: Yes
+- Query params: `property_id`
+- Request body (optional): `{ name, phone, message }`
+- Success response fields consumed:
+  - `data.owner.name`, `data.owner.phone`
+  - `data.documents[]`
+  - `data.lead.*`
+- Paywall response fields consumed:
+  - `paywall.one_day`
+  - `paywall.weekly`
+- Loading / Error / Empty:
+  - pending unlock state
+  - success reveal state
+  - paywall state for 402/paywall envelope
+  - unauthorized / error state
+- Mock replacement:
+  - real mode: no synthetic success
+  - demo mode: local fallback enabled
 
-### 5) Property detail
-- **Screen:** `/booking/[slug]`
-- **Endpoint:** `/api/rental/properties/?property_id={id}`
-- **Method:** `GET`
-- **Auth:** No (assumed public)
-- **Body:** none
-- **Query:** `property_id`
-- **Expected response fields (normalized):**
-1. list-card fields
-2. `description`
-3. amenities/highlights
-4. owner contact metadata (masked/visible depending on unlock)
-- **Loading/Error/Empty:** loading shell, error block, not-found fallback
-- **Mock replacement:** **Partial now** (API first, mock fallback)
+### Pass Activation (from unlock paywall)
+- Endpoint: `POST /api/rental/passes/activate/`
+- Method: POST multipart/form-data
+- Auth: Yes
+- Body:
+  - `pass_type` (`one_day` | `weekly`)
+  - optional `property_id`
+- Response fields consumed:
+  - `data.payment_id`
+  - `data.razorpay_order_id`
+  - `data.razorpay_key_id`
+  - `data.amount`, `data.currency`, `data.pass_type`
+- Loading / Error / Empty:
+  - payment-init pending
+  - init-failure state
+  - checkout-launch state when Razorpay ids exist
+- Mock replacement:
+  - real mode: not used
+  - demo mode: enabled
 
-### 6) Unlock direct contact
-- **Screen:** `/booking/[slug]` unlock/paywall card
-- **Endpoint:** `/api/rental/properties/get-contact/?property_id={id}`
-- **Method:** `POST`
-- **Auth:** Usually required (backend dependent)
-- **Body:** `name`, `phone`, `message` (per collection sample)
-- **Query:** `property_id`
-- **Expected response fields (provisional):**
-1. unlocked owner contact or
-2. pass/credits required state message
-- **Loading/Error/Empty:** unlock pending, unauthorized state, exhausted-credit/pass-required state
-- **Mock replacement:** **Partial now** (API first, mock fallback with local credit wallet)
-
-### 7) Pass activation/order
-- **Screen:** unlock CTA fallback
-- **Endpoint:** `/api/rental/passes/activate/`
-- **Method:** `POST`
-- **Auth:** likely required
-- **Body (form-data):** `pass_type`
-- **Query:** none
-- **Expected response fields (provisional):** order/session/payment redirect details
-- **Loading/Error/Empty:** pending state and recoverable payment error
-- **Mock replacement:** **No full replacement yet** (endpoint present, response shape ambiguous)
+### Tenant Contacts (`/contacts`)
+- Backend endpoint: not defined in current rentals contract
+- Current data source: successful unlock responses cached client-side
+- Mock replacement:
+  - real mode: backend-unlocked records only
+  - demo mode: demo contacts allowed
 
 ---
 
 ## Owner Flows
 
-### 1) Owner entry routing
-- **Screen:** `/owner`
-- **Endpoint:** `/api/rental/my/properties/`
-- **Method:** `GET`
-- **Auth:** Required
-- **Body:** none
-- **Query:** none
-- **Expected response fields:** owner property list
-- **Loading/Error/Empty:** loading shell, unauthorized redirect/login prompt, empty => list-property route
-- **Mock replacement:** **Yes** for routing decision (API first, fallback mock list)
+### Owner Entry (`/owner`)
+- Endpoint: `GET /api/rental/my/properties/`
+- Auth: Yes
+- Behavior:
+  - empty list => `/owner/list-property`
+  - one or more listings => `/owner/dashboard`
+- Loading / Error:
+  - loading route state
+  - unauthorized redirects to login
+  - explicit error fallback
 
-### 2) Owner dashboard / my properties
-- **Screen:** `/owner/dashboard`
-- **Endpoint:** `/api/rental/my/properties/`
-- **Method:** `GET`
-- **Auth:** Required
-- **Body:** none
-- **Query:** none
-- **Expected response fields (normalized):**
-1. `id`
-2. `title`
-3. `location`
-4. `rent/deposit`
-5. `status`
-6. `thumbnail`
-- **Loading/Error/Empty:** dashboard loader, empty property card with CTA, retry on error
-- **Mock replacement:** **Yes** (API first, fallback mock)
+### Owner Dashboard (`/owner/dashboard`)
+- Endpoint: `GET /api/rental/my/properties/`
+- Auth: Yes
+- Response fields consumed:
+  - all owner listings including unverified/inactive
+  - status, price, location, image
+- Loading / Error / Empty:
+  - loading state
+  - error state
+  - empty-list state
 
-### 3) Owner create listing
-- **Screen:** `/owner/list-property`
-- **Endpoint:** `/api/rental/my/properties/create/`
-- **Method:** `POST` (multipart form-data)
-- **Auth:** Required
-- **Body fields (from collection):**
-1. `title`
-2. `property_type_id`
-3. `city_id`
-4. `rent`
-5. `deposit`
-6. `locality_id`
-7. `address_line`
-8. `bhk_id`
-9. `built_up_area_sqft`
-10. `furnishing_id`
-11. `availability_id`
-12. `description`
-13. `contact_phone`
-14. `amenity_ids`
-15. `keywords`
-16. `image_files` (file)
-17. `document_type`
-18. `document_file` (file)
-- **Query:** none
-- **Expected response fields:** created property payload + identifier (provisional)
-- **Loading/Error/Empty:** submit loading, inline validation errors, submit failure banner
-- **Mock replacement:** **Yes** where endpoint reachable; otherwise mock create is kept
+### Owner Create (`/owner/list-property`)
+- Endpoint: `POST /api/rental/my/properties/create/`
+- Method: POST multipart/form-data
+- Auth: Yes
+- Body fields:
+  - required: `title`, `property_type_id`, `city_id`, `rent`
+  - optional: `employee_id`, `deposit`, `bhk_id`, `locality_id`, `address_line`, `built_up_area_sqft`, `furnishing_id`, `availability_id`, `description`, `contact_phone`
+  - repeated: `amenity_ids`, `keyword_ids`, `image_files`
+  - document pair: `document_type` + `document_file` together
+- Response fields consumed:
+  - `data.property_id`, `data.is_verified`, `message`
+- Post-response behavior:
+  - backend refetch via `GET /my/properties/`
+- Loading / Error / Empty:
+  - submit pending
+  - backend validation errors
+  - success route transition
+- Mock replacement:
+  - real mode: not used
+  - demo mode: enabled
 
-### 4) Owner edit/update listing
-- **Screen:** `/owner/property/[id]/edit`
-- **Endpoint:** `/api/rental/my/properties/?property_id={id}`
-- **Method:** `POST` (multipart form-data)
-- **Auth:** Required
-- **Body fields (collection update sample):**
-1. `title`
-2. `rent`
-3. `deposit`
-4. `locality_id`
-5. `address_line`
-6. `bhk_id`
-7. `built_up_area_sqft`
-8. `furnishing_id`
-9. `availability_id`
-10. `description`
-11. `contact_phone`
-12. `keywords`
-13. `amenity_ids`
-14. `clear_images`
-15. `image_files`
-16. `clear_documents`
-17. `document_type`
-18. `document_file`
-- **Query:** `property_id`
-- **Expected response fields:** updated property payload/status (provisional)
-- **Loading/Error/Empty:** save loading, recoverable error banner, success toast/state
-- **Mock replacement:** **Yes** (API first, fallback mock update)
+### Owner Edit (`/owner/property/[id]/edit`)
+- Prefill source: `GET /api/rental/my/properties/`
+- Endpoint: `PATCH /api/rental/my/properties/update/?property_id=<uuid>`
+- Method: PATCH multipart/form-data
+- Auth: Yes
+- Payload behavior:
+  - changed fields only
+  - supports `clear_images` + replacement `image_files`
+  - supports `clear_documents` + `document_type` + `document_file`
+  - supports explicit clears for nullable ids where intended
+- Response fields consumed:
+  - `data.property_id`, `message`
+- Post-response behavior:
+  - backend refetch via `GET /my/properties/`
+- Loading / Error / Empty:
+  - submit pending
+  - no-change warning
+  - backend validation errors
+  - success route transition
+- Mock replacement:
+  - real mode: not used
+  - demo mode: enabled
 
-### 5) Owner unlocked contacts view
-- **Screen:** `/owner/contacts`
-- **Endpoint:** no dedicated owner-contacts endpoint in Rentals collection
-- **Method:** local derived state
-- **Auth:** owner session required
-- **Data source:** unlocked lead records from owner dashboard local store + unlock state
-- **Loading/Error/Empty:** empty contacts message and unlock guidance
-- **Mock replacement:** **Not yet** (backend endpoint missing in mapped Rentals set)
+### Owner Contacts (`/owner/contacts`)
+- Backend endpoint: not available in current rentals contract
+- Current source: local unlocked lead state (integration placeholder)
 
 ---
 
-## Master Data Endpoints (used by owner form filters/selects)
-- `GET /api/rental/masters/cities/`
-- `GET /api/rental/masters/localities/?city_id=...`
-- `GET /api/rental/masters/property-types/`
-- `GET /api/rental/masters/bhk-types/`
-- `GET /api/rental/masters/furnishing-types/`
-- `GET /api/rental/masters/availability-types/`
-- `GET /api/rental/masters/amenities/`
-- `GET /api/rental/masters/keywords/`
+## Admin Service Support (No new admin UI in this pass)
+- `PATCH /api/rental/admin/properties/approve/?property_id=<uuid>`
+- `PATCH /api/rental/admin/properties/reject/?property_id=<uuid>`
 
-Use defensive normalizers and preserve prior mock options when any master endpoint fails.
+---
 
+## Mapping Guarantees Implemented
+- Canonical frontend field: `propertyTitle`
+- Contract outbound field: `title`
+- Inbound compatibility: supports `title` and `property_title`
+- Canonical id flow: backend UUID for list/detail/edit/unlock
+- Gallery ordering: `is_primary` then `sort_order`
+- Tenant visibility enforcement in UI (real mode): hide non-verified/non-active listings
+
+---
+
+## Current Status
+- Working:
+  - list/detail/create/update/unlock/pass endpoints and methods
+  - multipart vs JSON request shaping
+  - strict no-silent-mock in real mode
+- Partially wired:
+  - owner contacts list still needs backend endpoint
+- Needs backend clarification:
+  - undocumented alternate response envelopes outside documented success/error/paywall patterns

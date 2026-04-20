@@ -1,120 +1,180 @@
 export type UnknownRecord = Record<string, unknown>;
 
-export type WireApiEnvelope<T> =
-    | T
-    | {
-          data?: T;
-          results?: T;
-          items?: T;
-          count?: number;
-          message?: string;
-          status?: string | number;
-      };
-
-export interface RentalMasterOptionWire extends UnknownRecord {
-    id?: string;
-    uuid?: string;
-    name?: string;
-    label?: string;
-    code?: string;
-    value?: string | number;
-    is_active?: boolean;
+export interface ApiErrorShape {
+    error: string;
 }
 
-export interface RentalMediaWire extends UnknownRecord {
-    id?: string;
-    url?: string;
-    image_url?: string;
-    file?: string;
-    media_file?: string;
-    image?: string;
-    is_cover?: boolean;
-    display_image?: boolean;
-    is_primary?: boolean;
+export interface ApiSuccessEnvelope<T> {
+    success: true;
+    message?: string;
+    data: T;
+}
+
+export interface ApiFailureEnvelope {
+    success?: false;
+    message?: string;
+    error?: string;
+}
+
+export type WireApiEnvelope<T> = ApiSuccessEnvelope<T> | ApiFailureEnvelope | ApiErrorShape | UnknownRecord | T;
+
+export interface RentalMasterOptionDto extends UnknownRecord {
+    id: string;
+    name: string;
+    code?: string;
+    is_active?: boolean;
+    sort_order?: number;
+    state?: string;
+    country?: string;
+    city_id?: string;
+    city_name?: string;
+    bhk_value?: number;
+}
+
+export interface RentalPropertyImageDto {
+    id: string;
+    image_url: string;
+    is_primary: boolean;
+    sort_order: number;
+}
+
+export interface RentalAmenityDto {
+    id: string;
+    name: string;
+    code?: string;
+    is_active?: boolean;
     sort_order?: number;
 }
 
-export interface RentalPropertyWire extends UnknownRecord {
-    id?: string;
-    property_id?: string;
-    title?: string;
-    property_title?: string;
-    name?: string;
-    rent?: number | string;
-    monthly_rent?: number | string;
-    deposit?: number | string;
-    security_deposit?: number | string;
+export interface RentalPropertyDto extends UnknownRecord {
+    id: string;
+    title: string;
     description?: string;
     address_line?: string;
-    city?: RentalMasterOptionWire | string;
+    keywords?: string[];
     city_id?: string;
     city_name?: string;
-    locality?: RentalMasterOptionWire | string;
     locality_id?: string;
     locality_name?: string;
-    property_type?: RentalMasterOptionWire | string;
     property_type_id?: string;
-    property_type_code?: string;
     property_type_name?: string;
-    bhk?: RentalMasterOptionWire | string;
+    property_type_code?: string;
     bhk_id?: string;
+    bhk_value?: number;
     bhk_name?: string;
-    bhk_value?: number | string;
-    furnishing?: RentalMasterOptionWire | string;
+    built_up_area_sqft?: number | string;
+    rent?: number | string;
+    deposit?: number | string;
     furnishing_id?: string;
     furnishing_name?: string;
     furnishing_code?: string;
-    availability?: RentalMasterOptionWire | string;
     availability_id?: string;
     availability_name?: string;
     availability_code?: string;
-    built_up_area_sqft?: number | string;
-    amenities?: Array<RentalMasterOptionWire | string>;
-    amenity_ids?: string[] | string;
-    keywords?: Array<RentalMasterOptionWire | string> | string;
-    status?: string;
-    is_verified?: boolean;
     contact_phone?: string;
-    images?: RentalMediaWire[];
-    image_files?: RentalMediaWire[];
-    media?: RentalMediaWire[];
-    display_image?: string;
+    images?: RentalPropertyImageDto[];
+    amenities?: RentalAmenityDto[];
+    amenity_ids?: string[];
+    keyword_ids?: string[];
+    listed_by_employee_id?: string;
+    listed_by_employee_name?: string;
+    is_active?: boolean;
+    is_verified?: boolean;
     created_at?: string;
     updated_at?: string;
+    property_id?: string;
+    property_title?: string;
 }
 
-export interface RentalContactUnlockRequestWire {
-    name: string;
-    phone: string;
-    message?: string;
+export interface RentalMyPropertyCreateDataDto {
+    property_id: string;
+    is_verified: boolean;
 }
 
-export interface RentalContactUnlockResponseWire extends UnknownRecord {
-    success?: boolean;
-    message?: string;
+export interface RentalMyPropertyUpdateDataDto {
+    property_id: string;
+}
+
+export interface RentalContactUnlockRequestDto {
+    name?: string;
     phone?: string;
-    owner_phone?: string;
-    whatsapp?: string;
-    owner_name?: string;
-    contact?: UnknownRecord;
-    data?: UnknownRecord;
-}
-
-export interface RentalPassActivatePayloadWire {
-    pass_type: string;
-}
-
-export interface RentalPassActivateResponseWire extends UnknownRecord {
-    success?: boolean;
     message?: string;
-    order_id?: string;
-    payment_url?: string;
-    data?: UnknownRecord;
 }
+
+export interface RentalUnlockedLeadDto {
+    id: string;
+    property_id: string;
+    property_title: string;
+    name?: string;
+    phone?: string;
+    message?: string;
+    created_at?: string;
+}
+
+export interface RentalUnlockedOwnerDto {
+    phone: string;
+    email?: string;
+    name?: string;
+}
+
+export interface RentalOwnerDocumentDto {
+    id: string;
+    document_type: string;
+    title?: string | null;
+    document_file_url: string;
+    uploaded_at?: string;
+}
+
+export interface RentalContactUnlockSuccessDataDto {
+    lead: RentalUnlockedLeadDto;
+    owner: RentalUnlockedOwnerDto;
+    documents: RentalOwnerDocumentDto[];
+}
+
+export interface RentalPassOptionDto {
+    pass_type: "one_day" | "weekly";
+    price: number;
+    currency: string;
+    duration_days: number;
+}
+
+export interface RentalPaywallDto {
+    one_day: RentalPassOptionDto;
+    weekly: RentalPassOptionDto;
+}
+
+export interface RentalContactUnlockSuccessDto {
+    success: true;
+    message?: string;
+    data: RentalContactUnlockSuccessDataDto;
+}
+
+export interface RentalContactUnlockPaywallDto {
+    success: false;
+    message: string;
+    paywall: RentalPaywallDto;
+}
+
+export type RentalContactUnlockResponseDto = RentalContactUnlockSuccessDto | RentalContactUnlockPaywallDto | ApiErrorShape;
+
+export interface RentalPassActivatePayloadDto {
+    pass_type: "one_day" | "weekly";
+    property_id?: string;
+}
+
+export interface RentalPassActivateDataDto {
+    payment_id: string;
+    razorpay_order_id: string;
+    razorpay_key_id: string;
+    amount: number;
+    currency: string;
+    pass_type: "one_day" | "weekly";
+}
+
+export type RentalPassActivateResponseDto = ApiSuccessEnvelope<RentalPassActivateDataDto> | ApiErrorShape | ApiFailureEnvelope;
 
 export interface OwnerPropertyUpsertPayload {
     propertyTitle: string;
-    title?: string;
     propertyTypeId: string;
     cityId: string;
     localityId: string;
@@ -128,7 +188,8 @@ export interface OwnerPropertyUpsertPayload {
     description: string;
     contactPhone: string;
     amenityIds: string[];
-    keywords: string[];
+    keywordIds: string[];
+    employeeId?: string;
     documentType?: string;
     imageFiles?: File[];
     documentFile?: File | null;

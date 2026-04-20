@@ -1,11 +1,24 @@
+import { ApiError } from "@/lib/api/client";
 import { CheckoutAdapter, CheckoutState, StartUnlockPayload } from "@/lib/adapters/types";
 import { authAdapter } from "@/lib/adapters/authAdapter";
 import { mockPropertyDetails } from "@/mocks/properties";
 import { addUnlockedTenantContact, consumeCredit, extractErrorMessage, getCredits, RENTALS_MOCK_MODE, rentalsService } from "@/lib/rentals";
+import { RentalContactUnlockResponseDto, RentalPassActivateResponseDto, UnknownRecord } from "@/lib/rentals/wireTypes";
 
 const CHECKOUT_KEY = "spoto_checkout_records_v2";
 
 type CheckoutStore = Record<string, CheckoutState>;
+
+const asRecord = (value: unknown): UnknownRecord | null =>
+    value !== null && typeof value === "object" ? (value as UnknownRecord) : null;
+
+const firstString = (...values: unknown[]): string => {
+    for (const value of values) {
+        if (typeof value === "string" && value.trim()) return value.trim();
+        if (typeof value === "number" && Number.isFinite(value)) return String(value);
+    }
+    return "";
+};
 
 const isBrowser = () => typeof window !== "undefined";
 
@@ -50,6 +63,56 @@ const getFallbackContact = (propertyId: string) => {
     };
 };
 
+const toPaywallFromPayload = (payload: unknown): CheckoutState["paywall"] | undefined => {
+    const record = asRecord(payload);
+    if (!record) return undefined;
+    const paywall = asRecord(record.paywall);
+    if (!paywall) return undefined;
+    const oneDay = asRecord(paywall.one_day);
+    const weekly = asRecord(paywall.weekly);
+    if (!oneDay || !weekly) return undefined;
+    return {
+        oneDay: {
+            passType: "one_day",
+            price: Number(oneDay.price || 99),
+            currency: firstString(oneDay.currency, "INR"),
+            durationDays: Number(oneDay.duration_days || 1),
+        },
+        weekly: {
+            passType: "weekly",
+            price: Number(weekly.price || 249),
+            currency: firstString(weekly.currency, "INR"),
+            durationDays: Number(weekly.duration_days || 7),
+        },
+    };
+};
+
+const parseUnlockSuccess = (response: RentalContactUnlockResponseDto) => {
+    const record = asRecord(response);
+    if (!record) return null;
+
+    const success = record.success;
+    if (success === false) {
+        return {
+            type: "paywall" as const,
+            message: firstString(record.message, "Free contacts exhausted. Choose a pass."),
+            paywall: toPaywallFromPayload(record),
+        };
+    }
+
+    const data = asRecord(record.data);
+    const owner = asRecord(data?.owner);
+    const phone = firstString(owner?.phone);
+    if (!phone) return null;
+
+    return {
+        type: "success" as const,
+        message: firstString(record.message, "Contact unlocked"),
+        ownerName: firstString(owner?.name, "Owner"),
+        ownerPhone: phone,
+    };
+};
+
 class HybridCheckoutAdapter implements CheckoutAdapter {
     async startUnlock(payload: StartUnlockPayload): Promise<CheckoutState> {
         const state = createState(payload);
@@ -82,30 +145,30 @@ class HybridCheckoutAdapter implements CheckoutAdapter {
 
         try {
             const response = await rentalsService.unlockPropertyContact(current.propertyId, payload);
-            const responseRecord = response as Record<string, unknown>;
-            const nested = (responseRecord.data || responseRecord.contact || {}) as Record<string, unknown>;
+            const parsed = parseUnlockSuccess(response);
+            if (!parsed) {
+                throw new Error("Unable to unlock owner contact.");
+            }
 
-            const unlockedPhone =
-                (response.phone as string) ||
-                (response.owner_phone as string) ||
-                (nested.phone as string) ||
-                "";
-            const unlockedName =
-                (response.owner_name as string) ||
-                (nested.name as string) ||
-                "Owner";
-            const successFlag = responseRecord.success;
-
-            if (successFlag === false || !unlockedPhone) {
-                throw new Error((response.message as string) || "Unable to unlock owner contact.");
+            if (parsed.type === "paywall") {
+                const paywallState: CheckoutState = {
+                    ...current,
+                    status: "paywall",
+                    message: parsed.message,
+                    paywall: parsed.paywall,
+                    creditsRemaining: getCredits("tenant"),
+                    updatedAt: new Date().toISOString(),
+                };
+                saveState(paywallState);
+                return paywallState;
             }
 
             const success: CheckoutState = {
                 ...current,
                 status: "success",
-                message: (response.message as string) || "Owner contact unlocked.",
-                unlockedPhone,
-                unlockedName,
+                message: parsed.message,
+                unlockedPhone: parsed.ownerPhone,
+                unlockedName: parsed.ownerName,
                 creditsRemaining: getCredits("tenant"),
                 updatedAt: new Date().toISOString(),
             };
@@ -113,8 +176,8 @@ class HybridCheckoutAdapter implements CheckoutAdapter {
             addUnlockedTenantContact({
                 id: `tenant_unlock_${Date.now()}`,
                 propertyId: current.propertyId,
-                name: unlockedName,
-                phone: unlockedPhone,
+                name: parsed.ownerName,
+                phone: parsed.ownerPhone,
                 source: "api",
                 unlockedAt: success.updatedAt,
             });
@@ -122,11 +185,16 @@ class HybridCheckoutAdapter implements CheckoutAdapter {
             saveState(success);
             return success;
         } catch (error) {
+            const apiError = error as ApiError;
+            const paywall = apiError.status === 402 ? toPaywallFromPayload(apiError.data) : undefined;
             if (!RENTALS_MOCK_MODE) {
                 const failed: CheckoutState = {
                     ...current,
-                    status: "failed",
-                    message: extractErrorMessage(error, "Unable to unlock owner contact."),
+                    status: paywall ? "paywall" : "failed",
+                    message: paywall
+                        ? firstString(asRecord(apiError.data)?.message, "Free contacts exhausted. Choose a pass.")
+                        : extractErrorMessage(error, "Unable to unlock owner contact."),
+                    paywall,
                     updatedAt: new Date().toISOString(),
                 };
                 saveState(failed);
@@ -138,8 +206,12 @@ class HybridCheckoutAdapter implements CheckoutAdapter {
             if (!credit.success || !fallback) {
                 const blocked: CheckoutState = {
                     ...current,
-                    status: "failed",
-                    message: "No free credits left. Activate pass to continue.",
+                    status: "paywall",
+                    message: "No free credits left. Choose a pass.",
+                    paywall: {
+                        oneDay: { passType: "one_day", price: 99, currency: "INR", durationDays: 1 },
+                        weekly: { passType: "weekly", price: 249, currency: "INR", durationDays: 7 },
+                    },
                     creditsRemaining: 0,
                     updatedAt: new Date().toISOString(),
                 };
@@ -171,6 +243,53 @@ class HybridCheckoutAdapter implements CheckoutAdapter {
         }
     }
 
+    async activatePass(id: string, passType: "one_day" | "weekly"): Promise<CheckoutState> {
+        const store = readStore();
+        const current = store[id];
+        if (!current) throw new Error("Checkout session not found");
+
+        try {
+            const response = (await rentalsService.activatePass({
+                pass_type: passType,
+                property_id: current.propertyId,
+            })) as RentalPassActivateResponseDto;
+
+            const envelope = asRecord(response);
+            const data = asRecord(envelope?.data);
+            const payment = {
+                paymentId: firstString(data?.payment_id),
+                razorpayOrderId: firstString(data?.razorpay_order_id),
+                razorpayKeyId: firstString(data?.razorpay_key_id),
+                amount: Number(data?.amount || 0),
+                currency: firstString(data?.currency, "INR"),
+                passType,
+            };
+
+            if (!payment.razorpayOrderId || !payment.razorpayKeyId) {
+                throw new Error("Payment initiation failed. Missing Razorpay order details.");
+            }
+
+            const updated: CheckoutState = {
+                ...current,
+                status: "pending",
+                message: firstString(envelope?.message, "Pass payment initiated."),
+                payment,
+                updatedAt: new Date().toISOString(),
+            };
+            saveState(updated);
+            return updated;
+        } catch (error) {
+            const failed: CheckoutState = {
+                ...current,
+                status: "failed",
+                message: extractErrorMessage(error, "Unable to initiate pass payment."),
+                updatedAt: new Date().toISOString(),
+            };
+            saveState(failed);
+            return failed;
+        }
+    }
+
     async getUnlockStatus(id: string): Promise<CheckoutState | null> {
         const store = readStore();
         return store[id] || null;
@@ -178,4 +297,3 @@ class HybridCheckoutAdapter implements CheckoutAdapter {
 }
 
 export const checkoutAdapter = new HybridCheckoutAdapter();
-

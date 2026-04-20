@@ -2,12 +2,14 @@ import { api, apiFormData } from "@/lib/api";
 import { clearCache } from "@/lib/api/client";
 import {
     OwnerPropertyUpsertPayload,
-    RentalContactUnlockRequestWire,
-    RentalContactUnlockResponseWire,
-    RentalMasterOptionWire,
-    RentalPassActivatePayloadWire,
-    RentalPassActivateResponseWire,
-    RentalPropertyWire,
+    RentalContactUnlockRequestDto,
+    RentalContactUnlockResponseDto,
+    RentalMasterOptionDto,
+    RentalPassActivatePayloadDto,
+    RentalPassActivateResponseDto,
+    RentalMyPropertyCreateDataDto,
+    RentalMyPropertyUpdateDataDto,
+    RentalPropertyDto,
     WireApiEnvelope,
 } from "@/lib/rentals/wireTypes";
 
@@ -18,86 +20,198 @@ export interface RentalPropertyListParams {
     bhk_id?: string;
     rent_min?: number;
     rent_max?: number;
-    amenity_ids?: string;
-    keywords?: string;
+    amenity_ids?: string[];
+    keywords?: string[];
 }
 
-const appendIfPresent = (formData: FormData, key: string, value: string | number | boolean | null | undefined) => {
-    if (value === undefined || value === null) return;
-    formData.append(key, String(value));
-};
+type UpsertMode = "create" | "update";
 
 const appendFileIfPresent = (formData: FormData, key: string, file: File | null | undefined) => {
     if (!file) return;
     formData.append(key, file);
 };
 
-const buildOwnerFormData = (payload: OwnerPropertyUpsertPayload): FormData => {
+const appendText = (
+    formData: FormData,
+    key: string,
+    value: string | number | null | undefined,
+    options?: { allowEmpty?: boolean }
+) => {
+    if (value === undefined || value === null) return;
+    const next = String(value);
+    if (next.length === 0 && !options?.allowEmpty) return;
+    formData.append(key, next);
+};
+
+const shouldInclude = (
+    mode: UpsertMode,
+    changedKeys: Set<keyof OwnerPropertyUpsertPayload> | undefined,
+    key: keyof OwnerPropertyUpsertPayload
+) => mode === "create" || Boolean(changedKeys?.has(key));
+
+const ensureDocumentPair = (
+    mode: UpsertMode,
+    changedKeys: Set<keyof OwnerPropertyUpsertPayload> | undefined,
+    payload: OwnerPropertyUpsertPayload
+) => {
+    const documentTypeChanged = shouldInclude(mode, changedKeys, "documentType");
+    const documentFileChanged = shouldInclude(mode, changedKeys, "documentFile");
+    const mustValidatePair = mode === "create" || documentTypeChanged || documentFileChanged;
+    if (!mustValidatePair) return;
+
+    const hasDocumentType = Boolean(payload.documentType && payload.documentType.trim());
+    const hasDocumentFile = Boolean(payload.documentFile);
+    if (hasDocumentType !== hasDocumentFile) {
+        throw new Error("document_type and document_file must be provided together.");
+    }
+};
+
+const buildOwnerFormData = (
+    payload: OwnerPropertyUpsertPayload,
+    options: { mode: UpsertMode; changedKeys?: Set<keyof OwnerPropertyUpsertPayload> }
+): FormData => {
+    const { mode, changedKeys } = options;
     const formData = new FormData();
 
-    const propertyTitle = payload.propertyTitle?.trim() || payload.title?.trim() || "";
-    appendIfPresent(formData, "property_title", propertyTitle);
-    appendIfPresent(formData, "title", propertyTitle);
-    appendIfPresent(formData, "property_type_id", payload.propertyTypeId);
-    appendIfPresent(formData, "city_id", payload.cityId);
-    appendIfPresent(formData, "rent", payload.rent);
-    appendIfPresent(formData, "deposit", payload.deposit);
-    appendIfPresent(formData, "locality_id", payload.localityId);
-    appendIfPresent(formData, "address_line", payload.addressLine);
-    appendIfPresent(formData, "bhk_id", payload.bhkId);
-    appendIfPresent(formData, "built_up_area_sqft", payload.builtUpAreaSqft);
-    appendIfPresent(formData, "furnishing_id", payload.furnishingId);
-    appendIfPresent(formData, "availability_id", payload.availabilityId);
-    appendIfPresent(formData, "description", payload.description);
-    appendIfPresent(formData, "contact_phone", payload.contactPhone);
-    appendIfPresent(formData, "amenity_ids", payload.amenityIds.join(","));
-    appendIfPresent(formData, "keywords", payload.keywords.join(","));
-    appendIfPresent(formData, "document_type", payload.documentType || "");
-    appendIfPresent(formData, "clear_images", payload.clearImages ? "true" : undefined);
-    appendIfPresent(formData, "clear_documents", payload.clearDocuments ? "true" : undefined);
+    ensureDocumentPair(mode, changedKeys, payload);
 
-    payload.imageFiles?.forEach((file) => formData.append("image_files", file));
-    appendFileIfPresent(formData, "document_file", payload.documentFile);
+    const title = payload.propertyTitle.trim();
+
+    if (shouldInclude(mode, changedKeys, "propertyTitle")) {
+        appendText(formData, "title", title);
+    }
+    if (shouldInclude(mode, changedKeys, "propertyTypeId")) {
+        appendText(formData, "property_type_id", payload.propertyTypeId);
+    }
+    if (shouldInclude(mode, changedKeys, "cityId")) {
+        appendText(formData, "city_id", payload.cityId);
+    }
+    if (shouldInclude(mode, changedKeys, "rent")) {
+        appendText(formData, "rent", payload.rent);
+    }
+    if (shouldInclude(mode, changedKeys, "employeeId")) {
+        appendText(formData, "employee_id", payload.employeeId);
+    }
+    if (shouldInclude(mode, changedKeys, "deposit")) {
+        appendText(formData, "deposit", payload.deposit);
+    }
+    if (shouldInclude(mode, changedKeys, "localityId")) {
+        appendText(formData, "locality_id", payload.localityId, { allowEmpty: mode === "update" });
+    }
+    if (shouldInclude(mode, changedKeys, "addressLine")) {
+        appendText(formData, "address_line", payload.addressLine);
+    }
+    if (shouldInclude(mode, changedKeys, "bhkId")) {
+        appendText(formData, "bhk_id", payload.bhkId, { allowEmpty: mode === "update" });
+    }
+    if (shouldInclude(mode, changedKeys, "builtUpAreaSqft")) {
+        appendText(formData, "built_up_area_sqft", payload.builtUpAreaSqft);
+    }
+    if (shouldInclude(mode, changedKeys, "furnishingId")) {
+        appendText(formData, "furnishing_id", payload.furnishingId);
+    }
+    if (shouldInclude(mode, changedKeys, "availabilityId")) {
+        appendText(formData, "availability_id", payload.availabilityId);
+    }
+    if (shouldInclude(mode, changedKeys, "description")) {
+        appendText(formData, "description", payload.description);
+    }
+    if (shouldInclude(mode, changedKeys, "contactPhone")) {
+        appendText(formData, "contact_phone", payload.contactPhone);
+    }
+
+    if (shouldInclude(mode, changedKeys, "amenityIds")) {
+        payload.amenityIds.forEach((amenityId) => appendText(formData, "amenity_ids", amenityId));
+    }
+    if (shouldInclude(mode, changedKeys, "keywordIds")) {
+        payload.keywordIds.forEach((keywordId) => appendText(formData, "keyword_ids", keywordId));
+    }
+    if (shouldInclude(mode, changedKeys, "clearImages") && payload.clearImages) {
+        appendText(formData, "clear_images", "true");
+    }
+    if (shouldInclude(mode, changedKeys, "clearDocuments") && payload.clearDocuments) {
+        appendText(formData, "clear_documents", "true");
+    }
+    if (shouldInclude(mode, changedKeys, "documentType")) {
+        appendText(formData, "document_type", payload.documentType || "");
+    }
+    if (shouldInclude(mode, changedKeys, "imageFiles")) {
+        payload.imageFiles?.forEach((file) => appendFileIfPresent(formData, "image_files", file));
+    }
+    if (shouldInclude(mode, changedKeys, "documentFile")) {
+        appendFileIfPresent(formData, "document_file", payload.documentFile);
+    }
 
     return formData;
 };
 
+const serializePropertyListParams = (params: RentalPropertyListParams = {}) => {
+    const search = new URLSearchParams();
+    if (params.city_id) search.append("city_id", params.city_id);
+    if (params.locality_id) search.append("locality_id", params.locality_id);
+    if (params.property_type_id) search.append("property_type_id", params.property_type_id);
+    if (params.bhk_id) search.append("bhk_id", params.bhk_id);
+    if (typeof params.rent_min === "number") search.append("rent_min", String(params.rent_min));
+    if (typeof params.rent_max === "number") search.append("rent_max", String(params.rent_max));
+    params.amenity_ids?.forEach((amenityId) => {
+        if (amenityId) search.append("amenity_ids", amenityId);
+    });
+    if (params.keywords && params.keywords.length > 0) {
+        search.append("keywords", JSON.stringify(params.keywords));
+    }
+    return search.toString();
+};
+
 export const rentalsService = {
     listProperties: (params?: RentalPropertyListParams) =>
-        api.get<WireApiEnvelope<RentalPropertyWire[]>>("/api/rental/properties/", { params }),
+        api.get<WireApiEnvelope<RentalPropertyDto[]>>("/api/rental/properties/", {
+            params,
+            paramsSerializer: (input) => serializePropertyListParams(input as RentalPropertyListParams),
+            skipAuth: true,
+        }),
 
     getPropertyDetail: (propertyId: string) =>
-        api.get<WireApiEnvelope<RentalPropertyWire | RentalPropertyWire[]>>("/api/rental/properties/", {
+        api.get<WireApiEnvelope<RentalPropertyDto>>("/api/rental/properties/detail/", {
             params: { property_id: propertyId },
+            skipAuth: true,
         }),
 
-    unlockPropertyContact: (propertyId: string, payload: RentalContactUnlockRequestWire) =>
-        api.post<RentalContactUnlockResponseWire>("/api/rental/properties/get-contact/", payload, {
+    unlockPropertyContact: (propertyId: string, payload: RentalContactUnlockRequestDto) =>
+        api.post<RentalContactUnlockResponseDto>("/api/rental/properties/get-contact/", payload, {
             params: { property_id: propertyId },
+            headers: { "Content-Type": "application/json" },
         }),
 
-    activatePass: (payload: RentalPassActivatePayloadWire) => {
+    activatePass: (payload: RentalPassActivatePayloadDto) => {
         const formData = new FormData();
         formData.append("pass_type", payload.pass_type);
-        return apiFormData.post<RentalPassActivateResponseWire>("/api/rental/passes/activate/", formData);
+        if (payload.property_id) {
+            formData.append("property_id", payload.property_id);
+        }
+        return apiFormData.post<RentalPassActivateResponseDto>("/api/rental/passes/activate/", formData);
     },
 
-    getOwnerProperties: () => api.get<WireApiEnvelope<RentalPropertyWire[]>>("/api/rental/my/properties/"),
+    getOwnerProperties: () => api.get<WireApiEnvelope<RentalPropertyDto[]>>("/api/rental/my/properties/"),
 
     createOwnerProperty: async (payload: OwnerPropertyUpsertPayload) => {
-        const created = await apiFormData.post<WireApiEnvelope<RentalPropertyWire>>(
+        const created = await apiFormData.post<WireApiEnvelope<RentalMyPropertyCreateDataDto>>(
             "/api/rental/my/properties/create/",
-            buildOwnerFormData(payload)
+            buildOwnerFormData(payload, { mode: "create" })
         );
         clearCache("/api/rental/my/properties/");
         clearCache("/api/rental/properties/");
+        clearCache("/api/rental/properties/detail/");
         return created;
     },
 
-    updateOwnerProperty: async (propertyId: string, payload: OwnerPropertyUpsertPayload) => {
-        const updated = await api.patch<WireApiEnvelope<RentalPropertyWire>>(
+    updateOwnerProperty: async (
+        propertyId: string,
+        payload: OwnerPropertyUpsertPayload,
+        changedKeys?: Set<keyof OwnerPropertyUpsertPayload>
+    ) => {
+        const updated = await api.patch<WireApiEnvelope<RentalMyPropertyUpdateDataDto>>(
             `/api/rental/my/properties/update/?property_id=${encodeURIComponent(propertyId)}`,
-            buildOwnerFormData(payload),
+            buildOwnerFormData(payload, { mode: "update", changedKeys }),
             {
                 headers: {
                     "Content-Type": "multipart/form-data",
@@ -106,19 +220,32 @@ export const rentalsService = {
         );
         clearCache("/api/rental/my/properties/");
         clearCache("/api/rental/properties/");
-        clearCache(`/api/rental/properties/?property_id=${encodeURIComponent(propertyId)}`);
+        clearCache(`/api/rental/properties/detail/?property_id=${encodeURIComponent(propertyId)}`);
         return updated;
     },
 
-    listCities: () => api.get<WireApiEnvelope<RentalMasterOptionWire[]>>("/api/rental/masters/cities/"),
+    approveProperty: (propertyId: string) =>
+        api.patch<WireApiEnvelope<{ message?: string }>>(
+            `/api/rental/admin/properties/approve/?property_id=${encodeURIComponent(propertyId)}`
+        ),
+    rejectProperty: (propertyId: string) =>
+        api.patch<WireApiEnvelope<{ message?: string }>>(
+            `/api/rental/admin/properties/reject/?property_id=${encodeURIComponent(propertyId)}`
+        ),
+
+    listCities: () => api.get<WireApiEnvelope<RentalMasterOptionDto[]>>("/api/rental/masters/cities/", { skipAuth: true }),
     listLocalities: (cityId?: string) =>
-        api.get<WireApiEnvelope<RentalMasterOptionWire[]>>("/api/rental/masters/localities/", {
+        api.get<WireApiEnvelope<RentalMasterOptionDto[]>>("/api/rental/masters/localities/", {
             params: cityId ? { city_id: cityId } : undefined,
+            skipAuth: true,
         }),
-    listPropertyTypes: () => api.get<WireApiEnvelope<RentalMasterOptionWire[]>>("/api/rental/masters/property-types/"),
-    listBhkTypes: () => api.get<WireApiEnvelope<RentalMasterOptionWire[]>>("/api/rental/masters/bhk-types/"),
-    listFurnishingTypes: () => api.get<WireApiEnvelope<RentalMasterOptionWire[]>>("/api/rental/masters/furnishing-types/"),
-    listAvailabilityTypes: () => api.get<WireApiEnvelope<RentalMasterOptionWire[]>>("/api/rental/masters/availability-types/"),
-    listAmenities: () => api.get<WireApiEnvelope<RentalMasterOptionWire[]>>("/api/rental/masters/amenities/"),
-    listKeywords: () => api.get<WireApiEnvelope<RentalMasterOptionWire[]>>("/api/rental/masters/keywords/"),
+    listPropertyTypes: () =>
+        api.get<WireApiEnvelope<RentalMasterOptionDto[]>>("/api/rental/masters/property-types/", { skipAuth: true }),
+    listBhkTypes: () => api.get<WireApiEnvelope<RentalMasterOptionDto[]>>("/api/rental/masters/bhk-types/", { skipAuth: true }),
+    listFurnishingTypes: () =>
+        api.get<WireApiEnvelope<RentalMasterOptionDto[]>>("/api/rental/masters/furnishing-types/", { skipAuth: true }),
+    listAvailabilityTypes: () =>
+        api.get<WireApiEnvelope<RentalMasterOptionDto[]>>("/api/rental/masters/availability-types/", { skipAuth: true }),
+    listAmenities: () => api.get<WireApiEnvelope<RentalMasterOptionDto[]>>("/api/rental/masters/amenities/", { skipAuth: true }),
+    listKeywords: () => api.get<WireApiEnvelope<RentalMasterOptionDto[]>>("/api/rental/masters/keywords/", { skipAuth: true }),
 };

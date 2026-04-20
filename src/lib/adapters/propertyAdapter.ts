@@ -3,7 +3,6 @@ import { FilterState, HomeFeed, PropertyAdapter, PropertyDetail, PropertyListIte
 import { defaultFilterState, mockHomeFeed, mockPropertyDetails, mockPropertyList } from "@/mocks/properties";
 import {
     extractErrorMessage,
-    getSyncedDetail,
     isUuidLike,
     mergeListWithSynced,
     normalizeLocalitiesFromProperties,
@@ -15,8 +14,8 @@ import {
     toMasterSelectOption,
     upsertSyncedListingRecord,
     WireApiEnvelope,
-    RentalMasterOptionWire,
-    RentalPropertyWire,
+    RentalMasterOptionDto,
+    RentalPropertyDto,
 } from "@/lib/rentals";
 
 const includesIgnoreCase = (source: string, target: string) => source.toLowerCase().includes(target.toLowerCase());
@@ -28,7 +27,7 @@ const sortByMode = (items: PropertyListItem[], mode: FilterState["sortBy"]) => {
     return [...items];
 };
 
-const unwrapToList = (payload: WireApiEnvelope<unknown>): RentalPropertyWire[] => {
+const unwrapToList = (payload: WireApiEnvelope<unknown>): RentalPropertyDto[] => {
     const envelope = payload as Record<string, unknown>;
     const data = Array.isArray(payload)
         ? payload
@@ -42,7 +41,7 @@ const unwrapToList = (payload: WireApiEnvelope<unknown>): RentalPropertyWire[] =
         ? [envelope.data]
         : [];
 
-    return data as RentalPropertyWire[];
+    return data as RentalPropertyDto[];
 };
 
 const toMap = (options: SelectOption[]): Record<string, string> =>
@@ -58,7 +57,7 @@ const toToken = (value: string) =>
         .replace(/\s+/g, " ")
         .trim();
 
-const toIdByTokenMap = (wires: RentalMasterOptionWire[]): Record<string, string> =>
+const toIdByTokenMap = (wires: RentalMasterOptionDto[]): Record<string, string> =>
     wires.reduce<Record<string, string>>((acc, wire) => {
         const id = `${wire.id || wire.uuid || ""}`.trim();
         if (!id) return acc;
@@ -128,6 +127,7 @@ const buildNormalizationContext = async (payload: WireApiEnvelope<unknown>) => {
 };
 
 const isTenantVisible = (item: PropertyListItem): boolean => {
+    if (item.isActive === false) return false;
     if (item.isVerified === false) return false;
 
     const status = (item.status || "").toLowerCase();
@@ -144,7 +144,16 @@ const isTenantVisible = (item: PropertyListItem): boolean => {
 };
 
 const mapFiltersToApiParams = (filters: FilterState) => {
-    const params: Record<string, string | number | undefined> = {};
+    const params: {
+        city_id?: string;
+        locality_id?: string;
+        property_type_id?: string;
+        bhk_id?: string;
+        rent_min?: number;
+        rent_max?: number;
+        amenity_ids?: string[];
+        keywords?: string[];
+    } = {};
     if (filters.budgetMin > 0) params.rent_min = filters.budgetMin;
     if (filters.budgetMax > 0) params.rent_max = filters.budgetMax;
 
@@ -158,6 +167,54 @@ const mapFiltersToApiParams = (filters: FilterState) => {
     if (bhkId && isUuidLike(bhkId)) params.bhk_id = bhkId;
 
     return params;
+};
+
+const normalizeToken = (value: string) =>
+    value
+        .toLowerCase()
+        .replace(/[_-]+/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+
+const resolvePropertyTypeIdFromFilters = async (filters: FilterState): Promise<string | undefined> => {
+    if (filters.selectedPropertyTypeIds?.[0] && isUuidLike(filters.selectedPropertyTypeIds[0])) {
+        return filters.selectedPropertyTypeIds[0];
+    }
+    if (!filters.propertyTypes || filters.propertyTypes.length === 0) return undefined;
+
+    const selected = new Set(filters.propertyTypes.map((item) => normalizeToken(item)));
+    const masters = normalizeMasterOptions(await rentalsService.listPropertyTypes());
+    const match = masters.find((item) => {
+        const name = normalizeToken(item.name);
+        const code = normalizeToken(item.code || "");
+        if (selected.has("rent house") && (name.includes("apartment") || name.includes("house") || code.includes("apartment"))) {
+            return true;
+        }
+        if (selected.has("pg") && (name.includes("pg") || code.includes("pg"))) return true;
+        if (selected.has("zero deposit") && (name.includes("zero") || code.includes("zero"))) return true;
+        if (selected.has("co living") && (name.includes("co living") || code.includes("co living"))) return true;
+        return false;
+    });
+    return match?.id;
+};
+
+const resolveBhkIdFromFilters = async (filters: FilterState): Promise<string | undefined> => {
+    if (filters.selectedBhkIds?.[0] && isUuidLike(filters.selectedBhkIds[0])) {
+        return filters.selectedBhkIds[0];
+    }
+    if (!filters.bhk || filters.bhk.length === 0) return undefined;
+    const selected = new Set(filters.bhk.map((item) => normalizeToken(item)));
+    const masters = normalizeMasterOptions(await rentalsService.listBhkTypes());
+    const match = masters.find((item) => {
+        const name = normalizeToken(item.name);
+        const code = normalizeToken(item.code || "");
+        if (selected.has("1 rk") && (name.includes("1 rk") || code.includes("1 rk"))) return true;
+        if (selected.has("1 bhk") && (name.includes("1 bhk") || code.includes("1 bhk"))) return true;
+        if (selected.has("2 bhk") && (name.includes("2 bhk") || code.includes("2 bhk"))) return true;
+        if (selected.has("3 bhk") && (name.includes("3 bhk") || code.includes("3 bhk"))) return true;
+        return false;
+    });
+    return match?.id;
 };
 
 const applyClientFilters = (items: PropertyListItem[], filters: FilterState): PropertyListItem[] => {
@@ -242,7 +299,14 @@ class ApiFirstPropertyAdapter implements PropertyAdapter {
 
     async searchProperties(filters: FilterState): Promise<PropertyListItem[]> {
         try {
-            const response = await rentalsService.listProperties(mapFiltersToApiParams(filters));
+            const params = mapFiltersToApiParams(filters);
+            if (!params.property_type_id) {
+                params.property_type_id = await resolvePropertyTypeIdFromFilters(filters);
+            }
+            if (!params.bhk_id) {
+                params.bhk_id = await resolveBhkIdFromFilters(filters);
+            }
+            const response = await rentalsService.listProperties(params);
             const context = await buildNormalizationContext(response);
             const normalized = normalizePropertyList(response, { fallbackToMock: RENTALS_MOCK_MODE, ...context });
             const liveVisible = RENTALS_MOCK_MODE ? normalized : normalized.filter(isTenantVisible);
@@ -264,45 +328,49 @@ class ApiFirstPropertyAdapter implements PropertyAdapter {
             if (!RENTALS_MOCK_MODE && detail.id !== id) {
                 throw new Error("Property not found for the requested ID.");
             }
+            if (!RENTALS_MOCK_MODE && !(detail.propertyTitle || detail.title)) {
+                throw new Error("Property data is incomplete in backend response.");
+            }
             if (!RENTALS_MOCK_MODE && !isTenantVisible(detail)) {
                 throw new Error("This property is not available yet.");
             }
-            upsertSyncedListingRecord({
-                id: detail.id,
-                listItem: {
+            if (RENTALS_MOCK_MODE) {
+                upsertSyncedListingRecord({
                     id: detail.id,
-                    title: detail.title,
-                    propertyTitle: detail.propertyTitle || detail.title,
-                    locality: detail.locality,
-                    localityId: detail.localityId,
-                    city: detail.city,
-                    cityId: detail.cityId,
-                    pricePerMonth: detail.pricePerMonth,
-                    deposit: detail.deposit,
-                    furnished: detail.furnished,
-                    image: detail.image,
-                    galleryImages: detail.galleryImages,
-                    bhk: detail.bhk,
-                    bhkId: detail.bhkId,
-                    propertyTypes: detail.propertyTypes,
-                    propertyTypeId: detail.propertyTypeId,
-                    furnishingId: detail.furnishingId,
-                    availabilityId: detail.availabilityId,
-                    status: detail.status,
-                    isVerified: detail.isVerified,
-                    moveInOptions: detail.moveInOptions,
-                    badges: detail.badges,
-                    features: detail.features,
-                },
-                detail,
-                updatedAt: new Date().toISOString(),
-                source: "api",
-            });
+                    listItem: {
+                        id: detail.id,
+                        title: detail.title,
+                        propertyTitle: detail.propertyTitle || detail.title,
+                        locality: detail.locality,
+                        localityId: detail.localityId,
+                        city: detail.city,
+                        cityId: detail.cityId,
+                        pricePerMonth: detail.pricePerMonth,
+                        deposit: detail.deposit,
+                        furnished: detail.furnished,
+                        image: detail.image,
+                        galleryImages: detail.galleryImages,
+                        bhk: detail.bhk,
+                        bhkId: detail.bhkId,
+                        propertyTypes: detail.propertyTypes,
+                        propertyTypeId: detail.propertyTypeId,
+                        furnishingId: detail.furnishingId,
+                        availabilityId: detail.availabilityId,
+                        status: detail.status,
+                        isVerified: detail.isVerified,
+                        isActive: detail.isActive,
+                        moveInOptions: detail.moveInOptions,
+                        badges: detail.badges,
+                        features: detail.features,
+                    },
+                    detail,
+                    updatedAt: new Date().toISOString(),
+                    source: "api",
+                });
+            }
             return detail;
         } catch (error) {
             if (RENTALS_MOCK_MODE) {
-                const synced = getSyncedDetail(id);
-                if (synced) return synced;
                 const fallback = mockPropertyDetails.find((item) => item.id === id) ?? mockPropertyDetails[0];
                 if (fallback) return fallback;
             }

@@ -38,6 +38,7 @@ export interface PropertyListItem {
     availabilityId?: string;
     status?: string;
     isVerified?: boolean;
+    isActive?: boolean;
     moveInOptions: MoveInOption[];
     badges: string[];
     features: string[];
@@ -108,7 +109,7 @@ export interface AuthAdapter {
     getSession(): AuthSession;
 }
 
-export type CheckoutStatus = "idle" | "pending" | "success" | "failed";
+export type CheckoutStatus = "idle" | "pending" | "paywall" | "success" | "failed";
 
 export interface StartUnlockPayload {
     propertyId: string;
@@ -125,11 +126,24 @@ export interface CheckoutState {
     unlockedPhone?: string;
     unlockedName?: string;
     creditsRemaining?: number;
+    paywall?: {
+        oneDay: { passType: "one_day"; price: number; currency: string; durationDays: number };
+        weekly: { passType: "weekly"; price: number; currency: string; durationDays: number };
+    };
+    payment?: {
+        paymentId: string;
+        razorpayOrderId: string;
+        razorpayKeyId: string;
+        amount: number;
+        currency: string;
+        passType: "one_day" | "weekly";
+    };
 }
 
 export interface CheckoutAdapter {
     startUnlock(payload: StartUnlockPayload): Promise<CheckoutState>;
     confirmUnlock(id: string, outcome?: "success" | "failed"): Promise<CheckoutState>;
+    activatePass(id: string, passType: "one_day" | "weekly"): Promise<CheckoutState>;
     getUnlockStatus(id: string): Promise<CheckoutState | null>;
 }
 
