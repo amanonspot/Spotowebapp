@@ -2,26 +2,12 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { ownerAdapter } from "@/lib/adapters";
-import { RENTALS_MOCK_MODE } from "@/lib/rentals";
 
 export default function OwnerEntryPage() {
     const router = useRouter();
 
     useEffect(() => {
-        let mounted = true;
-        const decide = async () => {
-            try {
-                const route = await ownerAdapter.getOwnerEntryRoute();
-                if (mounted) router.replace(route);
-            } catch {
-                if (mounted) router.replace(RENTALS_MOCK_MODE ? "/owner/list-property" : "/auth/login");
-            }
-        };
-        decide();
-        return () => {
-            mounted = false;
-        };
+        router.replace("/owner/dashboard");
     }, [router]);
 
     return (

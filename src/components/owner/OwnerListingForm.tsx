@@ -16,6 +16,7 @@ interface OwnerListingFormProps {
 const emptyForm: OwnerListingFormInput = {
     propertyTitle: "",
     title: "",
+    employeeId: "",
     propertyTypeId: "",
     cityId: "",
     localityId: "",
@@ -26,6 +27,9 @@ const emptyForm: OwnerListingFormInput = {
     deposit: "",
     builtUpAreaSqft: "",
     addressLine: "",
+    streetLocalityArea: "",
+    landmark: "",
+    googleMapsLink: "",
     description: "",
     contactPhone: "",
     amenityIds: [],
@@ -237,6 +241,12 @@ export default function OwnerListingForm({ mode, propertyId, initialValue }: Own
                         onChange={(event) => updateField("contactPhone", sanitizeNumericInput(event.target.value).slice(0, 10))}
                         placeholder="Owner phone"
                         inputMode="numeric"
+                        className={controlBaseClass}
+                    />
+                    <input
+                        value={form.employeeId || ""}
+                        onChange={(event) => updateField("employeeId", event.target.value)}
+                        placeholder="Employee ID (optional)"
                         className={controlBaseClass}
                     />
                     <SelectInput

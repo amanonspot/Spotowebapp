@@ -57,14 +57,20 @@ export default function SearchPage() {
         let mounted = true;
 
         const boot = async () => {
-            const feed = await propertyAdapter.getHomeFeed();
-            if (mounted === false) return;
+            try {
+                const feed = await propertyAdapter.getHomeFeed();
+                if (mounted === false) return;
 
-            setLocalities(
-                feed.localityOptions && feed.localityOptions.length > 0
-                    ? feed.localityOptions
-                    : feed.localities.map((name) => ({ id: name, name }))
-            );
+                setLocalities(
+                    feed.localityOptions && feed.localityOptions.length > 0
+                        ? feed.localityOptions
+                        : feed.localities.map((name) => ({ id: name, name }))
+                );
+            } catch (bootError) {
+                if (mounted) {
+                    setError(bootError instanceof Error ? bootError.message : "Unable to load search localities");
+                }
+            }
 
             if (typeof window !== "undefined") {
                 const done = window.localStorage.getItem(PREF_FLAG);

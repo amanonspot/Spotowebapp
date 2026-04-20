@@ -25,6 +25,7 @@ export interface RentalPropertyListParams {
 }
 
 type UpsertMode = "create" | "update";
+type KeywordFieldMode = "keyword_ids" | "keywords_json";
 
 const appendFileIfPresent = (formData: FormData, key: string, file: File | null | undefined) => {
     if (!file) return;
@@ -68,9 +69,9 @@ const ensureDocumentPair = (
 
 const buildOwnerFormData = (
     payload: OwnerPropertyUpsertPayload,
-    options: { mode: UpsertMode; changedKeys?: Set<keyof OwnerPropertyUpsertPayload> }
+    options: { mode: UpsertMode; changedKeys?: Set<keyof OwnerPropertyUpsertPayload>; keywordFieldMode?: KeywordFieldMode }
 ): FormData => {
-    const { mode, changedKeys } = options;
+    const { mode, changedKeys, keywordFieldMode = "keyword_ids" } = options;
     const formData = new FormData();
 
     ensureDocumentPair(mode, changedKeys, payload);
@@ -124,7 +125,11 @@ const buildOwnerFormData = (
         payload.amenityIds.forEach((amenityId) => appendText(formData, "amenity_ids", amenityId));
     }
     if (shouldInclude(mode, changedKeys, "keywordIds")) {
-        payload.keywordIds.forEach((keywordId) => appendText(formData, "keyword_ids", keywordId));
+        if (keywordFieldMode === "keywords_json") {
+            appendText(formData, "keywords", JSON.stringify(payload.keywordIds));
+        } else {
+            payload.keywordIds.forEach((keywordId) => appendText(formData, "keyword_ids", keywordId));
+        }
     }
     if (shouldInclude(mode, changedKeys, "clearImages") && payload.clearImages) {
         appendText(formData, "clear_images", "true");
@@ -143,6 +148,18 @@ const buildOwnerFormData = (
     }
 
     return formData;
+};
+
+const isKeywordValidationError = (error: unknown): boolean => {
+    if (!error || typeof error !== "object") return false;
+    const record = error as Record<string, unknown>;
+    const status = typeof record.status === "number" ? record.status : undefined;
+    if (status && status !== 400) return false;
+    const text = [record.message, record.error]
+        .filter((value) => typeof value === "string")
+        .join(" ")
+        .toLowerCase();
+    return text.includes("keyword");
 };
 
 const serializePropertyListParams = (params: RentalPropertyListParams = {}) => {
@@ -171,10 +188,23 @@ export const rentalsService = {
         }),
 
     getPropertyDetail: (propertyId: string) =>
-        api.get<WireApiEnvelope<RentalPropertyDto>>("/api/rental/properties/detail/", {
-            params: { property_id: propertyId },
-            skipAuth: true,
-        }),
+        api
+            .get<WireApiEnvelope<RentalPropertyDto>>("/api/rental/properties/detail/", {
+                params: { property_id: propertyId },
+                skipAuth: true,
+            })
+            .catch((error) => {
+                const status = typeof (error as Record<string, unknown>)?.status === "number"
+                    ? ((error as Record<string, unknown>).status as number)
+                    : undefined;
+                if (status && status !== 400 && status !== 404) {
+                    throw error;
+                }
+                return api.get<WireApiEnvelope<RentalPropertyDto>>("/api/rental/properties/", {
+                    params: { property_id: propertyId },
+                    skipAuth: true,
+                });
+            }),
 
     unlockPropertyContact: (propertyId: string, payload: RentalContactUnlockRequestDto) =>
         api.post<RentalContactUnlockResponseDto>("/api/rental/properties/get-contact/", payload, {
@@ -194,10 +224,19 @@ export const rentalsService = {
     getOwnerProperties: () => api.get<WireApiEnvelope<RentalPropertyDto[]>>("/api/rental/my/properties/"),
 
     createOwnerProperty: async (payload: OwnerPropertyUpsertPayload) => {
-        const created = await apiFormData.post<WireApiEnvelope<RentalMyPropertyCreateDataDto>>(
-            "/api/rental/my/properties/create/",
-            buildOwnerFormData(payload, { mode: "create" })
-        );
+        let created: WireApiEnvelope<RentalMyPropertyCreateDataDto>;
+        try {
+            created = await apiFormData.post<WireApiEnvelope<RentalMyPropertyCreateDataDto>>(
+                "/api/rental/my/properties/create/",
+                buildOwnerFormData(payload, { mode: "create" })
+            );
+        } catch (error) {
+            if (!isKeywordValidationError(error)) throw error;
+            created = await apiFormData.post<WireApiEnvelope<RentalMyPropertyCreateDataDto>>(
+                "/api/rental/my/properties/create/",
+                buildOwnerFormData(payload, { mode: "create", keywordFieldMode: "keywords_json" })
+            );
+        }
         clearCache("/api/rental/my/properties/");
         clearCache("/api/rental/properties/");
         clearCache("/api/rental/properties/detail/");
@@ -209,15 +248,23 @@ export const rentalsService = {
         payload: OwnerPropertyUpsertPayload,
         changedKeys?: Set<keyof OwnerPropertyUpsertPayload>
     ) => {
-        const updated = await api.patch<WireApiEnvelope<RentalMyPropertyUpdateDataDto>>(
-            `/api/rental/my/properties/update/?property_id=${encodeURIComponent(propertyId)}`,
-            buildOwnerFormData(payload, { mode: "update", changedKeys }),
-            {
-                headers: {
-                    "Content-Type": "multipart/form-data",
-                },
-            }
-        );
+        let updated: WireApiEnvelope<RentalMyPropertyUpdateDataDto>;
+        const url = `/api/rental/my/properties/update/?property_id=${encodeURIComponent(propertyId)}`;
+        const headers = { "Content-Type": "multipart/form-data" };
+        try {
+            updated = await api.patch<WireApiEnvelope<RentalMyPropertyUpdateDataDto>>(
+                url,
+                buildOwnerFormData(payload, { mode: "update", changedKeys }),
+                { headers }
+            );
+        } catch (error) {
+            if (!isKeywordValidationError(error)) throw error;
+            updated = await api.patch<WireApiEnvelope<RentalMyPropertyUpdateDataDto>>(
+                url,
+                buildOwnerFormData(payload, { mode: "update", changedKeys, keywordFieldMode: "keywords_json" }),
+                { headers }
+            );
+        }
         clearCache("/api/rental/my/properties/");
         clearCache("/api/rental/properties/");
         clearCache(`/api/rental/properties/detail/?property_id=${encodeURIComponent(propertyId)}`);

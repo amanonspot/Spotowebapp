@@ -117,6 +117,23 @@ class HybridAuthAdapter implements AuthAdapter {
         }
     }
 
+    async requestListingOtp(phone: string): Promise<OtpRequestResult> {
+        return this.requestOtp(phone);
+    }
+
+    async verifyListingOtp(phone: string, code: string): Promise<boolean> {
+        try {
+            await authService.verifyListingOTP(code, phone);
+            return true;
+        } catch (error) {
+            if (DEFAULT_MOCK_MODE && code === DEFAULT_MOCK_OTP) {
+                return true;
+            }
+            const message = error instanceof Error ? error.message : "OTP verification failed";
+            throw new Error(message);
+        }
+    }
+
     getSession(): AuthSession {
         return (
             readJson<AuthSession>(SESSION_KEY) || {

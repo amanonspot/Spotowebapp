@@ -32,6 +32,7 @@ const OWNER_LEADS_KEY = "spoto_owner_leads_v1";
 const defaultFormInput: OwnerListingFormInput = {
     propertyTitle: "",
     title: "",
+    employeeId: "",
     propertyTypeId: "",
     cityId: "",
     localityId: "",
@@ -42,6 +43,9 @@ const defaultFormInput: OwnerListingFormInput = {
     deposit: "",
     builtUpAreaSqft: "",
     addressLine: "",
+    streetLocalityArea: "",
+    landmark: "",
+    googleMapsLink: "",
     description: "",
     contactPhone: "",
     amenityIds: [],
@@ -230,12 +234,25 @@ const toSummary = (listing: ReturnType<typeof normalizePropertyList>[number]): O
     status: listing.status || "pending_review",
     image: listing.image,
     updatedAt: new Date().toISOString(),
+    isVerified: listing.isVerified,
+    isActive: listing.isActive,
 });
 
 const titleFromInput = (input: OwnerListingFormInput) => input.propertyTitle.trim();
 
+const composeDescription = (input: OwnerListingFormInput): string => {
+    const direct = input.description.trim();
+    const extra = [input.streetLocalityArea, input.landmark, input.googleMapsLink]
+        .map((value) => (value || "").trim())
+        .filter(Boolean)
+        .join("\n");
+    if (direct && extra) return `${direct}\n${extra}`.trim();
+    return direct || extra;
+};
+
 const toUpsertPayload = (input: OwnerListingFormInput): OwnerPropertyUpsertPayload => ({
     propertyTitle: titleFromInput(input),
+    employeeId: (input.employeeId || "").trim() || undefined,
     propertyTypeId: input.propertyTypeId,
     cityId: input.cityId,
     localityId: input.localityId,
@@ -246,7 +263,7 @@ const toUpsertPayload = (input: OwnerListingFormInput): OwnerPropertyUpsertPaylo
     deposit: Number(input.deposit || 0),
     builtUpAreaSqft: Number(input.builtUpAreaSqft || 0),
     addressLine: input.addressLine.trim(),
-    description: input.description.trim(),
+    description: composeDescription(input),
     contactPhone: input.contactPhone.trim(),
     amenityIds: input.amenityIds.filter((item) => isUuidLike(item)),
     keywordIds: input.keywords.filter((item) => isUuidLike(item)),
@@ -274,6 +291,7 @@ const buildChangedKeys = (
 
 const toPayloadFromWire = (wire: RentalPropertyDto): OwnerPropertyUpsertPayload => ({
     propertyTitle: firstString(wire.title, wire.property_title),
+    employeeId: firstString((wire as UnknownRecord).listed_by_employee_id) || undefined,
     propertyTypeId: firstString(wire.property_type_id),
     cityId: firstString(wire.city_id),
     localityId: firstString(wire.locality_id),
@@ -311,6 +329,7 @@ const toFormFromWire = (wire: RentalPropertyDto): OwnerListingFormInput => ({
     ...defaultFormInput,
     propertyTitle: firstString(wire.title, wire.property_title),
     title: firstString(wire.title, wire.property_title),
+    employeeId: firstString((wire as UnknownRecord).listed_by_employee_id),
     propertyTypeId: firstString(wire.property_type_id),
     cityId: firstString(wire.city_id),
     localityId: firstString(wire.locality_id),
@@ -350,8 +369,7 @@ const getCreatedPropertyMeta = (
 
 class HybridOwnerAdapter implements OwnerListingAdapter {
     async getOwnerEntryRoute(): Promise<"/owner/dashboard" | "/owner/list-property"> {
-        const dashboard = await this.getDashboard();
-        return dashboard.listings.length > 0 ? "/owner/dashboard" : "/owner/list-property";
+        return "/owner/dashboard";
     }
 
     async getDashboard(): Promise<OwnerDashboardData> {
@@ -379,10 +397,9 @@ class HybridOwnerAdapter implements OwnerListingAdapter {
     }
 
     async getMasters(cityId?: string): Promise<OwnerMastersData> {
-        const [cities, localities, propertyTypes, bhkTypes, furnishingTypes, availabilityTypes, amenities, keywords] =
+        const [cities, propertyTypes, bhkTypes, furnishingTypes, availabilityTypes, amenities, keywords] =
             await Promise.allSettled([
                 rentalsService.listCities(),
-                rentalsService.listLocalities(cityId),
                 rentalsService.listPropertyTypes(),
                 rentalsService.listBhkTypes(),
                 rentalsService.listFurnishingTypes(),
@@ -391,9 +408,20 @@ class HybridOwnerAdapter implements OwnerListingAdapter {
                 rentalsService.listKeywords(),
             ]);
 
+        const cityOptions =
+            cities.status === "fulfilled" ? normalizeMasterOptions(cities.value).map(toMasterSelectOption) : [];
+        const effectiveCityId = cityId || (cityOptions.length === 1 ? cityOptions[0].id : undefined);
+        const localities = effectiveCityId
+            ? await Promise.allSettled([rentalsService.listLocalities(effectiveCityId)])
+            : [];
+        const localitiesResult = localities[0];
+
         const parsed: OwnerMastersData = {
-            cities: cities.status === "fulfilled" ? normalizeMasterOptions(cities.value).map(toMasterSelectOption) : [],
-            localities: localities.status === "fulfilled" ? normalizeMasterOptions(localities.value).map(toMasterSelectOption) : [],
+            cities: cityOptions,
+            localities:
+                localitiesResult && localitiesResult.status === "fulfilled"
+                    ? normalizeMasterOptions(localitiesResult.value).map(toMasterSelectOption)
+                    : [],
             propertyTypes:
                 propertyTypes.status === "fulfilled" ? normalizeMasterOptions(propertyTypes.value).map(toMasterSelectOption) : [],
             bhkTypes: bhkTypes.status === "fulfilled" ? normalizeMasterOptions(bhkTypes.value).map(toMasterSelectOption) : [],
@@ -448,14 +476,25 @@ class HybridOwnerAdapter implements OwnerListingAdapter {
 
         try {
             const response = await rentalsService.createOwnerProperty(toUpsertPayload(input));
-            const { propertyId } = getCreatedPropertyMeta(response);
+            const { propertyId, isVerified } = getCreatedPropertyMeta(response);
             const dashboard = await this.getDashboard();
             const created = dashboard.listings.find((item) => item.id === propertyId);
-            if (created) return created;
+            if (created) return { ...created, isVerified: created.isVerified ?? isVerified ?? undefined };
             if (!propertyId) {
                 throw new Error("Create succeeded but property_id was missing in backend response.");
             }
-            throw new Error("Create succeeded but listing was not returned by owner dashboard yet. Please refresh.");
+            return {
+                id: propertyId,
+                title: titleFromInput(input),
+                locality: input.localityId || "",
+                city: input.cityId || "",
+                rent: Number(input.rent || 0),
+                deposit: Number(input.deposit || 0),
+                status: isVerified ? "verified" : "pending_review",
+                image: "",
+                updatedAt: new Date().toISOString(),
+                isVerified: isVerified ?? undefined,
+            };
         } catch (error) {
             if (RENTALS_MOCK_MODE) {
                 return {

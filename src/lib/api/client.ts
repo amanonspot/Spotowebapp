@@ -13,6 +13,45 @@ const getAccessToken = () => {
     return localStorage.getItem("access_token") || localStorage.getItem("spoto_access_token");
 };
 
+const getRefreshToken = () => {
+    if (typeof window === "undefined") return null;
+    return localStorage.getItem("refresh_token") || localStorage.getItem("spoto_refresh_token");
+};
+
+const persistTokens = (accessToken?: string, refreshToken?: string) => {
+    if (typeof window === "undefined") return;
+    if (accessToken) localStorage.setItem("access_token", accessToken);
+    if (refreshToken) localStorage.setItem("refresh_token", refreshToken);
+    if (accessToken || refreshToken) localStorage.setItem("isAuthenticated", "true");
+};
+
+const clearAuthTokens = () => {
+    if (typeof window === "undefined") return;
+    localStorage.removeItem("access_token");
+    localStorage.removeItem("refresh_token");
+    localStorage.removeItem("isAuthenticated");
+    localStorage.removeItem("spoto_session_v1");
+};
+
+const persistTokensFromBody = (data: unknown) => {
+    if (!data || typeof data !== "object") return;
+    const payload = data as Record<string, unknown>;
+    const access = typeof payload.access === "string" ? payload.access : "";
+    const refresh = typeof payload.refresh === "string" ? payload.refresh : "";
+    if (access || refresh) persistTokens(access || undefined, refresh || undefined);
+};
+
+const persistTokensFromHeaders = (headers: Record<string, unknown> | undefined) => {
+    if (!headers) return;
+    const getHeader = (key: string) => {
+        const value = headers[key] ?? headers[key.toLowerCase()];
+        return typeof value === "string" ? value : "";
+    };
+    const access = getHeader("X-New-Access-Token");
+    const refresh = getHeader("X-New-Refresh-Token");
+    if (access || refresh) persistTokens(access || undefined, refresh || undefined);
+};
+
 const buildErrorMessage = (error: AxiosError): string => {
     const status = error.response?.status;
     if (status === 401) return "Your session has expired. Please log in again.";
@@ -42,6 +81,7 @@ export interface ApiError extends Error {
 }
 
 type RequestConfig = AxiosRequestConfig & { skipAuth?: boolean };
+type RetryRequestConfig = RequestConfig & { _retry?: boolean };
 
 export const clearCache = (url?: string) => {
     if (!url) {
@@ -65,21 +105,51 @@ const apiClient: AxiosInstance = axios.create({
 apiClient.interceptors.request.use((config) => {
     const skipAuth = Boolean((config as RequestConfig).skipAuth);
     const token = getAccessToken();
-    if (!skipAuth && token) {
+    const refreshToken = getRefreshToken();
+    if (!skipAuth) {
         config.headers = config.headers || {};
-        config.headers.Authorization = `Bearer ${token}`;
+        if (token) config.headers.Authorization = `Bearer ${token}`;
+        if (refreshToken) config.headers["X-Refresh-Token"] = refreshToken;
     }
     return config;
 });
 
 apiClient.interceptors.response.use(
-    (response) => response,
-    (error: AxiosError) => {
-        if (error.response?.status === 401 && typeof window !== "undefined") {
-            localStorage.removeItem("access_token");
-            localStorage.removeItem("refresh_token");
-            localStorage.removeItem("isAuthenticated");
-            localStorage.removeItem("spoto_session_v1");
+    async (response) => {
+        persistTokensFromHeaders(response.headers as Record<string, unknown>);
+        persistTokensFromBody(response.data);
+        return response;
+    },
+    async (error: AxiosError) => {
+        persistTokensFromHeaders(error.response?.headers as Record<string, unknown> | undefined);
+        persistTokensFromBody(error.response?.data);
+
+        const status = error.response?.status;
+        const originalConfig = error.config as RetryRequestConfig | undefined;
+        const refreshToken = getRefreshToken();
+        const skipAuth = Boolean(originalConfig?.skipAuth);
+
+        if (status === 401 && originalConfig && !originalConfig._retry && !skipAuth && refreshToken) {
+            originalConfig._retry = true;
+            originalConfig.headers = originalConfig.headers || {};
+            const latestAccess = getAccessToken();
+            if (latestAccess) {
+                originalConfig.headers.Authorization = `Bearer ${latestAccess}`;
+            }
+            originalConfig.headers["X-Refresh-Token"] = refreshToken;
+
+            try {
+                return await apiClient.request(originalConfig);
+            } catch (retryError) {
+                if (axios.isAxiosError(retryError) && retryError.response?.status === 401) {
+                    clearAuthTokens();
+                }
+                return Promise.reject(retryError);
+            }
+        }
+
+        if (status === 401) {
+            clearAuthTokens();
         }
 
         return Promise.reject(error);

@@ -4,9 +4,9 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Bell, Building2, ChevronLeft, House, Plus, Upload, X } from "lucide-react";
 import PrimaryButton from "@/components/revamp/PrimaryButton";
+import { authAdapter, ownerAdapter } from "@/lib/adapters";
 import { OwnerListingFormInput, OwnerMastersData, SelectOption } from "@/lib/adapters/types";
-import { ownerAdapter } from "@/lib/adapters";
-import { RENTALS_MOCK_MODE } from "@/lib/rentals";
+import { OWNER_MOCK_MODE, RENTALS_MOCK_MODE } from "@/lib/rentals";
 
 const TOTAL_STEPS = 7;
 const STEP_TITLES = [
@@ -19,12 +19,15 @@ const STEP_TITLES = [
     "Verify Phone OTP",
 ];
 
+const OTP_RESEND_SECONDS = 30;
+
 const sanitizeNumericInput = (value: string) => value.replace(/[^\d]/g, "");
-const sanitizeTextInput = (value: string) => value.replace(/\s+/g, " ").trimStart();
+const sanitizeTextInput = (value: string) => value.replace(/\u0000/g, "");
 
 const emptyForm: OwnerListingFormInput = {
     propertyTitle: "",
     title: "",
+    employeeId: "",
     propertyTypeId: "",
     cityId: "",
     localityId: "",
@@ -35,6 +38,9 @@ const emptyForm: OwnerListingFormInput = {
     deposit: "",
     builtUpAreaSqft: "",
     addressLine: "",
+    streetLocalityArea: "",
+    landmark: "",
+    googleMapsLink: "",
     description: "",
     contactPhone: "",
     amenityIds: [],
@@ -127,15 +133,21 @@ export default function OwnerListingWizard() {
     const [customKeyword, setCustomKeyword] = useState("");
     const [coverIndex, setCoverIndex] = useState(0);
     const [ownerName, setOwnerName] = useState("");
+    const [localitySearch, setLocalitySearch] = useState("");
     const [otpDigits, setOtpDigits] = useState(["", "", "", ""]);
     const [otpError, setOtpError] = useState<string | null>(null);
+    const [otpMessage, setOtpMessage] = useState<string | null>(null);
+    const [otpRequesting, setOtpRequesting] = useState(false);
+    const [otpResendAt, setOtpResendAt] = useState<number>(0);
     const otpRefs = useRef<Array<HTMLInputElement | null>>([]);
+    const [clock, setClock] = useState<number>(Date.now());
 
     useEffect(() => {
         let mounted = true;
 
         const load = async () => {
             setLoadingMasters(true);
+            setError(null);
             try {
                 const response = await ownerAdapter.getMasters(form.cityId || undefined);
                 if (mounted) setMasters(response);
@@ -155,15 +167,63 @@ export default function OwnerListingWizard() {
         };
     }, [form.cityId]);
 
-    const propertyTypeOptions =
-        masters.propertyTypes.length > 0 ? masters.propertyTypes : RENTALS_MOCK_MODE ? fallbackPropertyTypes : [];
-    const bhkOptions = masters.bhkTypes.length > 0 ? masters.bhkTypes : RENTALS_MOCK_MODE ? fallbackBhk : [];
-    const furnishingOptions =
-        masters.furnishingTypes.length > 0 ? masters.furnishingTypes : RENTALS_MOCK_MODE ? fallbackFurnishing : [];
-    const amenityOptions = masters.amenities.length > 0 ? masters.amenities : RENTALS_MOCK_MODE ? fallbackAmenities : [];
-    const keywordOptions = masters.keywords.length > 0 ? masters.keywords : RENTALS_MOCK_MODE ? fallbackKeywords : [];
-    const localityOptions = masters.localities.length > 0 ? masters.localities : RENTALS_MOCK_MODE ? fallbackLocalities : [];
-    const cityOptions = masters.cities.length > 0 ? masters.cities : RENTALS_MOCK_MODE ? [fallbackOption("Bengaluru")] : [];
+    useEffect(() => {
+        if (form.cityId || masters.cities.length !== 1) return;
+        setForm((prev) => ({ ...prev, cityId: masters.cities[0].id }));
+    }, [form.cityId, masters.cities]);
+
+    useEffect(() => {
+        if (step !== 7) return;
+        const timer = window.setInterval(() => setClock(Date.now()), 1000);
+        return () => window.clearInterval(timer);
+    }, [step]);
+
+    const propertyTypeOptions = useMemo(
+        () => (masters.propertyTypes.length > 0 ? masters.propertyTypes : RENTALS_MOCK_MODE ? fallbackPropertyTypes : []),
+        [masters.propertyTypes]
+    );
+    const bhkOptions = useMemo(
+        () => (masters.bhkTypes.length > 0 ? masters.bhkTypes : RENTALS_MOCK_MODE ? fallbackBhk : []),
+        [masters.bhkTypes]
+    );
+    const furnishingOptions = useMemo(
+        () => (masters.furnishingTypes.length > 0 ? masters.furnishingTypes : RENTALS_MOCK_MODE ? fallbackFurnishing : []),
+        [masters.furnishingTypes]
+    );
+    const amenityOptions = useMemo(
+        () => (masters.amenities.length > 0 ? masters.amenities : RENTALS_MOCK_MODE ? fallbackAmenities : []),
+        [masters.amenities]
+    );
+    const keywordOptions = useMemo(
+        () => (masters.keywords.length > 0 ? masters.keywords : RENTALS_MOCK_MODE ? fallbackKeywords : []),
+        [masters.keywords]
+    );
+    const localityOptions = useMemo(
+        () => (masters.localities.length > 0 ? masters.localities : RENTALS_MOCK_MODE ? fallbackLocalities : []),
+        [masters.localities]
+    );
+    const cityOptions = useMemo(
+        () => (masters.cities.length > 0 ? masters.cities : RENTALS_MOCK_MODE ? [fallbackOption("Bengaluru")] : []),
+        [masters.cities]
+    );
+
+    const filteredLocalities = useMemo(() => {
+        const query = localitySearch.trim().toLowerCase();
+        if (!query) return localityOptions;
+        return localityOptions.filter((option) => option.name.toLowerCase().includes(query));
+    }, [localityOptions, localitySearch]);
+
+    const selectedCityName = useMemo(
+        () => cityOptions.find((option) => option.id === form.cityId)?.name || "",
+        [cityOptions, form.cityId]
+    );
+    const selectedLocalityName = useMemo(
+        () => localityOptions.find((option) => option.id === form.localityId)?.name || "",
+        [localityOptions, form.localityId]
+    );
+
+    const mapQuery = [selectedLocalityName, selectedCityName].filter(Boolean).join(", ");
+    const mapHref = form.googleMapsLink?.trim() || (mapQuery ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapQuery)}` : "");
 
     const imagePreviews = useMemo(
         () => form.imageFiles.map((file) => URL.createObjectURL(file)),
@@ -178,6 +238,8 @@ export default function OwnerListingWizard() {
 
     const sizeValue = Number(form.builtUpAreaSqft || 0);
     const sizeProgress = Math.min(100, Math.max(0, (sizeValue / 5000) * 100));
+    const otpResendIn = Math.max(0, Math.ceil((otpResendAt - clock) / 1000));
+    const canResendOtp = step === 7 && otpResendIn === 0 && form.contactPhone.length === 10 && !otpRequesting;
 
     const updateField = <K extends keyof OwnerListingFormInput>(key: K, value: OwnerListingFormInput[K]) => {
         setForm((prev) => ({
@@ -213,6 +275,30 @@ export default function OwnerListingWizard() {
             imageFiles: prev.imageFiles.filter((_, currentIndex) => currentIndex !== index),
         }));
         setCoverIndex((prev) => Math.max(0, Math.min(prev, form.imageFiles.length - 2)));
+    };
+
+    const requestOtp = async (reason: "initial" | "resend") => {
+        if (form.contactPhone.length !== 10) {
+            setOtpMessage("Enter a valid 10-digit phone number before requesting OTP.");
+            return false;
+        }
+
+        setOtpError(null);
+        setOtpMessage(null);
+        setOtpRequesting(true);
+        try {
+            const result = await authAdapter.requestListingOtp(form.contactPhone);
+            setOtpMessage(result.message || (reason === "resend" ? "OTP resent successfully." : "OTP sent successfully."));
+            setOtpResendAt(Date.now() + OTP_RESEND_SECONDS * 1000);
+            return true;
+        } catch (otpRequestError) {
+            const message =
+                otpRequestError instanceof Error ? otpRequestError.message : "Unable to request OTP right now.";
+            setOtpMessage(message);
+            return false;
+        } finally {
+            setOtpRequesting(false);
+        }
     };
 
     const stepValid = useMemo(() => {
@@ -271,41 +357,66 @@ export default function OwnerListingWizard() {
         setError(null);
 
         if (step < TOTAL_STEPS) {
+            if (step === 6) {
+                setStep(7);
+                await requestOtp("initial");
+                return;
+            }
             setStep((prev) => prev + 1);
             return;
         }
 
         const otp = otpDigits.join("");
-        if (otp !== "0000") {
-            setOtpError("Invalid OTP. Use 0000 for now.");
-            return;
-        }
-
         setSubmitting(true);
+        setOtpError(null);
         try {
+            if (authAdapter.verifyListingOtp) {
+                await authAdapter.verifyListingOtp(form.contactPhone, otp);
+            } else {
+                await authAdapter.verifyOtp(otp);
+            }
+
             const orderedImages = [...form.imageFiles];
             if (coverIndex > 0 && orderedImages[coverIndex]) {
                 const [cover] = orderedImages.splice(coverIndex, 1);
                 orderedImages.unshift(cover);
             }
 
-            const fallbackTitle = `${form.bhkId || "Property"} in ${form.localityId || form.cityId || "Bengaluru"}`;
-            await ownerAdapter.createProperty({
+            const fallbackTitle = `${form.bhkId || "Property"} in ${selectedLocalityName || selectedCityName || "Bengaluru"}`;
+            const created = await ownerAdapter.createProperty({
                 ...form,
                 propertyTitle: form.propertyTitle.trim() || fallbackTitle,
                 title: form.propertyTitle.trim() || fallbackTitle,
                 imageFiles: orderedImages,
                 availabilityId: form.availabilityId || "immediate",
             });
+
+            const pending = created.isVerified === false || /pending|review/i.test(created.status || "");
+            if (pending) {
+                router.push(`/owner/list-property/pending?property_id=${encodeURIComponent(created.id)}`);
+                return;
+            }
             router.push("/owner/dashboard");
         } catch (submitError) {
-            setError(submitError instanceof Error ? submitError.message : "Unable to publish listing.");
+            const message = submitError instanceof Error ? submitError.message : "Unable to publish listing.";
+            if (message.toLowerCase().includes("otp")) {
+                setOtpError(message);
+            } else {
+                setError(message);
+            }
         } finally {
             setSubmitting(false);
         }
     };
 
-    const nextLabel = step === TOTAL_STEPS ? (submitting ? "Publishing..." : "Submit") : "Next";
+    const nextLabel =
+        step === TOTAL_STEPS
+            ? submitting
+                ? "Publishing..."
+                : "Submit"
+            : step === 6
+            ? "Request OTP"
+            : "Next";
 
     const sectionCardClass = "rounded-2xl border border-white/20 bg-[#12121A] p-4";
     const chipClass =
@@ -322,7 +433,9 @@ export default function OwnerListingWizard() {
                     >
                         <ChevronLeft className="h-5 w-5" />
                     </button>
-                    <p className="text-[11px] text-white/55">Step {step} / {TOTAL_STEPS}</p>
+                    <p className="text-[11px] text-white/55">
+                        Step {step} / {TOTAL_STEPS}
+                    </p>
                     <button
                         type="button"
                         onClick={() => router.push("/owner/dashboard")}
@@ -340,7 +453,7 @@ export default function OwnerListingWizard() {
                         <section className={sectionCardClass}>
                             <p className="mb-3 text-lg font-semibold">Select Property Type</p>
                             <div className="space-y-3">
-                                {propertyTypeOptions.slice(0, 3).map((option, index) => {
+                                {propertyTypeOptions.map((option, index) => {
                                     const active = form.propertyTypeId === option.id;
                                     return (
                                         <button
@@ -360,6 +473,11 @@ export default function OwnerListingWizard() {
                                         </button>
                                     );
                                 })}
+                                {propertyTypeOptions.length === 1 && !RENTALS_MOCK_MODE ? (
+                                    <p className="rounded-xl border border-white/20 bg-[#0d0d14] px-3 py-2 text-xs text-white/70">
+                                        Only one property type is configured in backend masters right now.
+                                    </p>
+                                ) : null}
                                 {propertyTypeOptions.length === 0 ? (
                                     <p className="rounded-xl border border-white/20 bg-[#0d0d14] px-3 py-2 text-sm text-white/70">
                                         Property types are unavailable right now. Please retry.
@@ -399,6 +517,9 @@ export default function OwnerListingWizard() {
                                         );
                                     })}
                                 </div>
+                                {bhkOptions.length === 1 && !RENTALS_MOCK_MODE ? (
+                                    <p className="mt-2 text-xs text-white/60">Only one BHK option is currently configured.</p>
+                                ) : null}
                             </section>
 
                             <section className={sectionCardClass}>
@@ -561,6 +682,7 @@ export default function OwnerListingWizard() {
                                         background: `linear-gradient(90deg, #B7F041 ${sizeProgress}%, rgba(255,255,255,0.3) ${sizeProgress}%)`,
                                     }}
                                 />
+                                <p className="mt-2 text-xs text-white/70">Selected size: {sizeValue.toLocaleString("en-IN")} sq feet</p>
                             </section>
 
                             <input
@@ -607,12 +729,40 @@ export default function OwnerListingWizard() {
                         <>
                             <section className={sectionCardClass}>
                                 <p className="mb-3 text-sm font-semibold">Confirm Map Location</p>
-                                <div className="mb-3 rounded-xl border border-white/20 bg-white/5 px-3 py-2 text-sm text-white/60">
-                                    Search for area, street name..
-                                </div>
-                                <p className="text-xs text-white/55">Currently Live in:</p>
+                                <input
+                                    value={localitySearch}
+                                    onChange={(event) => setLocalitySearch(sanitizeTextInput(event.target.value))}
+                                    placeholder="Search locality, street name..."
+                                    className="h-11 w-full rounded-xl border border-white/20 bg-[#0d0d14] px-3 text-sm text-white/90 outline-none placeholder:text-white/35 focus:border-[#A67AEB]"
+                                />
+
+                                <p className="mt-3 text-xs text-white/55">Select city:</p>
                                 <div className="mt-2 flex flex-wrap gap-2">
-                                    {localityOptions.slice(0, 4).map((option) => {
+                                    {cityOptions.map((option) => {
+                                        const active = form.cityId === option.id;
+                                        return (
+                                            <button
+                                                key={option.id}
+                                                type="button"
+                                                onClick={() => {
+                                                    setLocalitySearch("");
+                                                    setForm((prev) => ({
+                                                        ...prev,
+                                                        cityId: option.id,
+                                                        localityId: prev.cityId === option.id ? prev.localityId : "",
+                                                    }));
+                                                }}
+                                                className={`${chipClass} ${active ? "border-[#B7F041] bg-[#B7F041] text-[#111]" : ""}`}
+                                            >
+                                                {option.name}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+
+                                <p className="mt-3 text-xs text-white/55">Currently Live in:</p>
+                                <div className="mt-2 flex max-h-36 flex-wrap gap-2 overflow-y-auto pr-1">
+                                    {filteredLocalities.map((option) => {
                                         const active = form.localityId === option.id;
                                         return (
                                             <button
@@ -626,31 +776,31 @@ export default function OwnerListingWizard() {
                                         );
                                     })}
                                 </div>
+                                {filteredLocalities.length === 0 ? (
+                                    <p className="mt-2 text-xs text-white/60">No localities match this search.</p>
+                                ) : null}
 
-                                <div className="mt-3 h-36 overflow-hidden rounded-xl border border-white/15 bg-white/10">
-                                    <img
-                                        src="https://images.unsplash.com/photo-1569336415962-a4bd9f69c07b?auto=format&fit=crop&w=900&q=70"
-                                        alt="map preview"
-                                        className="h-full w-full object-cover opacity-80"
-                                    />
+                                <div className="mt-3 rounded-xl border border-white/15 bg-white/5 p-3 text-sm text-white/80">
+                                    <p className="font-semibold text-white/90">Map Preview</p>
+                                    <p className="mt-1 text-xs text-white/65">
+                                        {mapQuery || "Select city/locality to resolve the map location."}
+                                    </p>
+                                    {mapHref ? (
+                                        <a
+                                            href={mapHref}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="mt-2 inline-flex rounded-lg border border-[#A67AEB] px-3 py-1.5 text-xs font-semibold text-[#cfb7ff]"
+                                        >
+                                            Open Map
+                                        </a>
+                                    ) : (
+                                        <p className="mt-2 text-xs text-white/60">
+                                            Map services unavailable here. Continue using selected locality/city.
+                                        </p>
+                                    )}
                                 </div>
                             </section>
-
-                            <div className="flex flex-wrap gap-2">
-                                {cityOptions.slice(0, 3).map((option) => {
-                                    const active = form.cityId === option.id;
-                                    return (
-                                        <button
-                                            key={option.id}
-                                            type="button"
-                                            onClick={() => updateField("cityId", option.id)}
-                                            className={`${chipClass} ${active ? "border-[#B7F041] bg-[#B7F041] text-[#111]" : ""}`}
-                                        >
-                                            {option.name}
-                                        </button>
-                                    );
-                                })}
-                            </div>
 
                             <input
                                 value={form.addressLine}
@@ -658,11 +808,35 @@ export default function OwnerListingWizard() {
                                 placeholder="Flat, House No., Building, Apartment"
                                 className="h-12 w-full rounded-xl border border-white/20 bg-[#0d0d14] px-3 text-sm text-white/90 outline-none placeholder:text-white/35 focus:border-[#A67AEB]"
                             />
+                            <input
+                                value={form.streetLocalityArea || ""}
+                                onChange={(event) => updateField("streetLocalityArea", sanitizeTextInput(event.target.value))}
+                                placeholder="Street, Locality, Area"
+                                className="h-12 w-full rounded-xl border border-white/20 bg-[#0d0d14] px-3 text-sm text-white/90 outline-none placeholder:text-white/35 focus:border-[#A67AEB]"
+                            />
+                            <input
+                                value={form.landmark || ""}
+                                onChange={(event) => updateField("landmark", sanitizeTextInput(event.target.value))}
+                                placeholder="Landmark"
+                                className="h-12 w-full rounded-xl border border-white/20 bg-[#0d0d14] px-3 text-sm text-white/90 outline-none placeholder:text-white/35 focus:border-[#A67AEB]"
+                            />
+                            <input
+                                value={form.googleMapsLink || ""}
+                                onChange={(event) => updateField("googleMapsLink", sanitizeTextInput(event.target.value))}
+                                placeholder="Google Maps Location Link"
+                                className="h-12 w-full rounded-xl border border-white/20 bg-[#0d0d14] px-3 text-sm text-white/90 outline-none placeholder:text-white/35 focus:border-[#A67AEB]"
+                            />
+                            <input
+                                value={form.employeeId || ""}
+                                onChange={(event) => updateField("employeeId", sanitizeTextInput(event.target.value).toUpperCase())}
+                                placeholder="Employee Code (if listed by SPOTO)"
+                                className="h-12 w-full rounded-xl border border-white/20 bg-[#0d0d14] px-3 text-sm text-white/90 outline-none placeholder:text-white/35 focus:border-[#A67AEB]"
+                            />
                             <textarea
                                 rows={3}
                                 value={form.description}
                                 onChange={(event) => updateField("description", sanitizeTextInput(event.target.value))}
-                                placeholder="Street, locality, area / landmark / maps link"
+                                placeholder="Describe your property"
                                 className="w-full rounded-xl border border-white/20 bg-[#0d0d14] px-3 py-3 text-sm text-white/90 outline-none placeholder:text-white/35 focus:border-[#A67AEB]"
                             />
                             <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-white/20 bg-[#0d0d14] px-3 py-3 text-sm text-white/80">
@@ -708,7 +882,7 @@ export default function OwnerListingWizard() {
                     {step === 7 && (
                         <>
                             <section className={sectionCardClass}>
-                                <p className="text-sm text-white/70">To confirm your number enter OTP sent to</p>
+                                <p className="text-sm text-white/70">To confirm your number, enter OTP sent to</p>
                                 <p className="mt-1 text-sm font-semibold">+91-{form.contactPhone || "XXXXXXXXXX"}</p>
                             </section>
                             <div className="flex justify-center gap-3">
@@ -730,11 +904,17 @@ export default function OwnerListingWizard() {
                             </div>
                             <button
                                 type="button"
-                                className="h-12 w-full rounded-xl border border-[#B7F041] text-base font-semibold text-white"
+                                onClick={() => requestOtp("resend")}
+                                disabled={!canResendOtp}
+                                className="h-12 w-full rounded-xl border border-[#B7F041] text-base font-semibold text-white disabled:cursor-not-allowed disabled:border-white/25 disabled:text-white/45"
                             >
-                                Resend link
+                                {otpRequesting ? "Sending OTP..." : otpResendIn > 0 ? `Resend in ${otpResendIn}s` : "Resend link"}
                             </button>
-                            <p className="text-center text-xs text-white/50">Mock OTP for now: 0000</p>
+                            <p className="text-center text-xs text-white/50">
+                                {OWNER_MOCK_MODE || RENTALS_MOCK_MODE
+                                    ? "Demo mode OTP is 0000."
+                                    : "OTP will be valid for 10 minutes."}
+                            </p>
                         </>
                     )}
                 </div>
@@ -742,6 +922,11 @@ export default function OwnerListingWizard() {
                 {error ? (
                     <p className="mt-3 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">
                         {error}
+                    </p>
+                ) : null}
+                {otpMessage ? (
+                    <p className="mt-3 rounded-xl border border-[#A67AEB]/30 bg-[#A67AEB]/10 px-3 py-2 text-sm text-[#e2d4ff]">
+                        {otpMessage}
                     </p>
                 ) : null}
                 {otpError ? (

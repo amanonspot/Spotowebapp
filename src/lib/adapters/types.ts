@@ -107,6 +107,8 @@ export interface AuthAdapter {
     requestOtp(phone: string): Promise<OtpRequestResult>;
     verifyOtp(code: string): Promise<AuthSession>;
     getSession(): AuthSession;
+    requestListingOtp?(phone: string): Promise<OtpRequestResult>;
+    verifyListingOtp?(phone: string, code: string): Promise<boolean>;
 }
 
 export type CheckoutStatus = "idle" | "pending" | "paywall" | "success" | "failed";
@@ -155,6 +157,7 @@ export interface SelectOption {
 export interface OwnerListingFormInput {
     propertyTitle: string;
     title?: string;
+    employeeId?: string;
     propertyTypeId: string;
     cityId: string;
     localityId: string;
@@ -165,6 +168,9 @@ export interface OwnerListingFormInput {
     deposit: string;
     builtUpAreaSqft: string;
     addressLine: string;
+    streetLocalityArea?: string;
+    landmark?: string;
+    googleMapsLink?: string;
     description: string;
     contactPhone: string;
     amenityIds: string[];
@@ -186,6 +192,8 @@ export interface OwnerListingSummary {
     status: string;
     image: string;
     updatedAt: string;
+    isVerified?: boolean;
+    isActive?: boolean;
 }
 
 export type OwnerLeadState = "locked" | "unlocked";

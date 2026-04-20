@@ -19,6 +19,7 @@ export default function OwnerDashboardPage() {
     const [dashboard, setDashboard] = useState<OwnerDashboardData>(emptyDashboard);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [searchQuery, setSearchQuery] = useState("");
 
     useEffect(() => {
         let mounted = true;
@@ -31,7 +32,11 @@ export default function OwnerDashboardPage() {
                 if (mounted) setDashboard(next);
             } catch (loadError) {
                 if (mounted) {
-                    setError(loadError instanceof Error ? loadError.message : "Unable to load dashboard");
+                    const message = loadError instanceof Error ? loadError.message : "Unable to load dashboard";
+                    setError(message);
+                    if (message.toLowerCase().includes("session") || message.toLowerCase().includes("unauthorized")) {
+                        router.push("/auth/login");
+                    }
                 }
             } finally {
                 if (mounted) setLoading(false);
@@ -42,12 +47,27 @@ export default function OwnerDashboardPage() {
         return () => {
             mounted = false;
         };
-    }, []);
+    }, [router]);
 
     const unlockedCount = useMemo(
         () => dashboard.leads.filter((lead) => lead.state === "unlocked").length,
         [dashboard.leads]
     );
+
+    const normalizedSearch = searchQuery.trim().toLowerCase();
+    const visibleListings = useMemo(() => {
+        if (!normalizedSearch) return dashboard.listings;
+        return dashboard.listings.filter((listing) =>
+            [listing.title, listing.locality, listing.city].some((value) => value.toLowerCase().includes(normalizedSearch))
+        );
+    }, [dashboard.listings, normalizedSearch]);
+
+    const visibleLeads = useMemo(() => {
+        if (!normalizedSearch) return dashboard.leads;
+        return dashboard.leads.filter((lead) =>
+            [lead.tenantName, lead.phone, lead.phoneMasked].some((value) => value.toLowerCase().includes(normalizedSearch))
+        );
+    }, [dashboard.leads, normalizedSearch]);
 
     const handleUnlock = async (leadId: string) => {
         try {
@@ -90,6 +110,15 @@ export default function OwnerDashboardPage() {
                     >
                         List Your Property
                     </PrimaryButton>
+
+                    <div className="mt-4 rounded-xl border border-white/15 bg-[#0d0d14] px-3 py-2">
+                        <input
+                            value={searchQuery}
+                            onChange={(event) => setSearchQuery(event.target.value)}
+                            placeholder="Search listings or leads"
+                            className="w-full bg-transparent text-sm text-white/90 outline-none placeholder:text-white/40"
+                        />
+                    </div>
                 </header>
 
                 {error ? (
@@ -102,13 +131,15 @@ export default function OwnerDashboardPage() {
                     <h2 className="mb-3 text-xl font-semibold">My Properties</h2>
                     {loading ? (
                         <div className="rounded-2xl border border-white/10 bg-[#0f0f13] p-4 text-white/70">Loading listings...</div>
-                    ) : dashboard.listings.length === 0 ? (
+                    ) : visibleListings.length === 0 ? (
                         <div className="rounded-2xl border border-white/10 bg-[#0f0f13] p-4 text-white/70">
-                            You have no listings yet. Start by publishing one property.
+                            {dashboard.listings.length === 0
+                                ? "You have no listings yet. Start by publishing one property."
+                                : "No listings match your search."}
                         </div>
                     ) : (
                         <div className="space-y-4">
-                            {dashboard.listings.map((listing) => (
+                            {visibleListings.map((listing) => (
                                 <article
                                     key={listing.id}
                                     className="overflow-hidden rounded-2xl border border-white/15 bg-[#111116]"
@@ -139,13 +170,13 @@ export default function OwnerDashboardPage() {
 
                 <section className="mt-8">
                     <h2 className="mb-3 text-xl font-semibold">Tenant Leads</h2>
-                    {dashboard.leads.length === 0 ? (
+                    {visibleLeads.length === 0 ? (
                         <div className="rounded-2xl border border-white/10 bg-[#0f0f13] p-4 text-white/70">
-                            No leads unlocked yet.
+                            {dashboard.leads.length === 0 ? "No leads unlocked yet." : "No leads match your search."}
                         </div>
                     ) : (
                         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                            {dashboard.leads.map((lead) => (
+                            {visibleLeads.map((lead) => (
                             <article key={lead.id} className="rounded-2xl border border-[#A67AEB]/40 bg-[#101019] p-4">
                                 <p className="text-xs text-white/70">Tenant</p>
                                 <h3 className="text-xl font-semibold">{lead.tenantName}</h3>
