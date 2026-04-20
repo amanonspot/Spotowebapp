@@ -44,3 +44,6 @@ public/assets/images/Spoto - APIs.postman_collection (1).json
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Local Netlify folder
+.netlify
