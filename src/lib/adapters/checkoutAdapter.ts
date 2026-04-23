@@ -66,7 +66,7 @@ const getFallbackContact = (propertyId: string) => {
 const toPaywallFromPayload = (payload: unknown): CheckoutState["paywall"] | undefined => {
     const record = asRecord(payload);
     if (!record) return undefined;
-    const paywall = asRecord(record.paywall);
+    const paywall = asRecord(record.data);
     if (!paywall) return undefined;
     const oneDay = asRecord(paywall.one_day);
     const weekly = asRecord(paywall.weekly);
@@ -95,7 +95,7 @@ const parseUnlockSuccess = (response: RentalContactUnlockResponseDto) => {
     if (success === false) {
         return {
             type: "paywall" as const,
-            message: firstString(record.message, "Free contacts exhausted. Choose a pass."),
+            message: firstString(record.error, record.message, "Free contacts exhausted. Choose a pass."),
             paywall: toPaywallFromPayload(record),
         };
     }
@@ -104,12 +104,29 @@ const parseUnlockSuccess = (response: RentalContactUnlockResponseDto) => {
     const owner = asRecord(data?.owner);
     const phone = firstString(owner?.phone);
     if (!phone) return null;
+    const documents = Array.isArray(data?.documents)
+        ? data.documents
+              .map((doc) => {
+                  const record = asRecord(doc);
+                  if (!record) return null;
+                  const url = firstString(record.document_file_url);
+                  if (!url) return null;
+                  return {
+                      id: firstString(record.id) || undefined,
+                      documentType: firstString(record.document_type, "document"),
+                      documentUrl: url,
+                      uploadedAt: firstString(record.uploaded_at) || undefined,
+                  };
+              })
+              .filter((item): item is NonNullable<typeof item> => Boolean(item))
+        : [];
 
     return {
         type: "success" as const,
         message: firstString(record.message, "Contact unlocked"),
         ownerName: firstString(owner?.name, "Owner"),
         ownerPhone: phone,
+        documents,
     };
 };
 
@@ -156,7 +173,7 @@ class HybridCheckoutAdapter implements CheckoutAdapter {
                     status: "paywall",
                     message: parsed.message,
                     paywall: parsed.paywall,
-                    creditsRemaining: getCredits("tenant"),
+                    creditsRemaining: undefined,
                     updatedAt: new Date().toISOString(),
                 };
                 saveState(paywallState);
@@ -169,7 +186,8 @@ class HybridCheckoutAdapter implements CheckoutAdapter {
                 message: parsed.message,
                 unlockedPhone: parsed.ownerPhone,
                 unlockedName: parsed.ownerName,
-                creditsRemaining: getCredits("tenant"),
+                unlockedDocuments: parsed.documents,
+                creditsRemaining: undefined,
                 updatedAt: new Date().toISOString(),
             };
 
@@ -192,7 +210,7 @@ class HybridCheckoutAdapter implements CheckoutAdapter {
                     ...current,
                     status: paywall ? "paywall" : "failed",
                     message: paywall
-                        ? firstString(asRecord(apiError.data)?.message, "Free contacts exhausted. Choose a pass.")
+                        ? firstString(asRecord(apiError.data)?.error, asRecord(apiError.data)?.message, "Free contacts exhausted. Choose a pass.")
                         : extractErrorMessage(error, "Unable to unlock owner contact."),
                     paywall,
                     updatedAt: new Date().toISOString(),

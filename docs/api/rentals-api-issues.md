@@ -1,80 +1,40 @@
-# Rentals API Issues (Frontend Audit)
+# Rentals API Issues (Contract-Locked Audit)
 
-## 1) Malformed Endpoints in Collection Samples
-1. `DELETE api/rental/masters/property-types/delete/`
-- Missing base-url variable and leading slash.
-- Not consumable as-is by frontend tooling.
+## 1. Contract Conflicts
 
-2. `DELETE /api/rental/masters/bhk-types/delete/?bhk_id`
-- Inconsistent formatting vs other collection entries using full base path pattern.
-- Needs one canonical style from backend docs/collection.
+No unresolved contract conflicts remain in frontend integration after this pass.
 
-## 2) Localhost-Hardcoded Endpoints
-1. Legacy non-rentals sample detected in collection:
-- `http://127.0.0.1:8000/api/event/...`
-- Not used by rentals integration and must not be used in deploy config.
+## 2. Backend/Ops/Data-seeding dependencies (not frontend-fixable)
 
-## 3) Missing / Inconsistent Env Dependencies
-1. Multiple frontend env keys exist:
-- `NEXT_PUBLIC_API_BASE_URL` (preferred)
-- `NEXT_PUBLIC_API_URL` (legacy fallback)
+### A) Masters completeness
+- If only one city/locality/property type/BHK appears, this is a seed-data issue.
+- Frontend now correctly renders what backend returns and does not hardcode fake options.
 
-2. Required deploy action:
-- Ensure Netlify/production defines `NEXT_PUBLIC_API_BASE_URL`.
-- Keep legacy fallback only for backward compatibility during migration.
+### B) OTP delivery reliability
+- API flow is integrated; actual SMS delivery still depends on provider/ops setup.
+- Frontend now surfaces structured field-level OTP errors.
 
-## 4) Ambiguous Request / Response Fields
-1. `POST /api/rental/properties/get-contact/?property_id=...`
-- Exact error envelope shape on exhausted free unlocks varies by server path (`402` + body vs success:false paywall envelope).
-- Frontend now handles both patterns, but backend should standardize one contract.
+### C) Owner role and listing population
+- `is_owner` now exists in backend response shape, but product behavior still depends on actual user/listing data in backend.
 
-2. `POST /api/rental/passes/activate/`
-- Contract-critical fields (`razorpay_order_id`, `razorpay_key_id`, `amount`, `currency`) must always be present for checkout.
-- Any optional/nullable behavior should be explicitly documented.
+## 3. Strict frontend integration risks (now fixed)
+1. Legacy `title` contract drift in owner create/update payload.
+2. Legacy keyword UUID assumptions (`keyword_ids`, keyword masters).
+3. Detail route using deprecated `/properties/detail/`.
+4. Missing `available_from` parity in create/edit/display.
+5. Inconsistent error parsing when backend returns `success:false` + `field_errors`.
+6. Paywall parsing expecting deprecated `paywall` root key.
+7. Localities API calls without `city_id`.
+8. Document metadata not surfaced after create/update/edit.
 
-3. `GET /api/rental/properties/` and `GET /api/rental/properties/detail/`
-- Field aliases can vary (`title` vs `property_title`, `amenities[]` vs `amenity_ids[]`, `keywords[]` vs `keyword_ids[]`).
-- Frontend normalizes variants, but backend should provide one canonical shape.
+## 4. Remaining frontend product improvements (non-blocking for API correctness)
+1. Owner dashboard UI parity with mobile reference visuals.
+2. Stronger skeleton/loading states for owner edit prefill and public detail.
+3. Explicit inline field binding for all backend `field_errors` keys on owner wizard.
+4. Geo proximity filter controls (`lat/lng/radius_km`) exposure in tenant search UI.
 
-4. Owner property list payload shape
-- Some records may omit display-friendly labels while returning ids only.
-- Frontend resolves using masters, but backend docs should define which display fields are guaranteed.
-
-## 5) Endpoints Requiring Backend Clarification
-1. Owner contacts listing endpoint
-- No rentals endpoint currently returns all unlocked tenant contacts for owner dashboard/contacts.
-- Frontend currently uses local unlock state for owner contacts UI only.
-
-2. Approval visibility semantics
-- Tenant visibility appears tied to verification + active status.
-- Backend should confirm final tenant-list inclusion rules explicitly for newly created owner listings.
-
-3. Payment activation lifecycle
-- Webhook-based final pass activation is backend-authoritative.
-- Backend should document a polling/status endpoint contract if frontend must reflect completion state.
-
-## 6) Frontend-Detected Integration Risks (Now Mitigated in Code)
-1. Silent API→mock masking in real mode.
-- Fixed: real mode now throws explicit errors, mock fallback only in demo mode.
-
-2. Synthetic create/update success summaries in real mode.
-- Fixed: create/update now require backend truth/refetch confirmation.
-
-3. Inconsistent auth application on public endpoints.
-- Fixed: public rentals endpoints use `skipAuth`; protected endpoints use Bearer token.
-
-## 7) Backend Issues for Backend Team
-1. Standardize one response envelope per endpoint family:
-- success: `{ success: true, data: ... }`
-- failure: `{ error: \"...\" }` or documented structured equivalent
-
-2. Confirm and lock canonical field names:
-- title field (`title` only vs dual support with `property_title`)
-- amenities/keywords representation consistency
-
-3. Provide owner-contacts endpoint if owner contacts should be backend-source-of-truth.
-
-4. Document hard validation behavior for:
-- `document_type` + `document_file` pairing
-- `clear_images` / `clear_documents` update semantics
-- update partial field clearing behavior (e.g., empty string vs null)
+## 5. Locked business rules reflected in frontend
+1. Tenant visibility: only live/verified listings are public.
+2. Create without employee code: listing starts in `in_review`.
+3. Rejected recovery: owner must edit and resubmit.
+4. UI normalization: `verifying` and `verification_retry` share one pending/retry UX state.

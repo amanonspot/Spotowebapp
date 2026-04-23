@@ -42,6 +42,7 @@ export interface User {
   dob?: string;
   profile_pic?: string;
   city?: string;
+  is_owner?: boolean;
 }
 
 export interface UpdateUserRequest {

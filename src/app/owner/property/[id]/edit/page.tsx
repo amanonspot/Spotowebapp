@@ -1,11 +1,9 @@
 "use client";
 
-import React, { use, useEffect, useState } from "react";
+import React, { use } from "react";
 import { useRouter } from "next/navigation";
 import OwnerBottomNav from "@/components/owner/OwnerBottomNav";
-import OwnerListingForm from "@/components/owner/OwnerListingForm";
-import { OwnerListingFormInput } from "@/lib/adapters/types";
-import { ownerAdapter } from "@/lib/adapters";
+import OwnerListingWizard from "@/components/owner/OwnerListingWizard";
 
 interface PageProps {
     params: Promise<{ id: string }>;
@@ -14,26 +12,6 @@ interface PageProps {
 export default function OwnerPropertyEditPage({ params }: PageProps) {
     const router = useRouter();
     const { id } = use(params);
-    const [initialValue, setInitialValue] = useState<OwnerListingFormInput | null>(null);
-    const [error, setError] = useState<string | null>(null);
-
-    useEffect(() => {
-        let mounted = true;
-
-        const load = async () => {
-            try {
-                const form = await ownerAdapter.getPropertyForEdit(id);
-                if (mounted) setInitialValue(form);
-            } catch (loadError) {
-                if (mounted) setError(loadError instanceof Error ? loadError.message : "Unable to load listing");
-            }
-        };
-
-        load();
-        return () => {
-            mounted = false;
-        };
-    }, [id]);
 
     return (
         <main className="min-h-screen bg-[#050507] pb-24 text-white">
@@ -59,23 +37,10 @@ export default function OwnerPropertyEditPage({ params }: PageProps) {
                     <p className="mt-1 text-sm text-white/70">Update listing details and publish latest values.</p>
                 </header>
 
-                {error ? (
-                    <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-100">
-                        {error}
-                    </div>
-                ) : null}
-
-                {initialValue ? (
-                    <OwnerListingForm mode="edit" propertyId={id} initialValue={initialValue} />
-                ) : (
-                    <div className="rounded-2xl border border-white/10 bg-[#0f0f13] p-4 text-white/70">
-                        Loading editable listing...
-                    </div>
-                )}
+                <OwnerListingWizard mode="edit" propertyId={id} />
             </div>
 
             <OwnerBottomNav />
         </main>
     );
 }
-

@@ -41,33 +41,43 @@ const persistTokensFromBody = (data: unknown) => {
     if (access || refresh) persistTokens(access || undefined, refresh || undefined);
 };
 
-const persistTokensFromHeaders = (headers: Record<string, unknown> | undefined) => {
-    if (!headers) return;
-    const getHeader = (key: string) => {
-        const value = headers[key] ?? headers[key.toLowerCase()];
-        return typeof value === "string" ? value : "";
-    };
-    const access = getHeader("X-New-Access-Token");
-    const refresh = getHeader("X-New-Refresh-Token");
-    if (access || refresh) persistTokens(access || undefined, refresh || undefined);
+const extractFieldError = (payload: unknown): string => {
+    if (!payload || typeof payload !== "object") return "";
+    const fieldErrors = (payload as Record<string, unknown>).field_errors;
+    if (!fieldErrors || typeof fieldErrors !== "object") return "";
+    for (const value of Object.values(fieldErrors as Record<string, unknown>)) {
+        if (typeof value === "string" && value.trim()) return value.trim();
+        if (Array.isArray(value)) {
+            const first = value.find((item) => typeof item === "string" && item.trim());
+            if (typeof first === "string") return first.trim();
+        }
+    }
+    return "";
+};
+
+const firstNonEmptyString = (...values: unknown[]) => {
+    for (const value of values) {
+        if (typeof value === "string" && value.trim()) return value.trim();
+    }
+    return "";
 };
 
 const buildErrorMessage = (error: AxiosError): string => {
+    const payload = error.response?.data;
+    if (payload && typeof payload === "object") {
+        const data = payload as Record<string, unknown>;
+        const message = firstNonEmptyString(data.error, data.message, data.detail);
+        if (message) return message.slice(0, 200);
+        const fieldMessage = extractFieldError(payload);
+        if (fieldMessage) return fieldMessage.slice(0, 200);
+    }
+
     const status = error.response?.status;
     if (status === 401) return "Your session has expired. Please log in again.";
     if (status === 403) return "You are not authorized to perform this action.";
     if (status === 429) return "Too many requests. Please try again shortly.";
     if (typeof status === "number" && status >= 500) {
         return "Something went wrong on the server. Please try again.";
-    }
-
-    const payload = error.response?.data;
-    if (payload && typeof payload === "object") {
-        const data = payload as Record<string, unknown>;
-        const message = data.message || data.error || data.detail;
-        if (typeof message === "string" && message.trim()) {
-            return message.trim().slice(0, 200);
-        }
     }
     if (error.message) return error.message;
     return "Network request failed";
@@ -76,6 +86,7 @@ const buildErrorMessage = (error: AxiosError): string => {
 export interface ApiError extends Error {
     status?: number;
     errors?: Record<string, string[]>;
+    fieldErrors?: Record<string, string | string[]>;
     unauthorized?: boolean;
     data?: unknown;
 }
@@ -105,23 +116,19 @@ const apiClient: AxiosInstance = axios.create({
 apiClient.interceptors.request.use((config) => {
     const skipAuth = Boolean((config as RequestConfig).skipAuth);
     const token = getAccessToken();
-    const refreshToken = getRefreshToken();
     if (!skipAuth) {
         config.headers = config.headers || {};
         if (token) config.headers.Authorization = `Bearer ${token}`;
-        if (refreshToken) config.headers["X-Refresh-Token"] = refreshToken;
     }
     return config;
 });
 
 apiClient.interceptors.response.use(
     async (response) => {
-        persistTokensFromHeaders(response.headers as Record<string, unknown>);
         persistTokensFromBody(response.data);
         return response;
     },
     async (error: AxiosError) => {
-        persistTokensFromHeaders(error.response?.headers as Record<string, unknown> | undefined);
         persistTokensFromBody(error.response?.data);
 
         const status = error.response?.status;
@@ -136,7 +143,6 @@ apiClient.interceptors.response.use(
             if (latestAccess) {
                 originalConfig.headers.Authorization = `Bearer ${latestAccess}`;
             }
-            originalConfig.headers["X-Refresh-Token"] = refreshToken;
 
             try {
                 return await apiClient.request(originalConfig);
@@ -146,10 +152,6 @@ apiClient.interceptors.response.use(
                 }
                 return Promise.reject(retryError);
             }
-        }
-
-        if (status === 401) {
-            clearAuthTokens();
         }
 
         return Promise.reject(error);
@@ -180,6 +182,25 @@ export const apiRequest = async <T = unknown>(
             ...config,
         });
 
+        const body = response.data as unknown;
+        if (body && typeof body === "object" && (body as Record<string, unknown>).success === false) {
+            const apiError = new Error(
+                firstNonEmptyString(
+                    (body as Record<string, unknown>).error,
+                    (body as Record<string, unknown>).message,
+                    extractFieldError(body),
+                    "Request failed"
+                )
+            ) as ApiError;
+            apiError.status = response.status;
+            apiError.data = body;
+            const fieldErrors = (body as Record<string, unknown>).field_errors;
+            if (fieldErrors && typeof fieldErrors === "object") {
+                apiError.fieldErrors = fieldErrors as Record<string, string | string[]>;
+            }
+            throw apiError;
+        }
+
         if (cacheKey) {
             requestCache.set(cacheKey, { data: response.data, timestamp: now });
         }
@@ -200,6 +221,10 @@ export const apiRequest = async <T = unknown>(
             const errors = (payload as Record<string, unknown>).errors;
             if (errors && typeof errors === "object") {
                 apiError.errors = errors as Record<string, string[]>;
+            }
+            const fieldErrors = (payload as Record<string, unknown>).field_errors;
+            if (fieldErrors && typeof fieldErrors === "object") {
+                apiError.fieldErrors = fieldErrors as Record<string, string | string[]>;
             }
         }
 

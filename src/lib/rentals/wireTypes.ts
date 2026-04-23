@@ -2,6 +2,9 @@ export type UnknownRecord = Record<string, unknown>;
 
 export interface ApiErrorShape {
     error: string;
+    success?: false;
+    field_errors?: Record<string, string | string[]>;
+    data?: unknown;
 }
 
 export interface ApiSuccessEnvelope<T> {
@@ -14,6 +17,8 @@ export interface ApiFailureEnvelope {
     success?: false;
     message?: string;
     error?: string;
+    field_errors?: Record<string, string | string[]>;
+    data?: unknown;
 }
 
 export type WireApiEnvelope<T> = ApiSuccessEnvelope<T> | ApiFailureEnvelope | ApiErrorShape | UnknownRecord | T;
@@ -48,7 +53,7 @@ export interface RentalAmenityDto {
 
 export interface RentalPropertyDto extends UnknownRecord {
     id: string;
-    title: string;
+    property_title: string;
     description?: string;
     address_line?: string;
     keywords?: string[];
@@ -71,28 +76,43 @@ export interface RentalPropertyDto extends UnknownRecord {
     availability_id?: string;
     availability_name?: string;
     availability_code?: string;
+    available_from?: string;
     contact_phone?: string;
+    owner_name?: string;
+    map_url?: string;
+    latitude?: string | number;
+    longitude?: string | number;
     images?: RentalPropertyImageDto[];
     amenities?: RentalAmenityDto[];
     amenity_ids?: string[];
-    keyword_ids?: string[];
     listed_by_employee_id?: string;
     listed_by_employee_name?: string;
     is_active?: boolean;
     is_verified?: boolean;
+    verification_status?: string;
+    status_reason?: string;
+    last_status_at?: string;
+    is_publicly_visible?: boolean;
     created_at?: string;
     updated_at?: string;
     property_id?: string;
-    property_title?: string;
+    documents?: RentalOwnerDocumentDto[];
 }
 
 export interface RentalMyPropertyCreateDataDto {
     property_id: string;
     is_verified: boolean;
+    verification_status?: string;
+    status?: string;
+    document?: RentalOwnerDocumentDto | null;
 }
 
 export interface RentalMyPropertyUpdateDataDto {
     property_id: string;
+    is_verified?: boolean;
+    verification_status?: string;
+    status?: string;
+    document?: RentalOwnerDocumentDto | null;
 }
 
 export interface RentalContactUnlockRequestDto {
@@ -120,7 +140,6 @@ export interface RentalUnlockedOwnerDto {
 export interface RentalOwnerDocumentDto {
     id: string;
     document_type: string;
-    title?: string | null;
     document_file_url: string;
     uploaded_at?: string;
 }
@@ -150,9 +169,9 @@ export interface RentalContactUnlockSuccessDto {
 }
 
 export interface RentalContactUnlockPaywallDto {
-    success: false;
-    message: string;
-    paywall: RentalPaywallDto;
+    success?: false;
+    error: string;
+    data: RentalPaywallDto;
 }
 
 export type RentalContactUnlockResponseDto = RentalContactUnlockSuccessDto | RentalContactUnlockPaywallDto | ApiErrorShape;
@@ -175,6 +194,7 @@ export type RentalPassActivateResponseDto = ApiSuccessEnvelope<RentalPassActivat
 
 export interface OwnerPropertyUpsertPayload {
     propertyTitle: string;
+    ownerName?: string;
     propertyTypeId: string;
     cityId: string;
     localityId: string;
@@ -185,10 +205,14 @@ export interface OwnerPropertyUpsertPayload {
     builtUpAreaSqft: number;
     furnishingId: string;
     availabilityId: string;
+    availableFrom?: string;
+    mapUrl?: string;
+    latitude?: string;
+    longitude?: string;
     description: string;
     contactPhone: string;
     amenityIds: string[];
-    keywordIds: string[];
+    keywords: string[];
     employeeId?: string;
     documentType?: string;
     imageFiles?: File[];

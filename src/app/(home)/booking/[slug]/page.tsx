@@ -202,6 +202,7 @@ export default function BookingDetailPage({ params }: PageProps) {
                   ...property.owner,
                   ownerName: checkoutState.unlockedName || property.owner.ownerName,
                   whatsappNumber: checkoutState.unlockedPhone,
+                  documents: checkoutState.unlockedDocuments || property.owner.documents || [],
               }
             : property.owner;
     const galleryImages =

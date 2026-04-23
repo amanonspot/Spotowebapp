@@ -889,3 +889,31 @@ input[type="number"]:-webkit-autofill {
         color: var(--spoto-neon-500);
     }
 }
+
+@keyframes spoto-shimmer {
+    0% {
+        background-position: -200% 0;
+    }
+    100% {
+        background-position: 200% 0;
+    }
+}
+
+.spoto-shimmer {
+    position: relative;
+    overflow: hidden;
+    background: linear-gradient(
+        90deg,
+        rgba(255, 255, 255, 0.04) 0%,
+        rgba(255, 255, 255, 0.1) 45%,
+        rgba(255, 255, 255, 0.04) 100%
+    );
+    background-size: 200% 100%;
+    animation: spoto-shimmer 1.4s linear infinite;
+}
+
+.spoto-image-blur {
+    filter: blur(18px);
+    transform: scale(1.03);
+    opacity: 0.55;
+}

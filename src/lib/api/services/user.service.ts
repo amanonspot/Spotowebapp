@@ -5,7 +5,6 @@
 
 import { api } from '../client';
 import {
-  User,
   UpdateUserRequest,
   UserDetailsResponse,
   UserBooking,
@@ -15,12 +14,11 @@ import {
  * Get user details
  */
 export const getUserDetails = async (): Promise<UserDetailsResponse> => {
-  try {
-    const response = await api.get<UserDetailsResponse>('/api/user/details');
-    return response;
-  } catch (error: unknown) {
-    throw error;
+  const response = await api.get<UserDetailsResponse | { success: true; data: UserDetailsResponse }>('/api/user/details/');
+  if (response && typeof response === 'object' && 'success' in response && response.success && 'data' in response) {
+    return response.data;
   }
+  return response as UserDetailsResponse;
 };
 
 /**

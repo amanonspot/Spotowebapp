@@ -2,6 +2,7 @@
 
 import React from "react";
 import { PropertyListItem } from "@/lib/adapters/types";
+import BlurImage from "@/components/revamp/BlurImage";
 
 interface RevampPropertyCardProps {
     property: PropertyListItem;
@@ -22,10 +23,11 @@ export default function RevampPropertyCard({ property, onClick, compact = false 
                 className="w-full text-left transition active:scale-[0.995] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#AF7AEB] focus-visible:ring-offset-2 focus-visible:ring-offset-[#09090f]"
             >
                 <div className="relative h-56 w-full overflow-hidden">
-                    <img
+                    <BlurImage
                         src={property.image}
                         alt={property.title}
-                        className="h-full w-full object-cover"
+                        wrapperClassName="h-full w-full"
+                        className="h-full w-full"
                         loading="lazy"
                     />
                     <div className="absolute left-3 top-3 rounded-full bg-black/55 px-2 py-1 text-xs font-semibold text-[#d8d8d8]">

@@ -1,32 +1,35 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Bell, Building2, ChevronLeft, House, Plus, Upload, X } from "lucide-react";
 import PrimaryButton from "@/components/revamp/PrimaryButton";
-import { authAdapter, ownerAdapter } from "@/lib/adapters";
+import ShimmerBlock from "@/components/revamp/ShimmerBlock";
+import { ownerAdapter } from "@/lib/adapters";
 import { OwnerListingFormInput, OwnerMastersData, SelectOption } from "@/lib/adapters/types";
-import { OWNER_MOCK_MODE, RENTALS_MOCK_MODE } from "@/lib/rentals";
+import { RENTALS_MOCK_MODE } from "@/lib/rentals";
 
-const TOTAL_STEPS = 7;
-const STEP_TITLES = [
+const CREATE_STEP_TITLES = [
     "Select Property Type",
     "Property Details",
     "Photos & Keywords",
     "Pricing & Possession",
-    "Address & Verification",
-    "Owner Details",
-    "Verify Phone OTP",
+    "Address & Submission",
 ];
-
-const OTP_RESEND_SECONDS = 30;
+const EDIT_STEP_TITLES = [
+    "Select Property Type",
+    "Property Details",
+    "Photos & Keywords",
+    "Pricing & Possession",
+    "Address & Submission",
+];
 
 const sanitizeNumericInput = (value: string) => value.replace(/[^\d]/g, "");
 const sanitizeTextInput = (value: string) => value.replace(/\u0000/g, "");
 
 const emptyForm: OwnerListingFormInput = {
     propertyTitle: "",
-    title: "",
+    ownerName: "",
     employeeId: "",
     propertyTypeId: "",
     cityId: "",
@@ -40,7 +43,9 @@ const emptyForm: OwnerListingFormInput = {
     addressLine: "",
     streetLocalityArea: "",
     landmark: "",
-    googleMapsLink: "",
+    mapUrl: "",
+    latitude: "",
+    longitude: "",
     description: "",
     contactPhone: "",
     amenityIds: [],
@@ -48,6 +53,9 @@ const emptyForm: OwnerListingFormInput = {
     documentType: "",
     imageFiles: [],
     documentFile: null,
+    documentMeta: { uploadState: "idle" },
+    availableFromDate: "",
+    availabilityMode: "immediate",
 };
 
 const emptyMasters: OwnerMastersData = {
@@ -122,25 +130,169 @@ const propertyTypeIcon = (index: number) => {
     return <House className="h-11 w-11" />;
 };
 
-export default function OwnerListingWizard() {
+interface OwnerListingWizardProps {
+    mode?: "create" | "edit";
+    propertyId?: string;
+    initialValue?: OwnerListingFormInput | null;
+}
+
+type OwnerFieldKey =
+    | "propertyTypeId"
+    | "propertyTitle"
+    | "bhkId"
+    | "furnishingId"
+    | "amenityIds"
+    | "keywords"
+    | "imageFiles"
+    | "builtUpAreaSqft"
+    | "rent"
+    | "deposit"
+    | "availabilityId"
+    | "availableFromDate"
+    | "cityId"
+    | "localityId"
+    | "addressLine"
+    | "streetLocalityArea"
+    | "landmark"
+    | "mapUrl"
+    | "latitude"
+    | "longitude"
+    | "employeeId"
+    | "description"
+    | "documentType"
+    | "documentFile"
+    | "contactPhone"
+    | "ownerName"
+    | "submit";
+
+type OwnerFieldErrors = Partial<Record<OwnerFieldKey, string>>;
+
+type ErrorWithFields = Error & {
+    fieldErrors?: Record<string, string | string[]>;
+    data?: unknown;
+};
+
+const ownerErrorKeyMap: Record<string, OwnerFieldKey[]> = {
+    property_title: ["propertyTitle"],
+    title: ["propertyTitle"],
+    property_type_id: ["propertyTypeId"],
+    city_id: ["cityId"],
+    locality_id: ["localityId"],
+    bhk_id: ["bhkId"],
+    furnishing_id: ["furnishingId"],
+    amenity_ids: ["amenityIds"],
+    keywords: ["keywords"],
+    images: ["imageFiles"],
+    image_files: ["imageFiles"],
+    rent: ["rent"],
+    deposit: ["deposit"],
+    built_up_area_sqft: ["builtUpAreaSqft"],
+    availability_id: ["availabilityId"],
+    available_from: ["availableFromDate"],
+    address_line: ["addressLine"],
+    street_locality_area: ["streetLocalityArea"],
+    landmark: ["landmark"],
+    map_url: ["mapUrl"],
+    latitude: ["latitude"],
+    longitude: ["longitude"],
+    employee_id: ["employeeId"],
+    description: ["description"],
+    document_type: ["documentType"],
+    document_file: ["documentFile"],
+    clear_documents: ["documentFile"],
+    contact_phone: ["contactPhone"],
+    phone: ["contactPhone"],
+    owner_name: ["ownerName"],
+    non_field_errors: ["submit"],
+    detail: ["submit"],
+};
+
+const fieldErrorMessage = (value: string | string[] | undefined) => {
+    if (!value) return "";
+    if (typeof value === "string") return value.trim();
+    return value.find((item) => typeof item === "string" && item.trim())?.trim() || "";
+};
+
+const parseFieldErrors = (error: unknown): OwnerFieldErrors => {
+    const candidate = error as Partial<ErrorWithFields> | undefined;
+    const fromError = candidate?.fieldErrors;
+    const fromPayload =
+        candidate?.data && typeof candidate.data === "object"
+            ? (candidate.data as { field_errors?: Record<string, string | string[]> }).field_errors
+            : undefined;
+    const fieldSource = fromError || fromPayload;
+    if (!fieldSource || typeof fieldSource !== "object") return {};
+
+    const mapped: OwnerFieldErrors = {};
+    Object.entries(fieldSource).forEach(([backendKey, rawValue]) => {
+        const targets = ownerErrorKeyMap[backendKey] || [];
+        const message = fieldErrorMessage(rawValue);
+        if (!message) return;
+        targets.forEach((target) => {
+            mapped[target] = message;
+        });
+    });
+    return mapped;
+};
+
+export default function OwnerListingWizard({ mode = "create", propertyId, initialValue = null }: OwnerListingWizardProps) {
     const router = useRouter();
+    const isEditMode = mode === "edit";
+    const stepTitles = isEditMode ? EDIT_STEP_TITLES : CREATE_STEP_TITLES;
+    const totalSteps = stepTitles.length;
     const [step, setStep] = useState(1);
     const [masters, setMasters] = useState<OwnerMastersData>(emptyMasters);
     const [form, setForm] = useState<OwnerListingFormInput>(emptyForm);
     const [loadingMasters, setLoadingMasters] = useState(true);
+    const [loadingInitial, setLoadingInitial] = useState(isEditMode);
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [submitError, setSubmitError] = useState<string | null>(null);
+    const [fieldErrors, setFieldErrors] = useState<OwnerFieldErrors>({});
     const [customKeyword, setCustomKeyword] = useState("");
     const [coverIndex, setCoverIndex] = useState(0);
-    const [ownerName, setOwnerName] = useState("");
+    const [initialLoadNonce, setInitialLoadNonce] = useState(0);
     const [localitySearch, setLocalitySearch] = useState("");
-    const [otpDigits, setOtpDigits] = useState(["", "", "", ""]);
-    const [otpError, setOtpError] = useState<string | null>(null);
-    const [otpMessage, setOtpMessage] = useState<string | null>(null);
-    const [otpRequesting, setOtpRequesting] = useState(false);
-    const [otpResendAt, setOtpResendAt] = useState<number>(0);
-    const otpRefs = useRef<Array<HTMLInputElement | null>>([]);
-    const [clock, setClock] = useState<number>(Date.now());
+    const [prefillHydrated, setPrefillHydrated] = useState(false);
+
+    useEffect(() => {
+        if (!isEditMode) {
+            setLoadingInitial(false);
+            return;
+        }
+
+        let mounted = true;
+        const loadInitial = async () => {
+            try {
+                if (initialValue) {
+                    if (mounted) {
+                        setForm((prev) => ({ ...prev, ...initialValue }));
+                        setLoadingInitial(false);
+                    }
+                    return;
+                }
+                if (propertyId) {
+                    const editable = await ownerAdapter.getPropertyForEdit(propertyId);
+                    if (mounted) {
+                        setForm((prev) => ({ ...prev, ...editable }));
+                        setLoadingInitial(false);
+                    }
+                    return;
+                }
+                if (mounted) setLoadingInitial(false);
+            } catch (loadError) {
+                if (mounted) {
+                    setError(loadError instanceof Error ? loadError.message : "Unable to load editable property.");
+                    setLoadingInitial(false);
+                }
+            }
+        };
+
+        loadInitial();
+        return () => {
+            mounted = false;
+        };
+    }, [isEditMode, initialValue, propertyId, initialLoadNonce]);
 
     useEffect(() => {
         let mounted = true;
@@ -173,10 +325,34 @@ export default function OwnerListingWizard() {
     }, [form.cityId, masters.cities]);
 
     useEffect(() => {
-        if (step !== 7) return;
-        const timer = window.setInterval(() => setClock(Date.now()), 1000);
-        return () => window.clearInterval(timer);
-    }, [step]);
+        if (isEditMode || prefillHydrated) return;
+        let mounted = true;
+
+        const hydratePrefill = async () => {
+            try {
+                const prefill = await ownerAdapter.getOwnerSubmissionPrefill();
+                if (!mounted) return;
+
+                setForm((prev) => {
+                    const next = { ...prev };
+                    if (!prev.ownerName?.trim() && prefill.ownerName) {
+                        next.ownerName = prefill.ownerName;
+                    }
+                    if (!prev.contactPhone?.trim() && prefill.contactPhone) {
+                        next.contactPhone = prefill.contactPhone.replace(/\D/g, "").slice(-10);
+                    }
+                    return next;
+                });
+            } finally {
+                if (mounted) setPrefillHydrated(true);
+            }
+        };
+
+        hydratePrefill();
+        return () => {
+            mounted = false;
+        };
+    }, [isEditMode, prefillHydrated]);
 
     const propertyTypeOptions = useMemo(
         () => (masters.propertyTypes.length > 0 ? masters.propertyTypes : RENTALS_MOCK_MODE ? fallbackPropertyTypes : []),
@@ -223,7 +399,7 @@ export default function OwnerListingWizard() {
     );
 
     const mapQuery = [selectedLocalityName, selectedCityName].filter(Boolean).join(", ");
-    const mapHref = form.googleMapsLink?.trim() || (mapQuery ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapQuery)}` : "");
+    const mapHref = form.mapUrl?.trim() || (mapQuery ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapQuery)}` : "");
 
     const imagePreviews = useMemo(
         () => form.imageFiles.map((file) => URL.createObjectURL(file)),
@@ -238,17 +414,81 @@ export default function OwnerListingWizard() {
 
     const sizeValue = Number(form.builtUpAreaSqft || 0);
     const sizeProgress = Math.min(100, Math.max(0, (sizeValue / 5000) * 100));
-    const otpResendIn = Math.max(0, Math.ceil((otpResendAt - clock) / 1000));
-    const canResendOtp = step === 7 && otpResendIn === 0 && form.contactPhone.length === 10 && !otpRequesting;
+    const keywordSuggestionTokens = useMemo(
+        () => keywordOptions.map((option) => option.name.trim().toLowerCase()).filter(Boolean),
+        [keywordOptions]
+    );
+    const customKeywordValues = useMemo(
+        () =>
+            (form.keywords || [])
+                .map((item) => item.trim())
+                .filter(Boolean)
+                .filter((item) => !keywordSuggestionTokens.includes(item.toLowerCase())),
+        [form.keywords, keywordSuggestionTokens]
+    );
+    const documentSelected = Boolean(form.documentFile || form.documentMeta?.existingDocumentUrl);
+    const immediateAvailability = (masters.availabilityTypes.find((option) => option.name.toLowerCase().includes("immediate")) || null);
 
     const updateField = <K extends keyof OwnerListingFormInput>(key: K, value: OwnerListingFormInput[K]) => {
         setForm((prev) => ({
             ...prev,
             [key]: value,
         }));
+        const ownerKey = key as OwnerFieldKey;
+        setFieldErrors((prev) => {
+            if (!prev[ownerKey]) return prev;
+            const next = { ...prev };
+            delete next[ownerKey];
+            return next;
+        });
     };
 
-    const toggleSelection = (key: "amenityIds" | "keywords", value: string) => {
+    const setKeywordState = (values: string[]) => {
+        setForm((prev) => ({
+            ...prev,
+            keywords: Array.from(new Set(values.map((item) => item.trim()).filter(Boolean))),
+        }));
+        setFieldErrors((prev) => {
+            if (!prev.keywords) return prev;
+            const next = { ...prev };
+            delete next.keywords;
+            return next;
+        });
+    };
+
+    const getFieldError = (...keys: OwnerFieldKey[]) => {
+        for (const key of keys) {
+            const value = fieldErrors[key];
+            if (value) return value;
+        }
+        return "";
+    };
+
+    const clearFieldError = (...keys: OwnerFieldKey[]) => {
+        setFieldErrors((prev) => {
+            let changed = false;
+            const next = { ...prev };
+            keys.forEach((key) => {
+                if (next[key]) {
+                    delete next[key];
+                    changed = true;
+                }
+            });
+            return changed ? next : prev;
+        });
+    };
+
+    const renderFieldError = (...keys: OwnerFieldKey[]) => {
+        const message = getFieldError(...keys);
+        if (!message) return null;
+        return (
+            <p className="mt-2 rounded-lg border border-red-500/35 bg-red-500/10 px-2 py-1 text-xs text-red-200">
+                {message}
+            </p>
+        );
+    };
+
+    const toggleSelection = (key: "amenityIds", value: string) => {
         setForm((prev) => {
             const exists = prev[key].includes(value);
             return {
@@ -256,17 +496,22 @@ export default function OwnerListingWizard() {
                 [key]: exists ? prev[key].filter((item) => item !== value) : [...prev[key], value],
             };
         });
+        clearFieldError("amenityIds");
     };
 
     const addCustomKeyword = () => {
         const normalized = customKeyword.replace(/[^\w\s-]/g, "").trim();
         if (!normalized) return;
-        if (form.keywords.some((item) => item.toLowerCase() === normalized.toLowerCase())) {
+        if ((form.keywords || []).some((item) => item.toLowerCase() === normalized.toLowerCase())) {
             setCustomKeyword("");
             return;
         }
-        setForm((prev) => ({ ...prev, keywords: [...prev.keywords, normalized] }));
+        setKeywordState([...(form.keywords || []), normalized]);
         setCustomKeyword("");
+    };
+
+    const removeCustomKeyword = (keyword: string) => {
+        setKeywordState((form.keywords || []).filter((item) => item !== keyword));
     };
 
     const removeImage = (index: number) => {
@@ -275,42 +520,26 @@ export default function OwnerListingWizard() {
             imageFiles: prev.imageFiles.filter((_, currentIndex) => currentIndex !== index),
         }));
         setCoverIndex((prev) => Math.max(0, Math.min(prev, form.imageFiles.length - 2)));
-    };
-
-    const requestOtp = async (reason: "initial" | "resend") => {
-        if (form.contactPhone.length !== 10) {
-            setOtpMessage("Enter a valid 10-digit phone number before requesting OTP.");
-            return false;
-        }
-
-        setOtpError(null);
-        setOtpMessage(null);
-        setOtpRequesting(true);
-        try {
-            const result = await authAdapter.requestListingOtp(form.contactPhone);
-            setOtpMessage(result.message || (reason === "resend" ? "OTP resent successfully." : "OTP sent successfully."));
-            setOtpResendAt(Date.now() + OTP_RESEND_SECONDS * 1000);
-            return true;
-        } catch (otpRequestError) {
-            const message =
-                otpRequestError instanceof Error ? otpRequestError.message : "Unable to request OTP right now.";
-            setOtpMessage(message);
-            return false;
-        } finally {
-            setOtpRequesting(false);
-        }
+        clearFieldError("imageFiles");
     };
 
     const stepValid = useMemo(() => {
+        const availabilityValid = form.availabilityMode === "date" ? Boolean(form.availableFromDate) : Boolean(form.availabilityId);
         if (step === 1) return Boolean(form.propertyTypeId);
         if (step === 2) return Boolean(form.propertyTitle.trim() && form.bhkId && form.furnishingId);
         if (step === 3) return form.imageFiles.length > 0;
-        if (step === 4) return Boolean(form.rent && form.deposit && form.builtUpAreaSqft);
-        if (step === 5) return Boolean(form.cityId && form.localityId && form.addressLine.trim());
-        if (step === 6) return Boolean(ownerName.trim() && form.contactPhone.length === 10);
-        if (step === 7) return otpDigits.join("").length === 4;
+        if (step === 4) return Boolean(form.rent && form.deposit && form.builtUpAreaSqft && availabilityValid);
+        if (step === 5)
+            return Boolean(
+                form.cityId &&
+                    form.localityId &&
+                    form.addressLine.trim() &&
+                    form.ownerName?.trim() &&
+                    form.contactPhone.length === 10 &&
+                    (!form.documentFile || Boolean(form.documentType))
+            );
         return false;
-    }, [step, form, ownerName, otpDigits]);
+    }, [step, form]);
 
     const goBack = () => {
         if (step === 1) {
@@ -320,62 +549,21 @@ export default function OwnerListingWizard() {
         setStep((prev) => Math.max(1, prev - 1));
     };
 
-    const handleOtpChange = (index: number, value: string) => {
-        const digit = value.replace(/[^\d]/g, "").slice(-1);
-        setOtpError(null);
-        setOtpDigits((prev) => {
-            const next = [...prev];
-            next[index] = digit;
-            return next;
-        });
-        if (digit && index < otpRefs.current.length - 1) {
-            otpRefs.current[index + 1]?.focus();
-        }
-    };
-
-    const handleOtpBackspace = (index: number, event: React.KeyboardEvent<HTMLInputElement>) => {
-        if (event.key === "Backspace" && !otpDigits[index] && index > 0) {
-            otpRefs.current[index - 1]?.focus();
-        }
-    };
-
-    const handleOtpPaste = (event: React.ClipboardEvent<HTMLInputElement>) => {
-        const pasted = event.clipboardData.getData("text").replace(/[^\d]/g, "").slice(0, 4);
-        if (!pasted) return;
-        event.preventDefault();
-        const next = ["", "", "", ""];
-        pasted.split("").forEach((digit, index) => {
-            next[index] = digit;
-        });
-        setOtpDigits(next);
-        const targetIndex = Math.min(pasted.length, 4) - 1;
-        if (targetIndex >= 0) otpRefs.current[targetIndex]?.focus();
-    };
-
     const handleNext = async () => {
         if (!stepValid || submitting) return;
         setError(null);
+        setSubmitError(null);
+        setFieldErrors({});
 
-        if (step < TOTAL_STEPS) {
-            if (step === 6) {
-                setStep(7);
-                await requestOtp("initial");
-                return;
-            }
+        if (step < totalSteps) {
             setStep((prev) => prev + 1);
             return;
         }
 
-        const otp = otpDigits.join("");
         setSubmitting(true);
-        setOtpError(null);
+        setSubmitError(null);
+        setFieldErrors({});
         try {
-            if (authAdapter.verifyListingOtp) {
-                await authAdapter.verifyListingOtp(form.contactPhone, otp);
-            } else {
-                await authAdapter.verifyOtp(otp);
-            }
-
             const orderedImages = [...form.imageFiles];
             if (coverIndex > 0 && orderedImages[coverIndex]) {
                 const [cover] = orderedImages.splice(coverIndex, 1);
@@ -383,39 +571,44 @@ export default function OwnerListingWizard() {
             }
 
             const fallbackTitle = `${form.bhkId || "Property"} in ${selectedLocalityName || selectedCityName || "Bengaluru"}`;
-            const created = await ownerAdapter.createProperty({
+            const payload: OwnerListingFormInput = {
                 ...form,
                 propertyTitle: form.propertyTitle.trim() || fallbackTitle,
-                title: form.propertyTitle.trim() || fallbackTitle,
                 imageFiles: orderedImages,
-                availabilityId: form.availabilityId || "immediate",
-            });
+                availabilityId: form.availabilityId || immediateAvailability?.id || "immediate",
+                keywords: Array.from(new Set((form.keywords || []).map((item) => item.trim()).filter(Boolean))),
+                availabilityMode: form.availabilityMode || "immediate",
+                availableFromDate: form.availabilityMode === "date" ? form.availableFromDate : "",
+            };
 
-            const pending = created.isVerified === false || /pending|review/i.test(created.status || "");
-            if (pending) {
-                router.push(`/owner/list-property/pending?property_id=${encodeURIComponent(created.id)}`);
+            if (isEditMode && propertyId) {
+                await ownerAdapter.updateProperty(propertyId, payload);
+                router.push("/owner/dashboard");
                 return;
             }
-            router.push("/owner/dashboard");
+
+            const created = await ownerAdapter.submitListingFinalStep(payload);
+            router.push(`/owner/list-property/pending?property_id=${encodeURIComponent(created.id)}`);
         } catch (submitError) {
             const message = submitError instanceof Error ? submitError.message : "Unable to publish listing.";
-            if (message.toLowerCase().includes("otp")) {
-                setOtpError(message);
-            } else {
-                setError(message);
-            }
+            const parsedFieldErrors = parseFieldErrors(submitError);
+            const hasFieldErrors = Object.keys(parsedFieldErrors).length > 0;
+            if (hasFieldErrors) setFieldErrors(parsedFieldErrors);
+            setSubmitError(message);
         } finally {
             setSubmitting(false);
         }
     };
 
     const nextLabel =
-        step === TOTAL_STEPS
+        step === totalSteps
             ? submitting
-                ? "Publishing..."
+                ? isEditMode
+                    ? "Updating..."
+                    : "Publishing..."
+                : isEditMode
+                ? "Update Listing"
                 : "Submit"
-            : step === 6
-            ? "Request OTP"
             : "Next";
 
     const sectionCardClass = "rounded-2xl border border-white/20 bg-[#12121A] p-4";
@@ -434,7 +627,7 @@ export default function OwnerListingWizard() {
                         <ChevronLeft className="h-5 w-5" />
                     </button>
                     <p className="text-[11px] text-white/55">
-                        Step {step} / {TOTAL_STEPS}
+                        Step {step} / {totalSteps}
                     </p>
                     <button
                         type="button"
@@ -445,8 +638,27 @@ export default function OwnerListingWizard() {
                     </button>
                 </div>
 
-                <h1 className="text-3xl font-semibold leading-tight">{STEP_TITLES[step - 1]}</h1>
+                <h1 className="text-3xl font-semibold leading-tight">{stepTitles[step - 1]}</h1>
                 <p className="mt-1 text-sm text-white/60">SPOTO · List Your Property</p>
+
+                {loadingInitial ? (
+                    <div className="mt-5 rounded-xl border border-white/20 bg-[#0d0d14] px-3 py-3">
+                        <ShimmerBlock className="h-4 w-32 rounded-md" />
+                        <ShimmerBlock className="mt-2 h-10 w-full rounded-lg" />
+                        <ShimmerBlock className="mt-2 h-10 w-full rounded-lg" />
+                    </div>
+                ) : isEditMode && error ? (
+                    <div className="mt-5 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-3 text-sm text-red-200">
+                        <p>{error}</p>
+                        <button
+                            type="button"
+                            onClick={() => setInitialLoadNonce((prev) => prev + 1)}
+                            className="mt-2 rounded-lg border border-red-400/40 px-2 py-1 text-xs"
+                        >
+                            Retry loading listing
+                        </button>
+                    </div>
+                ) : null}
 
                 <div className="mt-5 space-y-4">
                     {step === 1 && (
@@ -483,6 +695,7 @@ export default function OwnerListingWizard() {
                                         Property types are unavailable right now. Please retry.
                                     </p>
                                 ) : null}
+                                {renderFieldError("propertyTypeId")}
                             </div>
                         </section>
                     )}
@@ -494,11 +707,11 @@ export default function OwnerListingWizard() {
                                 onChange={(event) => {
                                     const nextTitle = sanitizeTextInput(event.target.value);
                                     updateField("propertyTitle", nextTitle);
-                                    updateField("title", nextTitle);
                                 }}
                                 placeholder="Property Title"
                                 className="h-12 w-full rounded-xl border border-white/20 bg-[#0d0d14] px-3 text-sm text-white/90 outline-none placeholder:text-white/35 focus:border-[#A67AEB]"
                             />
+                            {renderFieldError("propertyTitle")}
 
                             <section className={sectionCardClass}>
                                 <p className="mb-3 text-sm font-semibold text-white/75">BHK type</p>
@@ -520,6 +733,7 @@ export default function OwnerListingWizard() {
                                 {bhkOptions.length === 1 && !RENTALS_MOCK_MODE ? (
                                     <p className="mt-2 text-xs text-white/60">Only one BHK option is currently configured.</p>
                                 ) : null}
+                                {renderFieldError("bhkId")}
                             </section>
 
                             <section className={sectionCardClass}>
@@ -539,6 +753,7 @@ export default function OwnerListingWizard() {
                                         );
                                     })}
                                 </div>
+                                {renderFieldError("furnishingId")}
                             </section>
 
                             <section className={sectionCardClass}>
@@ -558,6 +773,7 @@ export default function OwnerListingWizard() {
                                         );
                                     })}
                                 </div>
+                                {renderFieldError("amenityIds")}
                             </section>
                         </>
                     )}
@@ -622,18 +838,33 @@ export default function OwnerListingWizard() {
                                         </div>
                                     </>
                                 )}
+                                {renderFieldError("imageFiles")}
                             </section>
 
                             <section className={sectionCardClass}>
                                 <p className="mb-3 text-sm font-semibold text-white/75">Add keyword</p>
                                 <div className="flex flex-wrap gap-2">
                                     {keywordOptions.map((option) => {
-                                        const active = form.keywords.includes(option.id);
+                                        const token = option.name.trim();
+                                        const active = (form.keywords || []).some(
+                                            (item) => item.toLowerCase() === token.toLowerCase()
+                                        );
                                         return (
                                             <button
                                                 key={option.id}
                                                 type="button"
-                                                onClick={() => toggleSelection("keywords", option.id)}
+                                                onClick={() => {
+                                                    const exists = (form.keywords || []).some(
+                                                        (item) => item.toLowerCase() === token.toLowerCase()
+                                                    );
+                                                    setKeywordState(
+                                                        exists
+                                                            ? (form.keywords || []).filter(
+                                                                  (item) => item.toLowerCase() !== token.toLowerCase()
+                                                              )
+                                                            : [...(form.keywords || []), token]
+                                                    );
+                                                }}
                                                 className={`${chipClass} ${active ? "border-[#B7F041] bg-[#B7F041] text-[#111]" : ""}`}
                                             >
                                                 {option.name}
@@ -658,6 +889,21 @@ export default function OwnerListingWizard() {
                                         Add
                                     </button>
                                 </div>
+                                {customKeywordValues.length > 0 ? (
+                                    <div className="mt-2 flex flex-wrap gap-2">
+                                        {customKeywordValues.map((keyword) => (
+                                            <button
+                                                type="button"
+                                                key={keyword}
+                                                onClick={() => removeCustomKeyword(keyword)}
+                                                className="rounded-xl border border-[#A67AEB]/50 bg-[#A67AEB]/10 px-3 py-2 text-sm text-[#e2d4ff]"
+                                            >
+                                                {keyword} ×
+                                            </button>
+                                        ))}
+                                    </div>
+                                ) : null}
+                                {renderFieldError("keywords")}
                             </section>
                         </>
                     )}
@@ -683,6 +929,7 @@ export default function OwnerListingWizard() {
                                     }}
                                 />
                                 <p className="mt-2 text-xs text-white/70">Selected size: {sizeValue.toLocaleString("en-IN")} sq feet</p>
+                                {renderFieldError("builtUpAreaSqft")}
                             </section>
 
                             <input
@@ -692,6 +939,7 @@ export default function OwnerListingWizard() {
                                 inputMode="numeric"
                                 className="h-12 w-full rounded-xl border border-white/20 bg-[#0d0d14] px-3 text-sm text-white/90 outline-none placeholder:text-white/35 focus:border-[#A67AEB]"
                             />
+                            {renderFieldError("rent")}
                             <input
                                 value={form.deposit}
                                 onChange={(event) => updateField("deposit", sanitizeNumericInput(event.target.value))}
@@ -699,9 +947,24 @@ export default function OwnerListingWizard() {
                                 inputMode="numeric"
                                 className="h-12 w-full rounded-xl border border-white/20 bg-[#0d0d14] px-3 text-sm text-white/90 outline-none placeholder:text-white/35 focus:border-[#A67AEB]"
                             />
+                            {renderFieldError("deposit")}
 
                             <section className={sectionCardClass}>
                                 <p className="mb-3 text-sm font-semibold text-white/75">Available to Move In</p>
+                                <input
+                                    type="date"
+                                    value={form.availableFromDate || ""}
+                                    onChange={(event) => {
+                                        const nextDate = event.target.value;
+                                        updateField("availableFromDate", nextDate);
+                                        if (nextDate) {
+                                            updateField("availabilityMode", "date");
+                                        } else if (form.availabilityMode === "date") {
+                                            updateField("availabilityMode", "immediate");
+                                        }
+                                    }}
+                                    className="mb-3 h-12 w-full rounded-xl border border-white/20 bg-[#0d0d14] px-3 text-sm text-white/90 outline-none focus:border-[#A67AEB]"
+                                />
                                 <div className="flex flex-wrap gap-2">
                                     {(masters.availabilityTypes.length > 0
                                         ? masters.availabilityTypes
@@ -713,14 +976,37 @@ export default function OwnerListingWizard() {
                                             <button
                                                 key={option.id}
                                                 type="button"
-                                                onClick={() => updateField("availabilityId", option.id)}
+                                                onClick={() => {
+                                                    updateField("availabilityId", option.id);
+                                                    const isImmediate = option.name.toLowerCase().includes("immediate");
+                                                    if (isImmediate) {
+                                                        updateField("availabilityMode", "immediate");
+                                                        updateField("availableFromDate", "");
+                                                    }
+                                                }}
                                                 className={`${chipClass} ${active ? "border-[#B7F041] bg-[#B7F041] text-[#111]" : ""}`}
                                             >
                                                 {option.name}
                                             </button>
                                         );
                                     })}
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            updateField("availabilityMode", "immediate");
+                                            updateField("availableFromDate", "");
+                                            if (immediateAvailability) {
+                                                updateField("availabilityId", immediateAvailability.id);
+                                            }
+                                        }}
+                                        className={`${chipClass} ${
+                                            form.availabilityMode !== "date" ? "border-[#B7F041] bg-[#B7F041] text-[#111]" : ""
+                                        }`}
+                                    >
+                                        Immediately
+                                    </button>
                                 </div>
+                                {renderFieldError("availabilityId", "availableFromDate")}
                             </section>
                         </>
                     )}
@@ -759,6 +1045,7 @@ export default function OwnerListingWizard() {
                                         );
                                     })}
                                 </div>
+                                {renderFieldError("cityId")}
 
                                 <p className="mt-3 text-xs text-white/55">Currently Live in:</p>
                                 <div className="mt-2 flex max-h-36 flex-wrap gap-2 overflow-y-auto pr-1">
@@ -776,6 +1063,7 @@ export default function OwnerListingWizard() {
                                         );
                                     })}
                                 </div>
+                                {renderFieldError("localityId")}
                                 {filteredLocalities.length === 0 ? (
                                     <p className="mt-2 text-xs text-white/60">No localities match this search.</p>
                                 ) : null}
@@ -808,30 +1096,43 @@ export default function OwnerListingWizard() {
                                 placeholder="Flat, House No., Building, Apartment"
                                 className="h-12 w-full rounded-xl border border-white/20 bg-[#0d0d14] px-3 text-sm text-white/90 outline-none placeholder:text-white/35 focus:border-[#A67AEB]"
                             />
+                            {renderFieldError("addressLine")}
                             <input
                                 value={form.streetLocalityArea || ""}
                                 onChange={(event) => updateField("streetLocalityArea", sanitizeTextInput(event.target.value))}
                                 placeholder="Street, Locality, Area"
                                 className="h-12 w-full rounded-xl border border-white/20 bg-[#0d0d14] px-3 text-sm text-white/90 outline-none placeholder:text-white/35 focus:border-[#A67AEB]"
                             />
+                            {renderFieldError("streetLocalityArea")}
                             <input
                                 value={form.landmark || ""}
                                 onChange={(event) => updateField("landmark", sanitizeTextInput(event.target.value))}
                                 placeholder="Landmark"
                                 className="h-12 w-full rounded-xl border border-white/20 bg-[#0d0d14] px-3 text-sm text-white/90 outline-none placeholder:text-white/35 focus:border-[#A67AEB]"
                             />
+                            {renderFieldError("landmark")}
                             <input
-                                value={form.googleMapsLink || ""}
-                                onChange={(event) => updateField("googleMapsLink", sanitizeTextInput(event.target.value))}
+                                value={form.mapUrl || ""}
+                                onChange={(event) => updateField("mapUrl", sanitizeTextInput(event.target.value))}
                                 placeholder="Google Maps Location Link"
                                 className="h-12 w-full rounded-xl border border-white/20 bg-[#0d0d14] px-3 text-sm text-white/90 outline-none placeholder:text-white/35 focus:border-[#A67AEB]"
                             />
-                            <input
-                                value={form.employeeId || ""}
-                                onChange={(event) => updateField("employeeId", sanitizeTextInput(event.target.value).toUpperCase())}
-                                placeholder="Employee Code (if listed by SPOTO)"
-                                className="h-12 w-full rounded-xl border border-white/20 bg-[#0d0d14] px-3 text-sm text-white/90 outline-none placeholder:text-white/35 focus:border-[#A67AEB]"
-                            />
+                            {renderFieldError("mapUrl")}
+                            <div className="grid grid-cols-2 gap-2">
+                                <input
+                                    value={form.latitude || ""}
+                                    onChange={(event) => updateField("latitude", sanitizeTextInput(event.target.value))}
+                                    placeholder="Latitude (optional)"
+                                    className="h-12 w-full rounded-xl border border-white/20 bg-[#0d0d14] px-3 text-sm text-white/90 outline-none placeholder:text-white/35 focus:border-[#A67AEB]"
+                                />
+                                <input
+                                    value={form.longitude || ""}
+                                    onChange={(event) => updateField("longitude", sanitizeTextInput(event.target.value))}
+                                    placeholder="Longitude (optional)"
+                                    className="h-12 w-full rounded-xl border border-white/20 bg-[#0d0d14] px-3 text-sm text-white/90 outline-none placeholder:text-white/35 focus:border-[#A67AEB]"
+                                />
+                            </div>
+                            {renderFieldError("latitude", "longitude")}
                             <textarea
                                 rows={3}
                                 value={form.description}
@@ -839,33 +1140,74 @@ export default function OwnerListingWizard() {
                                 placeholder="Describe your property"
                                 className="w-full rounded-xl border border-white/20 bg-[#0d0d14] px-3 py-3 text-sm text-white/90 outline-none placeholder:text-white/35 focus:border-[#A67AEB]"
                             />
+                            {renderFieldError("description")}
                             <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-white/20 bg-[#0d0d14] px-3 py-3 text-sm text-white/80">
                                 <Upload className="h-4 w-4" />
-                                Upload Verification Document
+                                {documentSelected ? "Replace Verification Document" : "Upload Verification Document"}
                                 <input
                                     type="file"
-                                    accept=".pdf,image/jpeg,image/png,image/jpg"
+                                    accept=".pdf,.doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/jpeg,image/png,image/jpg"
                                     onChange={(event) => {
                                         const next = (event.target.files || [])[0] || null;
                                         updateField("documentFile", next);
+                                        updateField("clearDocuments", false);
                                         if (next && !form.documentType) {
                                             updateField("documentType", "electricity_bill");
                                         }
+                                        updateField("documentMeta", next
+                                            ? {
+                                                  selectedName: next.name,
+                                                  selectedSize: next.size,
+                                                  selectedType: next.type,
+                                                  uploadState: "selected",
+                                              }
+                                            : { uploadState: "idle" });
                                     }}
                                     className="hidden"
                                 />
                             </label>
-                        </>
-                    )}
-
-                    {step === 6 && (
-                        <>
+                            {documentSelected ? (
+                                <div className="rounded-xl border border-white/20 bg-[#0d0d14] px-3 py-2 text-xs text-white/75">
+                                    <p className="font-semibold text-white/90">
+                                        {form.documentMeta?.selectedName ||
+                                            form.documentFile?.name ||
+                                            form.documentMeta?.existingDocumentUrl?.split("/").pop() ||
+                                            "Verification document selected"}
+                                    </p>
+                                    <p>
+                                        {(form.documentMeta?.selectedSize || form.documentFile?.size || 0) > 0
+                                            ? `${(((form.documentMeta?.selectedSize || form.documentFile?.size || 0) / 1024 / 1024).toFixed(2))} MB`
+                                            : form.documentMeta?.existingUploadedAt
+                                            ? `Uploaded on ${new Date(form.documentMeta.existingUploadedAt).toLocaleString("en-IN")}`
+                                            : "Existing document on file"}
+                                    </p>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            updateField("documentFile", null);
+                                            updateField("clearDocuments", true);
+                                            updateField("documentMeta", { uploadState: "idle" });
+                                        }}
+                                        className="mt-2 rounded-lg border border-red-400/40 px-2 py-1 text-red-200"
+                                    >
+                                        Remove document
+                                    </button>
+                                </div>
+                            ) : (
+                                <p className="text-xs text-white/60">
+                                    Upload status: not selected. Required document type and file must be submitted together.
+                                </p>
+                            )}
+                            {renderFieldError("documentType", "documentFile")}
+                            <p className="text-sm font-semibold text-white/80">Owner Name</p>
                             <input
-                                value={ownerName}
-                                onChange={(event) => setOwnerName(sanitizeTextInput(event.target.value))}
-                                placeholder="Owner Name"
+                                value={form.ownerName || ""}
+                                onChange={(event) => updateField("ownerName", sanitizeTextInput(event.target.value))}
+                                placeholder="Enter full name"
                                 className="h-12 w-full rounded-xl border border-white/20 bg-[#0d0d14] px-3 text-sm text-white/90 outline-none placeholder:text-white/35 focus:border-[#A67AEB]"
                             />
+                            {renderFieldError("ownerName")}
+                            <p className="text-sm font-semibold text-white/80">Phone Number</p>
                             <div className="flex items-center rounded-xl border border-white/20 bg-[#0d0d14] px-3">
                                 <span className="mr-2 rounded-md bg-white/10 px-2 py-1 text-sm">🇮🇳 +91</span>
                                 <input
@@ -876,71 +1218,28 @@ export default function OwnerListingWizard() {
                                     className="h-12 w-full bg-transparent text-sm text-white/90 outline-none placeholder:text-white/35"
                                 />
                             </div>
-                        </>
-                    )}
-
-                    {step === 7 && (
-                        <>
-                            <section className={sectionCardClass}>
-                                <p className="text-sm text-white/70">To confirm your number, enter OTP sent to</p>
-                                <p className="mt-1 text-sm font-semibold">+91-{form.contactPhone || "XXXXXXXXXX"}</p>
-                            </section>
-                            <div className="flex justify-center gap-3">
-                                {otpDigits.map((digit, index) => (
-                                    <input
-                                        key={`otp-${index}`}
-                                        ref={(node) => {
-                                            otpRefs.current[index] = node;
-                                        }}
-                                        value={digit}
-                                        onChange={(event) => handleOtpChange(index, event.target.value)}
-                                        onKeyDown={(event) => handleOtpBackspace(index, event)}
-                                        onPaste={handleOtpPaste}
-                                        inputMode="numeric"
-                                        maxLength={1}
-                                        className="h-14 w-14 rounded-xl border border-white/20 bg-[#0d0d14] text-center text-xl font-semibold outline-none focus:border-[#A67AEB]"
-                                    />
-                                ))}
-                            </div>
-                            <button
-                                type="button"
-                                onClick={() => requestOtp("resend")}
-                                disabled={!canResendOtp}
-                                className="h-12 w-full rounded-xl border border-[#B7F041] text-base font-semibold text-white disabled:cursor-not-allowed disabled:border-white/25 disabled:text-white/45"
-                            >
-                                {otpRequesting ? "Sending OTP..." : otpResendIn > 0 ? `Resend in ${otpResendIn}s` : "Resend link"}
-                            </button>
-                            <p className="text-center text-xs text-white/50">
-                                {OWNER_MOCK_MODE || RENTALS_MOCK_MODE
-                                    ? "Demo mode OTP is 0000."
-                                    : "OTP will be valid for 10 minutes."}
-                            </p>
+                            {renderFieldError("contactPhone")}
                         </>
                     )}
                 </div>
 
-                {error ? (
+                {error && !(isEditMode && !loadingInitial) ? (
                     <p className="mt-3 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">
                         {error}
                     </p>
                 ) : null}
-                {otpMessage ? (
-                    <p className="mt-3 rounded-xl border border-[#A67AEB]/30 bg-[#A67AEB]/10 px-3 py-2 text-sm text-[#e2d4ff]">
-                        {otpMessage}
-                    </p>
-                ) : null}
-                {otpError ? (
+                {submitError ? (
                     <p className="mt-3 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">
-                        {otpError}
+                        Listing submit failed: {submitError}
                     </p>
                 ) : null}
-
+                {renderFieldError("submit")}
                 <div className="sticky bottom-0 mt-6 bg-[#050507] pb-4 pt-2">
                     <PrimaryButton
                         type="button"
                         className="h-12 w-full text-base"
                         onClick={handleNext}
-                        disabled={!stepValid || submitting || loadingMasters}
+                        disabled={!stepValid || submitting || loadingMasters || loadingInitial}
                     >
                         {nextLabel}
                     </PrimaryButton>
