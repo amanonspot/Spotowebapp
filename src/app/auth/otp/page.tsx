@@ -4,14 +4,14 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import DesktopOTPView from "./_components/DesktopOTPView";
 import MobileOTPView from "./_components/MobileOTPView";
-import { useMockAuth } from "@/lib/hooks/useMockAuth";
+import { useAuth } from "@/lib/hooks/useAuth";
 
 export default function OTPPage() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const phoneNumber = searchParams.get("phone") || "";
 
-    const { verifyOtp, requestOtp, continueAsGuest, error } = useMockAuth();
+    const { verifyOtp, requestOtp, continueAsGuest, error } = useAuth();
 
     const [otp, setOtp] = useState(["", "", "", ""]);
     const [timer, setTimer] = useState(600);

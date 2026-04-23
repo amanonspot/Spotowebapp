@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useMemo } from "react";
-import { BHKOption, FilterState, MoveInOption, PropertyType, SelectOption } from "@/lib/adapters/types";
+import React, { useMemo, useState } from "react";
+import { FilterState, MoveInOption, SelectOption } from "@/lib/adapters/types";
 import Chip from "@/components/revamp/Chip";
 import PrimaryButton from "@/components/revamp/PrimaryButton";
 
@@ -9,24 +9,28 @@ interface FilterPanelProps {
     isOpen: boolean;
     filters: FilterState;
     localities: SelectOption[];
+    propertyTypes: SelectOption[];
+    bhkTypes: SelectOption[];
+    amenities: SelectOption[];
+    keywordSuggestions: string[];
     onChange: (filters: FilterState) => void;
     onClose: () => void;
     onApply: () => void;
     onSkip: () => void;
 }
 
-const bhkOptions: { label: string; value: BHKOption }[] = [
-    { label: "1 rk", value: "1_rk" },
-    { label: "1 bhk", value: "1_bhk" },
-    { label: "2 bhk", value: "2_bhk" },
-    { label: "3 bhk", value: "3_bhk" },
+const fallbackBhkOptions: SelectOption[] = [
+    { id: "1_rk", name: "1 rk" },
+    { id: "1_bhk", name: "1 bhk" },
+    { id: "2_bhk", name: "2 bhk" },
+    { id: "3_bhk", name: "3 bhk" },
 ];
 
-const propertyTypeOptions: { label: string; value: PropertyType }[] = [
-    { label: "Rent House", value: "rent_house" },
-    { label: "PGs", value: "pg" },
-    { label: "Zero Deposit", value: "zero_deposit" },
-    { label: "Co-Living", value: "co_living" },
+const fallbackPropertyTypeOptions: SelectOption[] = [
+    { id: "rent_house", name: "Rent House" },
+    { id: "pg", name: "PGs" },
+    { id: "zero_deposit", name: "Zero Deposit" },
+    { id: "co_living", name: "Co-Living" },
 ];
 
 const moveInOptions: { label: string; value: MoveInOption }[] = [
@@ -46,19 +50,31 @@ const formatBudget = (value: number) => {
     return `₹${value.toLocaleString("en-IN")}`;
 };
 
+const toKeywordToken = (value: string) => value.trim().replace(/\s+/g, " ");
+
 export default function FilterPanel({
     isOpen,
     filters,
     localities,
+    propertyTypes,
+    bhkTypes,
+    amenities,
+    keywordSuggestions,
     onChange,
     onClose,
     onApply,
     onSkip,
 }: FilterPanelProps) {
+    const [customKeyword, setCustomKeyword] = useState("");
+
     const filteredLocalities = useMemo(() => {
         const query = filters.query.toLowerCase();
         return localities.filter((locality) => locality.name.toLowerCase().includes(query));
     }, [localities, filters.query]);
+
+    const resolvedPropertyTypes = propertyTypes.length > 0 ? propertyTypes : fallbackPropertyTypeOptions;
+    const resolvedBhkTypes = bhkTypes.length > 0 ? bhkTypes : fallbackBhkOptions;
+    const resolvedKeywordSuggestions = keywordSuggestions.filter(Boolean).slice(0, 8);
 
     if (!isOpen) return null;
 
@@ -75,7 +91,7 @@ export default function FilterPanel({
                 <div className="flex-1 space-y-7 overflow-y-auto px-6 py-6">
                     <section className="rounded-3xl border border-[#B7F041] bg-[#121217] p-5">
                         <h3 className="text-4xl font-light leading-tight text-white/90">
-                            Let's find your new <span className="font-bold">House</span>
+                            Let&apos;s find your new <span className="font-bold">House</span>
                         </h3>
                         <div className="mt-4 rounded-2xl bg-[#E7E7E7] px-4 py-3 text-black">
                             <input
@@ -96,14 +112,8 @@ export default function FilterPanel({
                                     onClick={() =>
                                         onChange({
                                             ...filters,
-                                            selectedLocalities: toggleValue(
-                                                filters.selectedLocalities,
-                                                locality.name
-                                            ),
-                                            selectedLocalityIds: toggleValue(
-                                                filters.selectedLocalityIds || [],
-                                                locality.id
-                                            ),
+                                            selectedLocalities: toggleValue(filters.selectedLocalities, locality.name),
+                                            selectedLocalityIds: toggleValue(filters.selectedLocalityIds || [], locality.id),
                                         })
                                     }
                                 />
@@ -114,12 +124,18 @@ export default function FilterPanel({
                     <section className="rounded-3xl border border-white/30 bg-[#121217] p-5">
                         <h3 className="text-2xl font-semibold">BHK type</h3>
                         <div className="mt-4 flex flex-wrap gap-3">
-                            {bhkOptions.map((option) => (
+                            {resolvedBhkTypes.map((option) => (
                                 <Chip
-                                    key={option.value}
-                                    label={option.label}
-                                    selected={filters.bhk.includes(option.value)}
-                                    onClick={() => onChange({ ...filters, bhk: toggleValue(filters.bhk, option.value) })}
+                                    key={option.id}
+                                    label={option.name}
+                                    selected={(filters.selectedBhkIds || []).includes(option.id)}
+                                    onClick={() =>
+                                        onChange({
+                                            ...filters,
+                                            selectedBhkIds: toggleValue(filters.selectedBhkIds || [], option.id),
+                                            bhk: toggleValue(filters.bhk || [], option.name.toLowerCase()),
+                                        })
+                                    }
                                 />
                             ))}
                         </div>
@@ -152,19 +168,129 @@ export default function FilterPanel({
                     <section className="rounded-3xl border border-white/30 bg-[#121217] p-5">
                         <h3 className="text-2xl font-semibold">Property Type</h3>
                         <div className="mt-4 flex flex-wrap gap-3">
-                            {propertyTypeOptions.map((option) => (
+                            {resolvedPropertyTypes.map((option) => (
                                 <Chip
-                                    key={option.value}
-                                    label={option.label}
-                                    selected={filters.propertyTypes.includes(option.value)}
+                                    key={option.id}
+                                    label={option.name}
+                                    selected={(filters.selectedPropertyTypeIds || []).includes(option.id)}
                                     onClick={() =>
                                         onChange({
                                             ...filters,
-                                            propertyTypes: toggleValue(filters.propertyTypes, option.value),
+                                            selectedPropertyTypeIds: toggleValue(filters.selectedPropertyTypeIds || [], option.id),
+                                            propertyTypes: toggleValue(filters.propertyTypes || [], option.name.toLowerCase()),
                                         })
                                     }
                                 />
                             ))}
+                        </div>
+                    </section>
+
+                    <section className="rounded-3xl border border-white/30 bg-[#121217] p-5">
+                        <h3 className="text-2xl font-semibold">Amenities</h3>
+                        <div className="mt-4 flex flex-wrap gap-3">
+                            {amenities.map((option) => (
+                                <Chip
+                                    key={option.id}
+                                    label={option.name}
+                                    selected={(filters.amenityIds || []).includes(option.id)}
+                                    onClick={() => onChange({ ...filters, amenityIds: toggleValue(filters.amenityIds || [], option.id) })}
+                                />
+                            ))}
+                            {amenities.length === 0 ? (
+                                <p className="text-xs text-white/60">Amenity options are currently unavailable.</p>
+                            ) : null}
+                        </div>
+                    </section>
+
+                    <section className="rounded-3xl border border-white/30 bg-[#121217] p-5">
+                        <h3 className="text-2xl font-semibold">Keywords</h3>
+                        {resolvedKeywordSuggestions.length > 0 ? (
+                            <div className="mt-4 flex flex-wrap gap-3">
+                                {resolvedKeywordSuggestions.map((keyword) => {
+                                    const normalized = toKeywordToken(keyword);
+                                    const selected = (filters.keywords || []).includes(normalized);
+                                    return (
+                                        <Chip
+                                            key={normalized}
+                                            label={keyword}
+                                            selected={selected}
+                                            onClick={() =>
+                                                onChange({
+                                                    ...filters,
+                                                    keywords: toggleValue(filters.keywords || [], normalized),
+                                                })
+                                            }
+                                        />
+                                    );
+                                })}
+                            </div>
+                        ) : null}
+                        <div className="mt-3 flex items-center gap-2">
+                            <input
+                                value={customKeyword}
+                                onChange={(event) => setCustomKeyword(event.target.value)}
+                                placeholder="Add keyword"
+                                className="h-11 flex-1 rounded-xl border border-white/20 bg-[#0d0d14] px-3 text-sm text-white/90 outline-none placeholder:text-white/35 focus:border-[#A67AEB]"
+                            />
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    const normalized = toKeywordToken(customKeyword);
+                                    if (!normalized) return;
+                                    if ((filters.keywords || []).includes(normalized)) {
+                                        setCustomKeyword("");
+                                        return;
+                                    }
+                                    onChange({ ...filters, keywords: [...(filters.keywords || []), normalized] });
+                                    setCustomKeyword("");
+                                }}
+                                className="h-11 rounded-xl bg-white px-4 text-sm font-semibold text-black"
+                            >
+                                Add
+                            </button>
+                        </div>
+                        {(filters.keywords || []).length > 0 ? (
+                            <div className="mt-3 flex flex-wrap gap-2">
+                                {(filters.keywords || []).map((keyword) => (
+                                    <button
+                                        key={keyword}
+                                        type="button"
+                                        onClick={() =>
+                                            onChange({
+                                                ...filters,
+                                                keywords: (filters.keywords || []).filter((item) => item !== keyword),
+                                            })
+                                        }
+                                        className="rounded-xl border border-[#A67AEB]/50 bg-[#A67AEB]/10 px-3 py-2 text-sm text-[#e2d4ff]"
+                                    >
+                                        {keyword} ×
+                                    </button>
+                                ))}
+                            </div>
+                        ) : null}
+                    </section>
+
+                    <section className="rounded-3xl border border-white/30 bg-[#121217] p-5">
+                        <h3 className="text-2xl font-semibold">Proximity Search (Optional)</h3>
+                        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                            <input
+                                value={filters.proximityLat || ""}
+                                onChange={(event) => onChange({ ...filters, proximityLat: event.target.value })}
+                                placeholder="Latitude"
+                                className="h-11 rounded-xl border border-white/20 bg-[#0d0d14] px-3 text-sm text-white/90 outline-none placeholder:text-white/35 focus:border-[#A67AEB]"
+                            />
+                            <input
+                                value={filters.proximityLng || ""}
+                                onChange={(event) => onChange({ ...filters, proximityLng: event.target.value })}
+                                placeholder="Longitude"
+                                className="h-11 rounded-xl border border-white/20 bg-[#0d0d14] px-3 text-sm text-white/90 outline-none placeholder:text-white/35 focus:border-[#A67AEB]"
+                            />
+                            <input
+                                value={filters.proximityRadiusKm || ""}
+                                onChange={(event) => onChange({ ...filters, proximityRadiusKm: event.target.value })}
+                                placeholder="Radius (km)"
+                                className="h-11 rounded-xl border border-white/20 bg-[#0d0d14] px-3 text-sm text-white/90 outline-none placeholder:text-white/35 focus:border-[#A67AEB]"
+                            />
                         </div>
                     </section>
 
@@ -176,9 +302,7 @@ export default function FilterPanel({
                                     key={option.value}
                                     label={option.label}
                                     selected={filters.moveInBy.includes(option.value)}
-                                    onClick={() =>
-                                        onChange({ ...filters, moveInBy: toggleValue(filters.moveInBy, option.value) })
-                                    }
+                                    onClick={() => onChange({ ...filters, moveInBy: toggleValue(filters.moveInBy, option.value) })}
                                 />
                             ))}
                         </div>

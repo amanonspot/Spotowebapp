@@ -13,6 +13,11 @@ interface PendingOtp {
     requestedAt: string;
 }
 
+type AuthAdapterError = Error & {
+    fieldErrors?: Record<string, string | string[]>;
+    data?: unknown;
+};
+
 const isBrowser = () => typeof window !== "undefined";
 
 const readJson = <T>(key: string): T | null => {
@@ -34,6 +39,24 @@ const writeJson = (key: string, value: unknown) => {
 const clearKey = (key: string) => {
     if (!isBrowser()) return;
     window.localStorage.removeItem(key);
+};
+
+const toAuthAdapterError = (error: unknown, fallback: string): AuthAdapterError => {
+    const next = new Error(
+        error instanceof Error && error.message ? error.message : fallback
+    ) as AuthAdapterError;
+
+    if (error && typeof error === "object") {
+        const typed = error as { fieldErrors?: Record<string, string | string[]>; data?: unknown };
+        if (typed.fieldErrors) next.fieldErrors = typed.fieldErrors;
+        if (typed.data) next.data = typed.data;
+        if (!typed.fieldErrors && typed.data && typeof typed.data === "object") {
+            const payload = typed.data as { field_errors?: Record<string, string | string[]> };
+            if (payload.field_errors) next.fieldErrors = payload.field_errors;
+        }
+    }
+
+    return next;
 };
 
 interface VerifyPayloadLike {
@@ -72,8 +95,7 @@ class HybridAuthAdapter implements AuthAdapter {
             };
         } catch (error) {
             if (!DEFAULT_MOCK_MODE) {
-                const message = error instanceof Error ? error.message : "Unable to request OTP";
-                throw new Error(message);
+                throw toAuthAdapterError(error, "Unable to request OTP");
             }
 
             return {
@@ -106,31 +128,13 @@ class HybridAuthAdapter implements AuthAdapter {
             return session;
         } catch (error) {
             if (!(DEFAULT_MOCK_MODE && code === DEFAULT_MOCK_OTP)) {
-                const message = error instanceof Error ? error.message : "OTP verification failed";
-                throw new Error(message);
+                throw toAuthAdapterError(error, "OTP verification failed");
             }
 
             const session = toSession(pending.phone);
             writeJson(SESSION_KEY, session);
             clearKey(PENDING_OTP_KEY);
             return session;
-        }
-    }
-
-    async requestListingOtp(phone: string): Promise<OtpRequestResult> {
-        return this.requestOtp(phone);
-    }
-
-    async verifyListingOtp(phone: string, code: string): Promise<boolean> {
-        try {
-            await authService.verifyListingOTP(code, phone);
-            return true;
-        } catch (error) {
-            if (DEFAULT_MOCK_MODE && code === DEFAULT_MOCK_OTP) {
-                return true;
-            }
-            const message = error instanceof Error ? error.message : "OTP verification failed";
-            throw new Error(message);
         }
     }
 

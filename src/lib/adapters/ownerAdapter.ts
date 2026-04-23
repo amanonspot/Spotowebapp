@@ -2,9 +2,12 @@ import {
     OwnerDashboardData,
     OwnerLeadCard,
     OwnerListingAdapter,
+    OwnerListingVerificationState,
     OwnerListingFormInput,
+    OwnerSubmissionPrefill,
     OwnerListingSummary,
     OwnerMastersData,
+    OwnerVerificationResult,
     SelectOption,
 } from "@/lib/adapters/types";
 import { mockPropertyList } from "@/mocks/properties";
@@ -26,12 +29,14 @@ import {
     RentalPropertyDto,
     OwnerPropertyUpsertPayload,
 } from "@/lib/rentals";
+import { userService } from "@/lib/api";
+import { authAdapter } from "@/lib/adapters/authAdapter";
 
 const OWNER_LEADS_KEY = "spoto_owner_leads_v1";
 
 const defaultFormInput: OwnerListingFormInput = {
     propertyTitle: "",
-    title: "",
+    ownerName: "",
     employeeId: "",
     propertyTypeId: "",
     cityId: "",
@@ -45,7 +50,9 @@ const defaultFormInput: OwnerListingFormInput = {
     addressLine: "",
     streetLocalityArea: "",
     landmark: "",
-    googleMapsLink: "",
+    mapUrl: "",
+    latitude: "",
+    longitude: "",
     description: "",
     contactPhone: "",
     amenityIds: [],
@@ -53,6 +60,9 @@ const defaultFormInput: OwnerListingFormInput = {
     documentType: "",
     imageFiles: [],
     documentFile: null,
+    documentMeta: { uploadState: "idle" },
+    availableFromDate: "",
+    availabilityMode: "immediate",
 };
 
 const defaultLeads: OwnerLeadCard[] = RENTALS_MOCK_MODE
@@ -81,6 +91,53 @@ const asRecord = (value: unknown): UnknownRecord | null =>
     value !== null && typeof value === "object" ? (value as UnknownRecord) : null;
 
 const asArray = <T = unknown>(value: unknown): T[] => (Array.isArray(value) ? (value as T[]) : []);
+
+const parseStringArray = (value: unknown): string[] => {
+    if (Array.isArray(value)) {
+        return value
+            .map((item) => {
+                if (typeof item === "string") return item.trim();
+                if (typeof item === "number" && Number.isFinite(item)) return String(item);
+                return "";
+            })
+            .filter(Boolean);
+    }
+    if (typeof value === "string") {
+        const trimmed = value.trim();
+        if (!trimmed) return [];
+        try {
+            const parsed = JSON.parse(trimmed);
+            if (Array.isArray(parsed)) {
+                return parsed
+                    .map((item) => (typeof item === "string" ? item.trim() : ""))
+                    .filter(Boolean);
+            }
+        } catch {
+            return [trimmed];
+        }
+    }
+    return [];
+};
+
+type AdapterError = Error & {
+    fieldErrors?: Record<string, string | string[]>;
+    data?: unknown;
+};
+
+const toAdapterError = (error: unknown, fallback: string): AdapterError => {
+    const message = extractErrorMessage(error, fallback);
+    const next = new Error(message) as AdapterError;
+    if (error && typeof error === "object") {
+        const typed = error as { fieldErrors?: Record<string, string | string[]>; data?: unknown };
+        if (typed.fieldErrors) next.fieldErrors = typed.fieldErrors;
+        if (typed.data) next.data = typed.data;
+        if (!typed.fieldErrors && typed.data && typeof typed.data === "object") {
+            const payload = typed.data as { field_errors?: Record<string, string | string[]> };
+            if (payload.field_errors) next.fieldErrors = payload.field_errors;
+        }
+    }
+    return next;
+};
 
 const firstString = (...values: unknown[]): string => {
     for (const value of values) {
@@ -176,11 +233,10 @@ const buildNormalizationContext = async (payload: WireApiEnvelope<unknown>) => {
         if (isUuidLike(cityId)) cityIds.add(cityId);
     });
 
-    const [citiesRes, amenitiesRes, keywordsRes, localitiesRes, propertyTypesRes, bhkRes, furnishingRes, availabilityRes] =
+    const [citiesRes, amenitiesRes, localitiesRes, propertyTypesRes, bhkRes, furnishingRes, availabilityRes] =
         await Promise.allSettled([
             rentalsService.listCities(),
             rentalsService.listAmenities(),
-            rentalsService.listKeywords(),
             Promise.all(Array.from(cityIds).map((cityId) => rentalsService.listLocalities(cityId))),
             rentalsService.listPropertyTypes(),
             rentalsService.listBhkTypes(),
@@ -199,8 +255,6 @@ const buildNormalizationContext = async (payload: WireApiEnvelope<unknown>) => {
         citiesRes.status === "fulfilled" ? toMap(normalizeMasterOptions(citiesRes.value).map(toMasterSelectOption)) : {};
     const amenityNameById =
         amenitiesRes.status === "fulfilled" ? toMap(normalizeMasterOptions(amenitiesRes.value).map(toMasterSelectOption)) : {};
-    const keywordNameById =
-        keywordsRes.status === "fulfilled" ? toMap(normalizeMasterOptions(keywordsRes.value).map(toMasterSelectOption)) : {};
     const localityNameById =
         localitiesRes.status === "fulfilled"
             ? localitiesRes.value
@@ -216,7 +270,6 @@ const buildNormalizationContext = async (payload: WireApiEnvelope<unknown>) => {
         cityNameById,
         localityNameById,
         amenityNameById,
-        keywordNameById,
         propertyTypeIdByToken: toIdByTokenMap(propertyTypeWires),
         bhkIdByToken: toIdByTokenMap(bhkWires),
         furnishingIdByToken: toIdByTokenMap(furnishingWires),
@@ -224,25 +277,73 @@ const buildNormalizationContext = async (payload: WireApiEnvelope<unknown>) => {
     };
 };
 
-const toSummary = (listing: ReturnType<typeof normalizePropertyList>[number]): OwnerListingSummary => ({
-    id: listing.id,
-    title: listing.propertyTitle || listing.title,
-    locality: listing.locality,
-    city: listing.city,
-    rent: listing.pricePerMonth,
-    deposit: listing.deposit,
-    status: listing.status || "pending_review",
-    image: listing.image,
-    updatedAt: new Date().toISOString(),
-    isVerified: listing.isVerified,
-    isActive: listing.isActive,
-});
+const mapVerificationState = (params: {
+    verificationStatus?: string;
+    status?: string;
+    isVerified?: boolean;
+    isActive?: boolean;
+    isPubliclyVisible?: boolean;
+}): OwnerListingVerificationState => {
+    const raw = firstString(params.verificationStatus, params.status).toLowerCase();
+    if (raw === "live") return "live";
+    if (raw === "rejected") return "rejected";
+    if (raw === "verification_pending") return "verification_pending";
+    if (raw === "verification_retry") return "verification_retry";
+    if (raw === "verifying") return "verifying";
+    if (raw === "in_review") return "in_review";
+
+    if (params.isPubliclyVisible === true) return "live";
+    if (params.isVerified === true && params.isActive !== false) return "live";
+    if (params.isVerified === false) return "in_review";
+    return "in_review";
+};
+
+const verificationMessage = (state: OwnerListingVerificationState, reason?: string): string => {
+    if (reason && reason.trim()) return reason.trim();
+    if (state === "live") return "Property is live now.";
+    if (state === "rejected") return "Property verification was rejected.";
+    if (state === "verifying" || state === "verification_retry" || state === "verification_pending") {
+        return "Employee code verification is in progress.";
+    }
+    return "Property is under review.";
+};
+
+const toSummary = (listing: ReturnType<typeof normalizePropertyList>[number]): OwnerListingSummary => {
+    const verificationStatus = firstString(listing.verificationStatus, listing.status);
+    const resolved = mapVerificationState({
+        verificationStatus,
+        status: listing.status,
+        isVerified: listing.isVerified,
+        isActive: listing.isActive,
+        isPubliclyVisible: listing.isPubliclyVisible,
+    });
+
+    return {
+        id: listing.id,
+        title: listing.propertyTitle || listing.title,
+        locality: listing.locality,
+        city: listing.city,
+        rent: listing.pricePerMonth,
+        deposit: listing.deposit,
+        status: listing.status || verificationStatus || "in_review",
+        verificationStatus: verificationStatus || undefined,
+        statusReason: listing.statusReason,
+        lastStatusAt: listing.lastStatusAt,
+        image: listing.image,
+        updatedAt: new Date().toISOString(),
+        isVerified: listing.isVerified,
+        isActive: listing.isActive,
+        isPubliclyVisible: listing.isPubliclyVisible,
+        verificationState: resolved,
+        verificationMessage: verificationMessage(resolved, listing.statusReason),
+    };
+};
 
 const titleFromInput = (input: OwnerListingFormInput) => input.propertyTitle.trim();
 
 const composeDescription = (input: OwnerListingFormInput): string => {
     const direct = input.description.trim();
-    const extra = [input.streetLocalityArea, input.landmark, input.googleMapsLink]
+    const extra = [input.streetLocalityArea, input.landmark, input.mapUrl]
         .map((value) => (value || "").trim())
         .filter(Boolean)
         .join("\n");
@@ -252,6 +353,7 @@ const composeDescription = (input: OwnerListingFormInput): string => {
 
 const toUpsertPayload = (input: OwnerListingFormInput): OwnerPropertyUpsertPayload => ({
     propertyTitle: titleFromInput(input),
+    ownerName: (input.ownerName || "").trim() || undefined,
     employeeId: (input.employeeId || "").trim() || undefined,
     propertyTypeId: input.propertyTypeId,
     cityId: input.cityId,
@@ -259,6 +361,13 @@ const toUpsertPayload = (input: OwnerListingFormInput): OwnerPropertyUpsertPaylo
     bhkId: input.bhkId,
     furnishingId: input.furnishingId,
     availabilityId: input.availabilityId,
+    availableFrom:
+        input.availabilityMode === "date" && (input.availableFromDate || "").trim()
+            ? (input.availableFromDate || "").trim()
+            : undefined,
+    mapUrl: (input.mapUrl || "").trim() || undefined,
+    latitude: (input.latitude || "").trim() || undefined,
+    longitude: (input.longitude || "").trim() || undefined,
     rent: Number(input.rent || 0),
     deposit: Number(input.deposit || 0),
     builtUpAreaSqft: Number(input.builtUpAreaSqft || 0),
@@ -266,7 +375,7 @@ const toUpsertPayload = (input: OwnerListingFormInput): OwnerPropertyUpsertPaylo
     description: composeDescription(input),
     contactPhone: input.contactPhone.trim(),
     amenityIds: input.amenityIds.filter((item) => isUuidLike(item)),
-    keywordIds: input.keywords.filter((item) => isUuidLike(item)),
+    keywords: Array.from(new Set((input.keywords || []).map((item) => item.trim()).filter(Boolean))),
     documentType: input.documentType || undefined,
     imageFiles: input.imageFiles,
     documentFile: input.documentFile,
@@ -290,7 +399,8 @@ const buildChangedKeys = (
 };
 
 const toPayloadFromWire = (wire: RentalPropertyDto): OwnerPropertyUpsertPayload => ({
-    propertyTitle: firstString(wire.title, wire.property_title),
+    propertyTitle: firstString(wire.property_title),
+    ownerName: firstString((wire as UnknownRecord).owner_name, (wire as UnknownRecord).contact_name) || undefined,
     employeeId: firstString((wire as UnknownRecord).listed_by_employee_id) || undefined,
     propertyTypeId: firstString(wire.property_type_id),
     cityId: firstString(wire.city_id),
@@ -298,6 +408,10 @@ const toPayloadFromWire = (wire: RentalPropertyDto): OwnerPropertyUpsertPayload 
     bhkId: firstString(wire.bhk_id),
     furnishingId: firstString(wire.furnishing_id),
     availabilityId: firstString(wire.availability_id),
+    availableFrom: firstString((wire as UnknownRecord).available_from),
+    mapUrl: firstString((wire as UnknownRecord).map_url),
+    latitude: firstString((wire as UnknownRecord).latitude),
+    longitude: firstString((wire as UnknownRecord).longitude),
     rent: Number(wire.rent || 0),
     deposit: Number(wire.deposit || 0),
     builtUpAreaSqft: Number(wire.built_up_area_sqft || 0),
@@ -309,15 +423,9 @@ const toPayloadFromWire = (wire: RentalPropertyDto): OwnerPropertyUpsertPayload 
             .map((item) => firstString(item.id))
             .filter(Boolean);
         if (fromObjects.length > 0) return fromObjects;
-        return asArray<string>(wire.amenity_ids).filter(Boolean);
+        return parseStringArray(wire.amenity_ids).filter(Boolean);
     })(),
-    keywordIds: (() => {
-        const fromKeywords = asArray<string | RentalMasterOptionDto>(wire.keywords)
-            .map((item) => (typeof item === "string" ? item : firstString(item.id)))
-            .filter((item) => isUuidLike(item));
-        if (fromKeywords.length > 0) return fromKeywords;
-        return asArray<string>(wire.keyword_ids).filter((item) => isUuidLike(item));
-    })(),
+    keywords: parseStringArray(wire.keywords),
     documentType: undefined,
     imageFiles: [],
     documentFile: null,
@@ -327,8 +435,8 @@ const toPayloadFromWire = (wire: RentalPropertyDto): OwnerPropertyUpsertPayload 
 
 const toFormFromWire = (wire: RentalPropertyDto): OwnerListingFormInput => ({
     ...defaultFormInput,
-    propertyTitle: firstString(wire.title, wire.property_title),
-    title: firstString(wire.title, wire.property_title),
+    propertyTitle: firstString(wire.property_title),
+    ownerName: firstString((wire as UnknownRecord).owner_name, (wire as UnknownRecord).contact_name),
     employeeId: firstString((wire as UnknownRecord).listed_by_employee_id),
     propertyTypeId: firstString(wire.property_type_id),
     cityId: firstString(wire.city_id),
@@ -336,6 +444,11 @@ const toFormFromWire = (wire: RentalPropertyDto): OwnerListingFormInput => ({
     bhkId: firstString(wire.bhk_id),
     furnishingId: firstString(wire.furnishing_id),
     availabilityId: firstString(wire.availability_id),
+    availableFromDate: firstString((wire as UnknownRecord).available_from),
+    availabilityMode: firstString((wire as UnknownRecord).available_from) ? "date" : "immediate",
+    mapUrl: firstString((wire as UnknownRecord).map_url),
+    latitude: firstString((wire as UnknownRecord).latitude),
+    longitude: firstString((wire as UnknownRecord).longitude),
     rent: firstString(wire.rent),
     deposit: firstString(wire.deposit),
     builtUpAreaSqft: firstString(wire.built_up_area_sqft),
@@ -347,24 +460,33 @@ const toFormFromWire = (wire: RentalPropertyDto): OwnerListingFormInput => ({
             .map((item) => firstString(item.id))
             .filter(Boolean);
         if (fromObjects.length > 0) return fromObjects;
-        return asArray<string>(wire.amenity_ids).filter(Boolean);
+        return parseStringArray(wire.amenity_ids).filter(Boolean);
     })(),
-    keywords: (() => {
-        const fromKeywords = asArray<string | RentalMasterOptionDto>(wire.keywords)
-            .map((item) => (typeof item === "string" ? item : firstString(item.id)))
-            .filter(Boolean);
-        if (fromKeywords.length > 0) return fromKeywords;
-        return asArray<string>(wire.keyword_ids).filter(Boolean);
+    keywords: parseStringArray(wire.keywords),
+    documentMeta: (() => {
+        const documents = asArray<UnknownRecord>((wire as UnknownRecord).documents);
+        const latest = documents[0];
+        const existingDocumentUrl = firstString(latest?.document_file_url);
+        const existingUploadedAt = firstString(latest?.uploaded_at);
+        const existingDocumentType = firstString(latest?.document_type);
+        return {
+            uploadState: existingDocumentUrl ? "uploaded" : "idle",
+            existingDocumentUrl: existingDocumentUrl || undefined,
+            existingUploadedAt: existingUploadedAt || undefined,
+            existingDocumentType: existingDocumentType || undefined,
+            selectedName: existingDocumentUrl ? existingDocumentUrl.split("/").pop() : undefined,
+        };
     })(),
 });
 
 const getCreatedPropertyMeta = (
     payload: WireApiEnvelope<unknown>
-): { propertyId: string; isVerified: boolean | null } => {
+): { propertyId: string; isVerified: boolean | null; verificationStatus: string } => {
     const data = asRecord(unwrapData(payload));
     const propertyId = firstString(data?.property_id, data?.id);
     const isVerified = typeof data?.is_verified === "boolean" ? data.is_verified : null;
-    return { propertyId, isVerified };
+    const verificationStatus = firstString(data?.verification_status, data?.status);
+    return { propertyId, isVerified, verificationStatus };
 };
 
 class HybridOwnerAdapter implements OwnerListingAdapter {
@@ -372,13 +494,48 @@ class HybridOwnerAdapter implements OwnerListingAdapter {
         return "/owner/dashboard";
     }
 
+    async getOwnerSubmissionPrefill(): Promise<OwnerSubmissionPrefill> {
+        try {
+            const [userData, session] = await Promise.allSettled([
+                userService.getUserDetails(),
+                Promise.resolve(authAdapter.getSession()),
+            ]);
+
+            const firstName = userData.status === "fulfilled" ? firstString(userData.value?.first_name) : "";
+            const lastName = userData.status === "fulfilled" ? firstString(userData.value?.last_name) : "";
+            const ownerName = `${firstName} ${lastName}`.trim();
+            const phoneFromUser = userData.status === "fulfilled" ? firstString(userData.value?.phone) : "";
+            const phoneFromSession = session.status === "fulfilled" ? firstString(session.value?.phone) : "";
+
+            const contactPhone = firstString(phoneFromUser, phoneFromSession).replace(/\D/g, "").slice(-10);
+            return {
+                ownerName: ownerName || undefined,
+                contactPhone: contactPhone || undefined,
+            };
+        } catch {
+            return {};
+        }
+    }
+
     async getDashboard(): Promise<OwnerDashboardData> {
         try {
-            const response = await rentalsService.getOwnerProperties();
+            const [ownerResponse, userResponse] = await Promise.allSettled([
+                rentalsService.getOwnerProperties(),
+                userService.getUserDetails(),
+            ]);
+            if (ownerResponse.status !== "fulfilled") {
+                throw ownerResponse.reason;
+            }
+            const response = ownerResponse.value;
             const context = await buildNormalizationContext(response);
             const listings = normalizePropertyList(response, { fallbackToMock: false, ...context }).map(toSummary);
+            const ownerName =
+                userResponse.status === "fulfilled"
+                    ? `${firstString(userResponse.value?.first_name)} ${firstString(userResponse.value?.last_name)}`.trim() ||
+                      "Owner"
+                    : "Owner";
             return {
-                ownerName: "Owner",
+                ownerName,
                 creditsLeft: getCredits("owner"),
                 listings,
                 leads: readLeads(),
@@ -392,12 +549,12 @@ class HybridOwnerAdapter implements OwnerListingAdapter {
                     leads: readLeads(),
                 };
             }
-            throw new Error(extractErrorMessage(error, "Unable to load owner dashboard"));
+            throw toAdapterError(error, "Unable to load owner dashboard");
         }
     }
 
     async getMasters(cityId?: string): Promise<OwnerMastersData> {
-        const [cities, propertyTypes, bhkTypes, furnishingTypes, availabilityTypes, amenities, keywords] =
+        const [cities, propertyTypes, bhkTypes, furnishingTypes, availabilityTypes, amenities] =
             await Promise.allSettled([
                 rentalsService.listCities(),
                 rentalsService.listPropertyTypes(),
@@ -405,7 +562,6 @@ class HybridOwnerAdapter implements OwnerListingAdapter {
                 rentalsService.listFurnishingTypes(),
                 rentalsService.listAvailabilityTypes(),
                 rentalsService.listAmenities(),
-                rentalsService.listKeywords(),
             ]);
 
         const cityOptions =
@@ -434,7 +590,7 @@ class HybridOwnerAdapter implements OwnerListingAdapter {
                     ? normalizeMasterOptions(availabilityTypes.value).map(toMasterSelectOption)
                     : [],
             amenities: amenities.status === "fulfilled" ? normalizeMasterOptions(amenities.value).map(toMasterSelectOption) : [],
-            keywords: keywords.status === "fulfilled" ? normalizeMasterOptions(keywords.value).map(toMasterSelectOption) : [],
+            keywords: [],
         };
 
         if (RENTALS_MOCK_MODE) {
@@ -465,35 +621,51 @@ class HybridOwnerAdapter implements OwnerListingAdapter {
             return toFormFromWire(wire);
         } catch (error) {
             if (RENTALS_MOCK_MODE) return defaultFormInput;
-            throw new Error(extractErrorMessage(error, "Unable to load listing for edit"));
+            throw toAdapterError(error, "Unable to load listing for edit");
         }
     }
 
     async createProperty(input: OwnerListingFormInput): Promise<OwnerListingSummary> {
+        return this.submitListingFinalStep(input);
+    }
+
+    async submitListingFinalStep(input: OwnerListingFormInput): Promise<OwnerListingSummary> {
         if (titleFromInput(input).length === 0) {
             throw new Error("Property title is required");
         }
 
         try {
             const response = await rentalsService.createOwnerProperty(toUpsertPayload(input));
-            const { propertyId, isVerified } = getCreatedPropertyMeta(response);
+            const { propertyId, isVerified, verificationStatus } = getCreatedPropertyMeta(response);
             const dashboard = await this.getDashboard();
             const created = dashboard.listings.find((item) => item.id === propertyId);
             if (created) return { ...created, isVerified: created.isVerified ?? isVerified ?? undefined };
             if (!propertyId) {
                 throw new Error("Create succeeded but property_id was missing in backend response.");
             }
+
+            const mappedVerification = mapVerificationState({
+                verificationStatus: verificationStatus || (isVerified ? "live" : "in_review"),
+                isVerified: isVerified ?? undefined,
+                isActive: isVerified ?? undefined,
+                isPubliclyVisible: Boolean(isVerified),
+            });
+
             return {
                 id: propertyId,
                 title: titleFromInput(input),
-                locality: input.localityId || "",
-                city: input.cityId || "",
+                locality: "",
+                city: "",
                 rent: Number(input.rent || 0),
                 deposit: Number(input.deposit || 0),
-                status: isVerified ? "verified" : "pending_review",
+                status: verificationStatus || (isVerified ? "live" : "in_review"),
+                verificationStatus: verificationStatus || (isVerified ? "live" : "in_review"),
                 image: "",
                 updatedAt: new Date().toISOString(),
                 isVerified: isVerified ?? undefined,
+                isPubliclyVisible: Boolean(isVerified),
+                verificationState: mappedVerification,
+                verificationMessage: verificationMessage(mappedVerification),
             };
         } catch (error) {
             if (RENTALS_MOCK_MODE) {
@@ -504,12 +676,15 @@ class HybridOwnerAdapter implements OwnerListingAdapter {
                     city: input.cityId || "Bengaluru",
                     rent: Number(input.rent || 0),
                     deposit: Number(input.deposit || 0),
-                    status: "pending_review",
+                    status: "in_review",
+                    verificationStatus: "in_review",
                     image: mockPropertyList[0]?.image || "",
                     updatedAt: new Date().toISOString(),
+                    verificationState: "in_review",
+                    verificationMessage: verificationMessage("in_review"),
                 };
             }
-            throw new Error(extractErrorMessage(error, "Unable to publish listing"));
+            throw toAdapterError(error, "Unable to publish listing");
         }
     }
 
@@ -553,13 +728,71 @@ class HybridOwnerAdapter implements OwnerListingAdapter {
                     city: input.cityId || "Bengaluru",
                     rent: Number(input.rent || 0),
                     deposit: Number(input.deposit || 0),
-                    status: "pending_review",
+                    status: "in_review",
+                    verificationStatus: "in_review",
                     image: mockPropertyList[0]?.image || "",
                     updatedAt: new Date().toISOString(),
+                    verificationState: "in_review",
+                    verificationMessage: verificationMessage("in_review"),
                 };
             }
-            throw new Error(extractErrorMessage(error, "Unable to update listing"));
+            throw toAdapterError(error, "Unable to update listing");
         }
+    }
+
+    async deleteProperty(id: string): Promise<void> {
+        try {
+            await rentalsService.deleteOwnerProperty(id);
+        } catch (error) {
+            if (RENTALS_MOCK_MODE) return;
+            throw toAdapterError(error, "Unable to delete listing");
+        }
+    }
+
+    async submitEmployeeCode(propertyId: string, employeeCode: string): Promise<OwnerVerificationResult> {
+        const normalized = employeeCode.trim();
+        if (!normalized) {
+            throw new Error("Please enter employee code.");
+        }
+        const dashboard = await this.getDashboard();
+        const current = dashboard.listings.find((item) => item.id === propertyId);
+        if (!current) {
+            throw new Error("Listing not found.");
+        }
+        if ((current.verificationState || "").toLowerCase() === "rejected") {
+            throw new Error("This listing was rejected. Edit and resubmit before trying employee code again.");
+        }
+
+        const response = await rentalsService.getOwnerProperties();
+        const wires = unwrapToList(response);
+        const wire = wires.find((item) => firstString(item.id, item.property_id) === propertyId);
+        if (!wire) {
+            throw new Error("Listing not found in owner properties.");
+        }
+
+        const payload = toPayloadFromWire(wire);
+        payload.employeeId = normalized;
+        await rentalsService.updateOwnerProperty(
+            propertyId,
+            payload,
+            new Set<keyof OwnerPropertyUpsertPayload>(["employeeId"])
+        );
+
+        const refreshed = await this.getDashboard();
+        const updated = refreshed.listings.find((item) => item.id === propertyId);
+        const state = updated?.verificationState || "in_review";
+        return {
+            propertyId,
+            verificationState: state,
+            message: updated?.verificationMessage || verificationMessage(state, updated?.statusReason),
+        };
+    }
+
+    async getVerificationStatus(propertyId: string): Promise<OwnerListingVerificationState> {
+        const dashboard = await this.getDashboard();
+        const listing = dashboard.listings.find((item) => item.id === propertyId);
+        if (listing?.verificationState) return listing.verificationState;
+        return "in_review";
     }
 
     async unlockLead(leadId: string): Promise<OwnerLeadCard> {

@@ -5,9 +5,10 @@
 
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { authService, userService } from '../api';
-import { VerifyOTPResponse, User } from '../api/types';
+import { User } from '../api/types';
+import { authAdapter, clearMockSession, setGuestSession } from '@/lib/adapters';
 import toast from 'react-hot-toast';
 
 export const useAuth = () => {
@@ -18,84 +19,84 @@ export const useAuth = () => {
   const [userDataLoaded, setUserDataLoaded] = useState(false);
   const loadingUserDataRef = useRef(false);
 
-  // Check authentication status on mount
-  useEffect(() => {
-    const checkAuthStatus = () => {
-      const authStatus = authService.isAuthenticated();
-      setIsAuthenticated(authStatus);
-      
-      if (authStatus && !user && !userDataLoaded && !loading) {
-        // Load user data if authenticated and user data not already loaded
-        loadUserData();
-      }
-    };
-
-    checkAuthStatus();
-  }, []); // Only run once on mount
-
-  // Listen for storage changes to update auth status
-  useEffect(() => {
-    const handleStorageChange = () => {
-      const authStatus = authService.isAuthenticated();
-      setIsAuthenticated(authStatus);
-      
-      if (!authStatus) {
-        setUser(null);
-        setUserDataLoaded(false);
-        loadingUserDataRef.current = false;
-      }
-    };
-
-    window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
+  const resetSessionState = useCallback(() => {
+    setUser(null);
+    setIsAuthenticated(false);
+    setUserDataLoaded(false);
+    loadingUserDataRef.current = false;
   }, []);
+
+  const syncAuthState = useCallback(() => {
+    const session = authAdapter.getSession();
+    const tokenAuthenticated = authService.isAuthenticated();
+    const nextAuthenticated = Boolean(session.isAuthenticated || tokenAuthenticated);
+    setIsAuthenticated(nextAuthenticated);
+
+    if (!nextAuthenticated) {
+      resetSessionState();
+    }
+  }, [resetSessionState]);
 
   /**
    * Load user data from API
    */
-  const loadUserData = async () => {
+  const loadUserData = useCallback(async () => {
     if (userDataLoaded || loading || loadingUserDataRef.current) return; // Prevent multiple calls
     
     loadingUserDataRef.current = true;
     setLoading(true);
     try {
-      console.log('Loading user data...');
       const userData = await userService.getUserDetails();
-      console.log('User data loaded:', userData);
       setUser(userData);
       setUserDataLoaded(true);
     } catch (err: any) {
-      console.error('Failed to load user data:', {
-        message: err?.message || 'Unknown error',
-        status: err?.status,
-        response: err?.response?.data
-      });
-      // If user data loading fails, clear auth state
-      authService.logout();
-      setUser(null);
-      setIsAuthenticated(false);
-      setUserDataLoaded(true);
-      window.location.href = '/auth/login';
+      const status = err?.status;
+      if (status === 401 || status === 403) {
+        clearMockSession();
+        authService.logout();
+        resetSessionState();
+      } else {
+        setError(err?.message || 'Unable to load profile right now.');
+        setUserDataLoaded(false);
+      }
     } finally {
       setLoading(false);
       loadingUserDataRef.current = false;
     }
-  };
+  }, [loading, resetSessionState, userDataLoaded]);
+
+  // Check authentication status on mount
+  useEffect(() => {
+    syncAuthState();
+  }, [syncAuthState]);
+
+  // Load profile after auth is resolved
+  useEffect(() => {
+    if (isAuthenticated && !user && !userDataLoaded && !loading) {
+      loadUserData();
+    }
+  }, [isAuthenticated, user, userDataLoaded, loading, loadUserData]);
+
+  // Listen for storage changes to update auth status
+  useEffect(() => {
+    const handleStorageChange = () => {
+      syncAuthState();
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, [syncAuthState]);
 
   /**
    * Generate OTP for phone number
    */
-  const generateOTP = async (phone: string) => {
+  const requestOtp = useCallback(async (phone: string) => {
     setLoading(true);
     setError(null);
     try {
-      console.log('Generating OTP for phone:', phone);
-      const response = await authService.generateOTP(phone);
-      console.log('OTP generation response:', response);
-      // Removed toast.success - using inline notification in form instead
+      const response = await authAdapter.requestOtp(phone);
       return response;
     } catch (err: any) {
-      console.error('OTP generation error:', err);
       const errorMessage = err.message || 'Failed to generate OTP';
       setError(errorMessage);
       toast.error(errorMessage);
@@ -103,26 +104,20 @@ export const useAuth = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   /**
    * Verify OTP
    */
-  const verifyOTP = async (otp: string): Promise<VerifyOTPResponse> => {
+  const verifyOtp = useCallback(async (otp: string) => {
     setLoading(true);
     setError(null);
     try {
-      console.log('Verifying OTP:', otp);
-      const response = await authService.verifyOTP(otp);
-      console.log('OTP verification response:', response);
-      
-      // Validate that both tokens are present in the response
-      if (!response.access || !response.refresh) {
-        throw new Error('Invalid response: Missing access or refresh token');
-      }
+      const response = await authAdapter.verifyOtp(otp);
       
       // Only set authentication status after successful OTP verification with valid tokens
       setIsAuthenticated(true);
+      setUserDataLoaded(false);
       
       // Load user data after successful authentication
       await loadUserData();
@@ -130,13 +125,6 @@ export const useAuth = () => {
       toast.success('Login successful!');
       return response;
     } catch (err: any) {
-      console.error('OTP verification error:', {
-        message: err?.message || 'Unknown error',
-        status: err?.status,
-        response: err?.response,
-        stack: err?.stack,
-        otp: otp ? 'Present' : 'Missing'
-      });
       const errorMessage = err.message || 'Failed to verify OTP';
       setError(errorMessage);
       toast.error(errorMessage);
@@ -144,12 +132,21 @@ export const useAuth = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [loadUserData]);
+
+  /**
+   * Continue as guest
+   */
+  const continueAsGuest = useCallback(() => {
+    setGuestSession();
+    authService.logout();
+    resetSessionState();
+  }, [resetSessionState]);
 
   /**
    * Google Sign-in
    */
-  const googleSignIn = async (googleAccessToken: string) => {
+  const googleSignIn = useCallback(async (googleAccessToken: string) => {
     setLoading(true);
     setError(null);
     try {
@@ -173,25 +170,24 @@ export const useAuth = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [loadUserData]);
 
   /**
    * Logout
    */
-  const logout = () => {
+  const logout = useCallback(() => {
+    clearMockSession();
     authService.logout();
-    setUser(null);
-    setIsAuthenticated(false);
-    setUserDataLoaded(false);
-    loadingUserDataRef.current = false;
+    resetSessionState();
     window.location.href = '/auth/login';
-  };
+  }, [resetSessionState]);
 
   /**
    * Check if user is authenticated
    */
   const checkIsAuthenticated = () => {
-    return authService.isAuthenticated();
+    const session = authAdapter.getSession();
+    return Boolean(session.isAuthenticated || authService.isAuthenticated());
   };
 
   /**
@@ -206,9 +202,12 @@ export const useAuth = () => {
     error,
     user,
     isAuthenticated,
-    generateOTP,
-    verifyOTP,
+    requestOtp,
+    verifyOtp,
+    generateOTP: requestOtp,
+    verifyOTP: verifyOtp,
     googleSignIn,
+    continueAsGuest,
     logout,
     checkIsAuthenticated,
     getCurrentUserId,

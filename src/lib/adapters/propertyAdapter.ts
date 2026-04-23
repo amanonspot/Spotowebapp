@@ -59,9 +59,9 @@ const toToken = (value: string) =>
 
 const toIdByTokenMap = (wires: RentalMasterOptionDto[]): Record<string, string> =>
     wires.reduce<Record<string, string>>((acc, wire) => {
-        const id = `${wire.id || wire.uuid || ""}`.trim();
+        const id = `${wire.id || ""}`.trim();
         if (!id) return acc;
-        const tokens = [wire.name, wire.label, wire.code, `${wire.value || ""}`]
+        const tokens = [wire.name, wire.code, `${wire.bhk_value || ""}`]
             .map((value) => toToken(`${value || ""}`))
             .filter(Boolean);
         tokens.forEach((token) => {
@@ -78,11 +78,10 @@ const buildNormalizationContext = async (payload: WireApiEnvelope<unknown>) => {
         if (isUuidLike(cityId)) cityIds.add(cityId);
     });
 
-    const [citiesRes, amenitiesRes, keywordsRes, localitiesRes, propertyTypesRes, bhkRes, furnishingRes, availabilityRes] =
+    const [citiesRes, amenitiesRes, localitiesRes, propertyTypesRes, bhkRes, furnishingRes, availabilityRes] =
         await Promise.allSettled([
         rentalsService.listCities(),
         rentalsService.listAmenities(),
-        rentalsService.listKeywords(),
         Promise.all(Array.from(cityIds).map((cityId) => rentalsService.listLocalities(cityId))),
         rentalsService.listPropertyTypes(),
         rentalsService.listBhkTypes(),
@@ -101,8 +100,6 @@ const buildNormalizationContext = async (payload: WireApiEnvelope<unknown>) => {
         citiesRes.status === "fulfilled" ? toMap(normalizeMasterOptions(citiesRes.value).map(toMasterSelectOption)) : {};
     const amenityNameById =
         amenitiesRes.status === "fulfilled" ? toMap(normalizeMasterOptions(amenitiesRes.value).map(toMasterSelectOption)) : {};
-    const keywordNameById =
-        keywordsRes.status === "fulfilled" ? toMap(normalizeMasterOptions(keywordsRes.value).map(toMasterSelectOption)) : {};
     const localityNameById =
         localitiesRes.status === "fulfilled"
             ? localitiesRes.value
@@ -118,7 +115,6 @@ const buildNormalizationContext = async (payload: WireApiEnvelope<unknown>) => {
         cityNameById,
         localityNameById,
         amenityNameById,
-        keywordNameById,
         propertyTypeIdByToken: toIdByTokenMap(propertyTypeWires),
         bhkIdByToken: toIdByTokenMap(bhkWires),
         furnishingIdByToken: toIdByTokenMap(furnishingWires),
@@ -127,20 +123,11 @@ const buildNormalizationContext = async (payload: WireApiEnvelope<unknown>) => {
 };
 
 const isTenantVisible = (item: PropertyListItem): boolean => {
-    if (item.isActive === false) return false;
-    if (item.isVerified === false) return false;
-
+    if (typeof item.isPubliclyVisible === "boolean") return item.isPubliclyVisible;
     const status = (item.status || "").toLowerCase();
-    if (!status) return true;
-
-    if (status.includes("reject") || status.includes("pending") || status.includes("review") || status.includes("draft")) {
-        return false;
-    }
-    if (status.includes("approved") || status.includes("active") || status.includes("publish") || status.includes("verified")) {
-        return true;
-    }
-
-    return true;
+    if (status.includes("reject") || status.includes("pending") || status.includes("review") || status.includes("draft")) return false;
+    if (status.includes("live") || status.includes("approved")) return true;
+    return Boolean(item.isVerified && item.isActive);
 };
 
 const mapFiltersToApiParams = (filters: FilterState) => {
@@ -153,6 +140,9 @@ const mapFiltersToApiParams = (filters: FilterState) => {
         rent_max?: number;
         amenity_ids?: string[];
         keywords?: string[];
+        lat?: number;
+        lng?: number;
+        radius_km?: number;
     } = {};
     if (filters.budgetMin > 0) params.rent_min = filters.budgetMin;
     if (filters.budgetMax > 0) params.rent_max = filters.budgetMax;
@@ -165,6 +155,21 @@ const mapFiltersToApiParams = (filters: FilterState) => {
 
     const bhkId = filters.selectedBhkIds?.[0];
     if (bhkId && isUuidLike(bhkId)) params.bhk_id = bhkId;
+
+    const amenityIds = (filters.amenityIds || []).filter((value) => isUuidLike(value));
+    if (amenityIds.length > 0) params.amenity_ids = amenityIds;
+
+    const keywords = (filters.keywords || []).map((item) => item.trim()).filter(Boolean);
+    if (keywords.length > 0) params.keywords = keywords;
+
+    const lat = Number(filters.proximityLat || "");
+    const lng = Number(filters.proximityLng || "");
+    const radius = Number(filters.proximityRadiusKm || "");
+    if (Number.isFinite(lat) && Number.isFinite(lng) && Number.isFinite(radius) && radius > 0) {
+        params.lat = lat;
+        params.lng = lng;
+        params.radius_km = radius;
+    }
 
     return params;
 };
@@ -248,13 +253,30 @@ const applyClientFilters = (items: PropertyListItem[], filters: FilterState): Pr
             (nextFilters.selectedPropertyTypeIds || []).length > 0
                 ? (nextFilters.selectedPropertyTypeIds || []).includes(item.propertyTypeId || "")
                 : nextFilters.propertyTypes.length === 0 ||
-                  nextFilters.propertyTypes.some((type) => item.propertyTypes.includes(type));
+                  nextFilters.propertyTypes.some((type) =>
+                      item.propertyTypes.some((itemType) => toToken(itemType) === toToken(type))
+                  );
 
         const moveInMatch =
             nextFilters.moveInBy.length === 0 ||
             nextFilters.moveInBy.some((moveIn) => item.moveInOptions.includes(moveIn));
 
-        return queryMatch && localityMatch && bhkMatch && budgetMatch && typeMatch && moveInMatch;
+        const amenityMatch =
+            (nextFilters.amenityIds || []).length === 0 ||
+            (item.amenityIds || []).some((amenityId) => (nextFilters.amenityIds || []).includes(amenityId));
+
+        const keywordMatch =
+            (nextFilters.keywords || []).length === 0 ||
+            (nextFilters.keywords || []).some((keyword) => {
+                const token = keyword.toLowerCase();
+                return (
+                    item.title.toLowerCase().includes(token) ||
+                    (item.badges || []).some((badge) => badge.toLowerCase().includes(token)) ||
+                    (item.features || []).some((feature) => feature.toLowerCase().includes(token))
+                );
+            });
+
+        return queryMatch && localityMatch && bhkMatch && budgetMatch && typeMatch && moveInMatch && amenityMatch && keywordMatch;
     });
 
     return sortByMode(filtered, nextFilters.sortBy);

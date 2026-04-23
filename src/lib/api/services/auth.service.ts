@@ -53,29 +53,6 @@ export const verifyOTP = async (otp: string, phone?: string): Promise<VerifyOTPR
 };
 
 /**
- * Verify OTP for listing flow.
- * Keeps existing login flow untouched while allowing owner listing OTP checks.
- */
-export const verifyListingOTP = async (otp: string, phone: string): Promise<boolean> => {
-  const response = await api.post<Partial<VerifyOTPResponse> | Record<string, unknown>>('/api/verify-otp/', { otp, phone });
-
-  // Backend may rotate tokens on successful OTP verification. Persist if present.
-  if (typeof window !== 'undefined' && response && typeof response === 'object') {
-    const record = response as Record<string, unknown>;
-    const access = typeof record.access === 'string' ? record.access : '';
-    const refresh = typeof record.refresh === 'string' ? record.refresh : '';
-    const userId = typeof record.user_id === 'string' ? record.user_id : '';
-
-    if (access) localStorage.setItem('access_token', access);
-    if (refresh) localStorage.setItem('refresh_token', refresh);
-    if (userId) localStorage.setItem('user_id', userId);
-    if (access || refresh) localStorage.setItem('isAuthenticated', 'true');
-  }
-
-  return true;
-};
-
-/**
  * Google Sign-in
  */
 export const googleSignIn = async (googleAccessToken: string): Promise<VerifyOTPResponse> => {
@@ -143,7 +120,6 @@ export const authService = {
   generateOTP,
   generateEmailOTP,
   verifyOTP,
-  verifyListingOTP,
   googleSignIn,
   logout,
   isAuthenticated,

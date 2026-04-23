@@ -4,11 +4,11 @@ import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import DesktopLoginView from "./_components/DesktopLoginView";
 import MobileLoginView from "./_components/MobileLoginView";
-import { useMockAuth } from "@/lib/hooks/useMockAuth";
+import { useAuth } from "@/lib/hooks/useAuth";
 
 export default function LoginPage() {
     const router = useRouter();
-    const { isAuthenticated, error, requestOtp, verifyOtp, continueAsGuest } = useMockAuth();
+    const { isAuthenticated, error, requestOtp, verifyOtp, continueAsGuest } = useAuth();
 
     const [phoneNumber, setPhoneNumber] = useState("");
     const [otpSent, setOtpSent] = useState(false);

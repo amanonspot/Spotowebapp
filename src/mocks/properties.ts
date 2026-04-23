@@ -195,6 +195,11 @@ export const defaultFilterState: FilterState = {
     propertyTypes: [],
     selectedPropertyTypeIds: [],
     moveInBy: [],
+    amenityIds: [],
+    keywords: [],
+    proximityLat: "",
+    proximityLng: "",
+    proximityRadiusKm: "",
     sortBy: "recommended",
 };
 

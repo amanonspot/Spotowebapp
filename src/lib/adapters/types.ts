@@ -7,13 +7,18 @@ export interface FilterState {
     query: string;
     selectedLocalities: string[];
     selectedLocalityIds?: string[];
-    bhk: BHKOption[];
+    bhk: string[];
     selectedBhkIds?: string[];
     budgetMin: number;
     budgetMax: number;
-    propertyTypes: PropertyType[];
+    propertyTypes: string[];
     selectedPropertyTypeIds?: string[];
     moveInBy: MoveInOption[];
+    amenityIds: string[];
+    keywords: string[];
+    proximityLat?: string;
+    proximityLng?: string;
+    proximityRadiusKm?: string;
     sortBy: SortOption;
 }
 
@@ -37,11 +42,16 @@ export interface PropertyListItem {
     furnishingId?: string;
     availabilityId?: string;
     status?: string;
+    verificationStatus?: string;
+    statusReason?: string;
+    lastStatusAt?: string;
     isVerified?: boolean;
     isActive?: boolean;
+    isPubliclyVisible?: boolean;
     moveInOptions: MoveInOption[];
     badges: string[];
     features: string[];
+    amenityIds?: string[];
 }
 
 export interface UnlockOffer {
@@ -52,20 +62,31 @@ export interface UnlockOffer {
     ctaLabel: string;
 }
 
+export interface OwnerDocument {
+    id?: string;
+    documentType: string;
+    documentUrl: string;
+    uploadedAt?: string;
+}
+
 export interface OwnerContact {
     ownerName: string;
     maskedPhone: string;
     whatsappNumber: string;
+    documents?: OwnerDocument[];
 }
 
 export interface PropertyDetail extends PropertyListItem {
     description: string;
     mapPreviewLabel: string;
     mapPreviewSubLabel: string;
+    mapUrl?: string;
+    latitude?: string;
+    longitude?: string;
+    availableFrom?: string;
     amenities: string[];
     amenityIds?: string[];
     highlights: string[];
-    keywordIds?: string[];
     owner: OwnerContact;
     unlockOffer: UnlockOffer;
 }
@@ -107,8 +128,6 @@ export interface AuthAdapter {
     requestOtp(phone: string): Promise<OtpRequestResult>;
     verifyOtp(code: string): Promise<AuthSession>;
     getSession(): AuthSession;
-    requestListingOtp?(phone: string): Promise<OtpRequestResult>;
-    verifyListingOtp?(phone: string, code: string): Promise<boolean>;
 }
 
 export type CheckoutStatus = "idle" | "pending" | "paywall" | "success" | "failed";
@@ -127,6 +146,7 @@ export interface CheckoutState {
     updatedAt: string;
     unlockedPhone?: string;
     unlockedName?: string;
+    unlockedDocuments?: OwnerDocument[];
     creditsRemaining?: number;
     paywall?: {
         oneDay: { passType: "one_day"; price: number; currency: string; durationDays: number };
@@ -154,9 +174,22 @@ export interface SelectOption {
     name: string;
 }
 
+export type OwnerAvailabilityMode = "immediate" | "date";
+export type OwnerDocumentUploadState = "idle" | "selected" | "uploading" | "uploaded" | "error";
+
+export interface OwnerDocumentMeta {
+    selectedName?: string;
+    selectedSize?: number;
+    selectedType?: string;
+    uploadState?: OwnerDocumentUploadState;
+    existingDocumentUrl?: string;
+    existingUploadedAt?: string;
+    existingDocumentType?: string;
+}
+
 export interface OwnerListingFormInput {
     propertyTitle: string;
-    title?: string;
+    ownerName?: string;
     employeeId?: string;
     propertyTypeId: string;
     cityId: string;
@@ -170,7 +203,9 @@ export interface OwnerListingFormInput {
     addressLine: string;
     streetLocalityArea?: string;
     landmark?: string;
-    googleMapsLink?: string;
+    mapUrl?: string;
+    latitude?: string;
+    longitude?: string;
     description: string;
     contactPhone: string;
     amenityIds: string[];
@@ -178,6 +213,9 @@ export interface OwnerListingFormInput {
     documentType: string;
     imageFiles: File[];
     documentFile: File | null;
+    documentMeta?: OwnerDocumentMeta;
+    availableFromDate?: string;
+    availabilityMode?: OwnerAvailabilityMode;
     clearImages?: boolean;
     clearDocuments?: boolean;
 }
@@ -190,10 +228,35 @@ export interface OwnerListingSummary {
     rent: number;
     deposit: number;
     status: string;
+    verificationStatus?: string;
+    statusReason?: string;
+    lastStatusAt?: string;
     image: string;
     updatedAt: string;
     isVerified?: boolean;
     isActive?: boolean;
+    isPubliclyVisible?: boolean;
+    verificationState?: OwnerListingVerificationState;
+    verificationMessage?: string;
+}
+
+export type OwnerListingVerificationState =
+    | "in_review"
+    | "verification_pending"
+    | "verifying"
+    | "live"
+    | "rejected"
+    | "verification_retry";
+
+export interface OwnerSubmissionPrefill {
+    ownerName?: string;
+    contactPhone?: string;
+}
+
+export interface OwnerVerificationResult {
+    propertyId: string;
+    verificationState: OwnerListingVerificationState;
+    message?: string;
 }
 
 export type OwnerLeadState = "locked" | "unlocked";
@@ -228,10 +291,15 @@ export interface OwnerMastersData {
 
 export interface OwnerListingAdapter {
     getOwnerEntryRoute(): Promise<"/owner/dashboard" | "/owner/list-property">;
+    getOwnerSubmissionPrefill(): Promise<OwnerSubmissionPrefill>;
     getDashboard(): Promise<OwnerDashboardData>;
     getMasters(cityId?: string): Promise<OwnerMastersData>;
     getPropertyForEdit(id: string): Promise<OwnerListingFormInput>;
+    submitListingFinalStep(input: OwnerListingFormInput): Promise<OwnerListingSummary>;
     createProperty(input: OwnerListingFormInput): Promise<OwnerListingSummary>;
     updateProperty(id: string, input: OwnerListingFormInput): Promise<OwnerListingSummary>;
+    deleteProperty(id: string): Promise<void>;
+    submitEmployeeCode(propertyId: string, employeeCode: string): Promise<OwnerVerificationResult>;
+    getVerificationStatus(propertyId: string): Promise<OwnerListingVerificationState>;
     unlockLead(leadId: string): Promise<OwnerLeadCard>;
 }

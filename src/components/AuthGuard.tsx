@@ -2,14 +2,14 @@
 
 import { useEffect, useState } from "react";
 import Logo from "./Logo";
-import { useMockAuth } from "@/lib/hooks/useMockAuth";
+import { useAuth } from "@/lib/hooks/useAuth";
 
 interface AuthGuardProps {
     children: React.ReactNode;
 }
 
 export default function AuthGuard({ children }: AuthGuardProps) {
-    const { loading } = useMockAuth();
+    const { loading } = useAuth();
     const [booting, setBooting] = useState(true);
 
     useEffect(() => {
