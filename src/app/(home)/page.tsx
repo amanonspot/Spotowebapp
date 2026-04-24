@@ -8,6 +8,7 @@ import PrimaryButton from "@/components/revamp/PrimaryButton";
 import RevampPropertyCard from "@/components/revamp/PropertyCard";
 import { propertyAdapter } from "@/lib/adapters";
 import { HomeFeed, PropertyListItem } from "@/lib/adapters/types";
+import { requireAuthThenContinue } from "@/lib/auth/requireAuthAction";
 
 const initialFeed: HomeFeed = {
     categories: [],
@@ -33,6 +34,19 @@ export default function HomePage() {
     const [loading, setLoading] = useState(true);
     const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
+
+    const handleListProperty = () => {
+        void requireAuthThenContinue({
+            router,
+            intent: {
+                type: "owner_list_property",
+                nextPath: "/owner/list-property",
+            },
+            onAuthenticated: () => {
+                router.push("/owner/list-property");
+            },
+        });
+    };
 
     useEffect(() => {
         let mounted = true;
@@ -75,7 +89,7 @@ export default function HomePage() {
                 <section className="rounded-b-[36px] border-b border-[#7e59be] bg-[radial-gradient(circle_at_top,#241634,transparent_55%)] pb-8">
                     <div className="flex items-center justify-between gap-3 py-2">
                         <button
-                            onClick={() => router.push("/owner")}
+                            onClick={handleListProperty}
                             className="rounded-full border border-white/30 px-4 py-2 text-sm transition hover:border-[#A67AEB] hover:text-[#E8DBFF] active:scale-[0.99]"
                         >
                             List Your Property
@@ -173,7 +187,7 @@ export default function HomePage() {
                 <section className="mt-10 rounded-2xl border border-[#B7F041]/40 bg-[#101212] p-6 text-center">
                     <p className="text-sm text-[#B7F041]">Landlord Growth CTA</p>
                     <h3 className="mt-2 text-3xl font-semibold">Get verified tenants in top Bengaluru localities</h3>
-                    <PrimaryButton className="mt-4" onClick={() => router.push("/owner")}>
+                    <PrimaryButton className="mt-4" onClick={handleListProperty}>
                         Post Property for Free
                     </PrimaryButton>
                 </section>

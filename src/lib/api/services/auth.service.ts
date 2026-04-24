@@ -9,6 +9,30 @@ import {
   VerifyOTPResponse,
 } from '../types';
 
+type VerifyPayload = Partial<VerifyOTPResponse> & {
+  success?: boolean;
+  data?: Partial<VerifyOTPResponse>;
+};
+
+const normalizeVerifyPayload = (payload: VerifyPayload): VerifyOTPResponse => {
+  const data = payload.data && typeof payload.data === 'object' ? payload.data : payload;
+  const access = typeof data.access === 'string' ? data.access : '';
+  const refresh = typeof data.refresh === 'string' ? data.refresh : '';
+  const message = typeof data.message === 'string' ? data.message : 'OTP verified successfully.';
+  const userId = typeof data.user_id === 'string' && data.user_id.trim() ? data.user_id : undefined;
+
+  if (!access || !refresh) {
+    throw new Error('Unable to verify OTP right now. Please try again.');
+  }
+
+  return {
+    access,
+    refresh,
+    message,
+    user_id: userId,
+  };
+};
+
 /**
  * Generate OTP for phone login
  */
@@ -29,34 +53,29 @@ export const generateEmailOTP = async (email: string): Promise<LoginResponse> =>
  * Verify OTP and get access token
  */
 export const verifyOTP = async (otp: string, phone?: string): Promise<VerifyOTPResponse> => {
-  try {
-    const payload = phone ? { otp, phone } : { otp };
-    const response = await api.post<VerifyOTPResponse>('/api/verify-otp/', payload);
-    
-    // Validate response structure - ensure both access and refresh tokens are present
-    if (!response.access || !response.refresh) {
-      throw new Error('Unable to verify OTP right now. Please try again.');
+  const payload = phone ? { otp, phone } : { otp };
+  const response = await api.post<VerifyPayload>('/api/verify-otp/', payload);
+  const normalized = normalizeVerifyPayload(response);
+
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('access_token', normalized.access);
+    localStorage.setItem('refresh_token', normalized.refresh);
+    if (normalized.user_id) {
+      localStorage.setItem('user_id', normalized.user_id);
+    } else {
+      localStorage.removeItem('user_id');
     }
-    
-    // Store tokens in localStorage only if both tokens are present
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('access_token', response.access);
-      localStorage.setItem('refresh_token', response.refresh);
-      localStorage.setItem('user_id', response.user_id);
-      localStorage.setItem('isAuthenticated', 'true');
-    }
-    
-    return response;
-  } catch (error: unknown) {
-    throw error;
+    localStorage.setItem('isAuthenticated', 'true');
   }
+
+  return normalized;
 };
 
 /**
  * Google Sign-in
  */
 export const googleSignIn = async (googleAccessToken: string): Promise<VerifyOTPResponse> => {
-  const response = await api.post<VerifyOTPResponse>(
+  const response = await api.post<VerifyPayload>(
     '/api/google/user/',
     {},
     {
@@ -66,20 +85,21 @@ export const googleSignIn = async (googleAccessToken: string): Promise<VerifyOTP
     }
   );
   
-  // Validate response structure - ensure both access and refresh tokens are present
-  if (!response.access || !response.refresh) {
-    throw new Error('Unable to complete Google sign-in. Please try again.');
-  }
+  const normalized = normalizeVerifyPayload(response);
   
   // Store tokens in localStorage only if both tokens are present
   if (typeof window !== 'undefined') {
-    localStorage.setItem('access_token', response.access);
-    localStorage.setItem('refresh_token', response.refresh);
-    localStorage.setItem('user_id', response.user_id);
+    localStorage.setItem('access_token', normalized.access);
+    localStorage.setItem('refresh_token', normalized.refresh);
+    if (normalized.user_id) {
+      localStorage.setItem('user_id', normalized.user_id);
+    } else {
+      localStorage.removeItem('user_id');
+    }
     localStorage.setItem('isAuthenticated', 'true');
   }
   
-  return response;
+  return normalized;
 };
 
 /**

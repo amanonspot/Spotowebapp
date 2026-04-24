@@ -22,7 +22,7 @@ export interface VerifyOTPRequest {
 export interface VerifyOTPResponse {
   access: string;
   refresh: string;
-  user_id: string;
+  user_id?: string;
   message: string;
 }
 

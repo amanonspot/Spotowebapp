@@ -1,12 +1,13 @@
 "use client";
 
-import React, { use, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import React, { use, useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import OwnerCard from "@/components/revamp/OwnerCard";
 import UnlockCard from "@/components/revamp/UnlockCard";
 import PrimaryButton from "@/components/revamp/PrimaryButton";
 import { authAdapter, checkoutAdapter, propertyAdapter } from "@/lib/adapters";
 import { CheckoutState, PropertyDetail } from "@/lib/adapters/types";
+import { requireAuthThenContinue } from "@/lib/auth/requireAuthAction";
 import { RENTALS_MOCK_MODE } from "@/lib/rentals";
 
 interface PageProps {
@@ -15,6 +16,7 @@ interface PageProps {
 
 export default function BookingDetailPage({ params }: PageProps) {
     const router = useRouter();
+    const searchParams = useSearchParams();
     const { slug } = use(params);
 
     const [property, setProperty] = useState<PropertyDetail | null>(null);
@@ -25,6 +27,9 @@ export default function BookingDetailPage({ params }: PageProps) {
     const [isUnlocked, setIsUnlocked] = useState(false);
     const [activeImageIndex, setActiveImageIndex] = useState(0);
     const [unlocking, setUnlocking] = useState(false);
+    const resumeHandledRef = useRef(false);
+    const resumeAction = searchParams.get("resume");
+    const resumePassType = searchParams.get("passType") === "one_day" ? "one_day" : "weekly";
 
     const openRazorpayCheckout = async (state: CheckoutState) => {
         if (!state.payment) return;
@@ -109,14 +114,37 @@ export default function BookingDetailPage({ params }: PageProps) {
         setActiveImageIndex(0);
     }, [property?.id]);
 
-    const handlePayNow = async () => {
-        if (property === null) return;
-        const session = authAdapter.getSession();
-        if (!session.isAuthenticated) {
-            router.push("/auth/login");
-            return;
-        }
+    useEffect(() => {
+        if (!property || !resumeAction || resumeHandledRef.current) return;
+        if (resumeAction !== "unlock" && resumeAction !== "buy_pass") return;
+        if (!authAdapter.getSession().isAuthenticated) return;
 
+        resumeHandledRef.current = true;
+
+        const runResumeAction = async () => {
+            try {
+                if (resumeAction === "unlock") {
+                    await runUnlockFlow();
+                    return;
+                }
+
+                let baseState = checkoutState;
+                if (!baseState || (baseState.status !== "paywall" && baseState.status !== "pending")) {
+                    baseState = await runUnlockFlow();
+                }
+                if (baseState) {
+                    await runPassActivation(resumePassType, baseState);
+                }
+            } finally {
+                router.replace(`/booking/${slug}`);
+            }
+        };
+
+        void runResumeAction();
+    }, [checkoutState, property, resumeAction, resumePassType, router, slug]);
+
+    const runUnlockFlow = async (): Promise<CheckoutState | null> => {
+        if (property === null) return null;
         setUnlocking(true);
         try {
             const pending = await checkoutAdapter.startUnlock({
@@ -127,7 +155,7 @@ export default function BookingDetailPage({ params }: PageProps) {
 
             if (RENTALS_MOCK_MODE) {
                 setShowCheckoutModal(true);
-                return;
+                return pending;
             }
 
             const resolved = await checkoutAdapter.confirmUnlock(pending.id);
@@ -135,18 +163,49 @@ export default function BookingDetailPage({ params }: PageProps) {
             if (resolved.status === "success") {
                 setIsUnlocked(true);
             }
+            return resolved;
+        } catch (unlockError) {
+            setCheckoutState((prev) =>
+                prev
+                    ? {
+                          ...prev,
+                          status: "failed",
+                          message: unlockError instanceof Error ? unlockError.message : "Unable to unlock owner contact.",
+                          updatedAt: new Date().toISOString(),
+                      }
+                    : prev
+            );
+            return null;
         } finally {
             setUnlocking(false);
         }
     };
 
-    const handleActivatePass = async (passType: "one_day" | "weekly") => {
-        if (!checkoutState) return;
+    const handlePayNow = async () => {
+        if (property === null) return;
+        await requireAuthThenContinue({
+            router,
+            intent: {
+                type: "unlock_contact",
+                propertyId: property.id,
+            },
+            onAuthenticated: async () => {
+                await runUnlockFlow();
+            },
+        });
+    };
+
+    const runPassActivation = async (
+        passType: "one_day" | "weekly",
+        baseState: CheckoutState | null = checkoutState
+    ): Promise<CheckoutState | null> => {
+        if (!baseState) return null;
         setUnlocking(true);
         try {
-            const initiated = await checkoutAdapter.activatePass(checkoutState.id, passType);
+            const initiated = await checkoutAdapter.activatePass(baseState.id, passType);
             setCheckoutState(initiated);
             await openRazorpayCheckout(initiated);
+            return initiated;
         } catch (passError) {
             setCheckoutState((prev) =>
                 prev
@@ -158,9 +217,25 @@ export default function BookingDetailPage({ params }: PageProps) {
                       }
                     : prev
             );
+            return null;
         } finally {
             setUnlocking(false);
         }
+    };
+
+    const handleActivatePass = async (passType: "one_day" | "weekly") => {
+        if (property === null) return;
+        await requireAuthThenContinue({
+            router,
+            intent: {
+                type: "buy_pass",
+                propertyId: property.id,
+                passType,
+            },
+            onAuthenticated: async () => {
+                await runPassActivation(passType);
+            },
+        });
     };
 
     const completeCheckout = async (outcome: "success" | "failed") => {

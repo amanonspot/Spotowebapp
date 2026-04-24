@@ -5,6 +5,9 @@ import { useRouter, useSearchParams } from "next/navigation";
 import DesktopOTPView from "./_components/DesktopOTPView";
 import MobileOTPView from "./_components/MobileOTPView";
 import { useAuth } from "@/lib/hooks/useAuth";
+import { clearAuthIntent, consumeAuthIntentDestination } from "@/lib/auth/authIntent";
+
+const resolvePostLoginDestination = () => consumeAuthIntentDestination() || "/";
 
 export default function OTPPage() {
     const router = useRouter();
@@ -85,7 +88,7 @@ export default function OTPPage() {
         setLocalError(undefined);
         try {
             await verifyOtp(otpValue);
-            router.push("/");
+            router.push(resolvePostLoginDestination());
         } catch (err) {
             setLocalError(err instanceof Error ? err.message : "Failed to verify OTP");
         } finally {
@@ -108,6 +111,7 @@ export default function OTPPage() {
         <>
             <button
                 onClick={() => {
+                    clearAuthIntent();
                     continueAsGuest();
                     router.push("/");
                 }}

@@ -9,6 +9,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { authService, userService } from '../api';
 import { User } from '../api/types';
 import { authAdapter, clearMockSession, setGuestSession } from '@/lib/adapters';
+import { clearAuthIntent } from '@/lib/auth/authIntent';
 import toast from 'react-hot-toast';
 
 export const useAuth = () => {
@@ -29,7 +30,8 @@ export const useAuth = () => {
   const syncAuthState = useCallback(() => {
     const session = authAdapter.getSession();
     const tokenAuthenticated = authService.isAuthenticated();
-    const nextAuthenticated = Boolean(session.isAuthenticated || tokenAuthenticated);
+    const sessionTokenAuthenticated = Boolean(session.isAuthenticated && session.accessToken);
+    const nextAuthenticated = Boolean(tokenAuthenticated || sessionTokenAuthenticated);
     setIsAuthenticated(nextAuthenticated);
 
     if (!nextAuthenticated) {
@@ -40,8 +42,10 @@ export const useAuth = () => {
   /**
    * Load user data from API
    */
-  const loadUserData = useCallback(async () => {
-    if (userDataLoaded || loading || loadingUserDataRef.current) return; // Prevent multiple calls
+  const loadUserData = useCallback(async (options?: { force?: boolean; strict?: boolean }) => {
+    const force = options?.force === true;
+    const strict = options?.strict === true;
+    if (!force && (userDataLoaded || loadingUserDataRef.current)) return user; // Prevent multiple calls
     
     loadingUserDataRef.current = true;
     setLoading(true);
@@ -49,21 +53,29 @@ export const useAuth = () => {
       const userData = await userService.getUserDetails();
       setUser(userData);
       setUserDataLoaded(true);
+      return userData;
     } catch (err: any) {
       const status = err?.status;
       if (status === 401 || status === 403) {
         clearMockSession();
         authService.logout();
         resetSessionState();
+        if (strict) {
+          throw new Error('Session expired. Please sign in again.');
+        }
       } else {
         setError(err?.message || 'Unable to load profile right now.');
         setUserDataLoaded(false);
+        if (strict) {
+          throw err instanceof Error ? err : new Error('Unable to load profile right now.');
+        }
       }
     } finally {
       setLoading(false);
       loadingUserDataRef.current = false;
     }
-  }, [loading, resetSessionState, userDataLoaded]);
+    return null;
+  }, [resetSessionState, user, userDataLoaded]);
 
   // Check authentication status on mount
   useEffect(() => {
@@ -114,13 +126,9 @@ export const useAuth = () => {
     setError(null);
     try {
       const response = await authAdapter.verifyOtp(otp);
-      
-      // Only set authentication status after successful OTP verification with valid tokens
-      setIsAuthenticated(true);
       setUserDataLoaded(false);
-      
-      // Load user data after successful authentication
-      await loadUserData();
+      await loadUserData({ force: true, strict: true });
+      syncAuthState();
       
       toast.success('Login successful!');
       return response;
@@ -132,7 +140,7 @@ export const useAuth = () => {
     } finally {
       setLoading(false);
     }
-  }, [loadUserData]);
+  }, [loadUserData, syncAuthState]);
 
   /**
    * Continue as guest
@@ -158,10 +166,9 @@ export const useAuth = () => {
       }
       
       // Set authentication status after successful Google sign-in with valid tokens
-      setIsAuthenticated(true);
-      
-      // Load user data after successful authentication
-      await loadUserData();
+      setUserDataLoaded(false);
+      await loadUserData({ force: true, strict: true });
+      syncAuthState();
       
       return response;
     } catch (err: any) {
@@ -170,7 +177,7 @@ export const useAuth = () => {
     } finally {
       setLoading(false);
     }
-  }, [loadUserData]);
+  }, [loadUserData, syncAuthState]);
 
   /**
    * Logout
@@ -178,6 +185,7 @@ export const useAuth = () => {
   const logout = useCallback(() => {
     clearMockSession();
     authService.logout();
+    clearAuthIntent();
     resetSessionState();
     window.location.href = '/auth/login';
   }, [resetSessionState]);
@@ -187,7 +195,7 @@ export const useAuth = () => {
    */
   const checkIsAuthenticated = () => {
     const session = authAdapter.getSession();
-    return Boolean(session.isAuthenticated || authService.isAuthenticated());
+    return Boolean(authService.isAuthenticated() || (session.isAuthenticated && session.accessToken));
   };
 
   /**

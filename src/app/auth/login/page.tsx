@@ -5,6 +5,9 @@ import { useRouter } from "next/navigation";
 import DesktopLoginView from "./_components/DesktopLoginView";
 import MobileLoginView from "./_components/MobileLoginView";
 import { useAuth } from "@/lib/hooks/useAuth";
+import { clearAuthIntent, consumeAuthIntentDestination } from "@/lib/auth/authIntent";
+
+const resolvePostLoginDestination = () => consumeAuthIntentDestination() || "/";
 
 export default function LoginPage() {
     const router = useRouter();
@@ -20,7 +23,7 @@ export default function LoginPage() {
 
     useEffect(() => {
         if (isAuthenticated) {
-            router.push("/");
+            router.push(resolvePostLoginDestination());
         }
     }, [isAuthenticated, router]);
 
@@ -48,7 +51,7 @@ export default function LoginPage() {
         setLocalError(undefined);
         try {
             await verifyOtp(otp);
-            router.push("/");
+            router.push(resolvePostLoginDestination());
         } catch (err) {
             setLocalError(err instanceof Error ? err.message : "Failed to verify OTP");
         } finally {
@@ -71,6 +74,7 @@ export default function LoginPage() {
     };
 
     const handleSkipLogin = () => {
+        clearAuthIntent();
         continueAsGuest();
         router.push("/");
     };

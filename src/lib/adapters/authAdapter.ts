@@ -139,12 +139,45 @@ class HybridAuthAdapter implements AuthAdapter {
     }
 
     getSession(): AuthSession {
-        return (
-            readJson<AuthSession>(SESSION_KEY) || {
+        const persisted = readJson<AuthSession>(SESSION_KEY);
+        if (!isBrowser()) {
+            return (
+                persisted || {
+                    isAuthenticated: false,
+                    isGuest: true,
+                }
+            );
+        }
+
+        const accessToken = window.localStorage.getItem("access_token") || undefined;
+        const refreshToken = window.localStorage.getItem("refresh_token") || undefined;
+
+        if (!persisted) {
+            if (accessToken) {
+                return {
+                    isAuthenticated: true,
+                    isGuest: false,
+                    accessToken,
+                    refreshToken,
+                };
+            }
+            return {
                 isAuthenticated: false,
                 isGuest: true,
-            }
-        );
+            };
+        }
+
+        if (accessToken && !persisted.accessToken) {
+            return {
+                ...persisted,
+                isAuthenticated: true,
+                isGuest: false,
+                accessToken,
+                refreshToken: persisted.refreshToken || refreshToken,
+            };
+        }
+
+        return persisted;
     }
 }
 
@@ -166,5 +199,6 @@ export const clearMockSession = () => {
     if (isBrowser()) {
         localStorage.removeItem("access_token");
         localStorage.removeItem("refresh_token");
+        localStorage.removeItem("isAuthenticated");
     }
 };
