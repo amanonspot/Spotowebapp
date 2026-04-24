@@ -162,7 +162,7 @@ const buildOwnerFormData = (
         appendText(formData, "document_type", payload.documentType || "");
     }
     if (shouldInclude(mode, changedKeys, "imageFiles")) {
-        payload.imageFiles?.forEach((file) => appendFileIfPresent(formData, "images", file));
+        payload.imageFiles?.forEach((file) => appendFileIfPresent(formData, "image_files", file));
     }
     if (shouldInclude(mode, changedKeys, "documentFile")) {
         appendFileIfPresent(formData, "document_file", payload.documentFile);

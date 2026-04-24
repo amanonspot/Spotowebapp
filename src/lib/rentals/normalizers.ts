@@ -105,6 +105,26 @@ const numberOrFallback = (value: unknown, fallback = 0): number => {
     return fallback;
 };
 
+const API_ORIGIN = (() => {
+    const rawBase = process.env.NEXT_PUBLIC_API_BASE_URL?.trim();
+    if (!rawBase) return "";
+    try {
+        return new URL(rawBase).origin;
+    } catch {
+        return "";
+    }
+})();
+
+const toAbsoluteMediaUrl = (value: unknown): string => {
+    const raw = stringOrFallback(value);
+    if (!raw) return "";
+    if (/^https?:\/\//i.test(raw)) return raw;
+    if (raw.startsWith("//")) return `https:${raw}`;
+    if (!API_ORIGIN) return raw;
+    if (raw.startsWith("/")) return `${API_ORIGIN}${raw}`;
+    return `${API_ORIGIN}/${raw.replace(/^\/+/, "")}`;
+};
+
 const normalizeToken = (value: unknown) =>
     stringOrFallback(value)
         .toLowerCase()
@@ -201,18 +221,52 @@ const resolveAvailabilityId = (wire: RentalPropertyDto, options: NormalizerConte
     );
 
 const toImageCandidates = (wire: RentalPropertyDto): Array<{ url: string; isPrimary: boolean; sortOrder: number }> => {
-    const mediaCandidates = asArray<UnknownRecord>(wire.images);
-    return mediaCandidates
+    const wireRecord = wire as UnknownRecord;
+    const mediaCandidates = [
+        ...asArray<UnknownRecord>(wire.images),
+        ...asArray<UnknownRecord>(wireRecord.image_files),
+        ...asArray<UnknownRecord>(wireRecord.media),
+    ];
+
+    const objectCandidates = mediaCandidates
         .map((candidate, index) => ({
-            url: firstString(candidate.image_url, candidate.url),
-            isPrimary: Boolean(candidate.is_primary),
+            url: firstString(candidate.image_url, candidate.url, candidate.image, candidate.file, candidate.media_file, candidate.src),
+            isPrimary: Boolean(candidate.is_primary || candidate.is_cover || candidate.is_display || candidate.display_image),
             sortOrder: numberOrFallback(candidate.sort_order, index),
+        }));
+
+    const stringCandidates = [
+        ...asArray<string>(wireRecord.gallery_images),
+        ...asArray<string>(wireRecord.galleryImages),
+        ...asArray<string>(wireRecord.image_urls),
+    ].map((url, index) => ({
+        url: stringOrFallback(url),
+        isPrimary: false,
+        sortOrder: mediaCandidates.length + index,
+    }));
+
+    const topLevelCandidates = [wireRecord.image_url, wireRecord.image, wireRecord.thumbnail, wireRecord.cover_image]
+        .map((url, index) => ({
+            url: stringOrFallback(url),
+            isPrimary: index === 0,
+            sortOrder: mediaCandidates.length + stringCandidates.length + index,
         }))
+        .filter((item) => Boolean(item.url));
+
+    const ranked = [...objectCandidates, ...stringCandidates, ...topLevelCandidates]
+        .map((item) => ({ ...item, url: toAbsoluteMediaUrl(item.url) }))
         .filter((item) => Boolean(item.url))
         .sort((a, b) => {
             if (a.isPrimary === b.isPrimary) return a.sortOrder - b.sortOrder;
             return a.isPrimary ? -1 : 1;
         });
+
+    const seen = new Set<string>();
+    return ranked.filter((item) => {
+        if (seen.has(item.url)) return false;
+        seen.add(item.url);
+        return true;
+    });
 };
 
 const normalizeAmenities = (wire: RentalPropertyDto, options: NormalizerContext): string[] => {
