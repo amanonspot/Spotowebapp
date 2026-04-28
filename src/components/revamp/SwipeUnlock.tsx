@@ -6,7 +6,8 @@ interface SwipeUnlockProps {
     label: string;
     disabled?: boolean;
     loading?: boolean;
-    threshold?: number;
+    completionThreshold?: number;
+    flickVelocityThreshold?: number;
     onComplete: () => void | Promise<void>;
     className?: string;
 }
@@ -17,7 +18,8 @@ export default function SwipeUnlock({
     label,
     disabled = false,
     loading = false,
-    threshold = 0.78,
+    completionThreshold = 0.62,
+    flickVelocityThreshold = 0.9,
     onComplete,
     className,
 }: SwipeUnlockProps) {
@@ -29,8 +31,9 @@ export default function SwipeUnlock({
     const [startOffset, setStartOffset] = useState(0);
     const [completing, setCompleting] = useState(false);
     const activePointerId = useRef<number | null>(null);
+    const dragMeta = useRef({ lastX: 0, lastTs: 0, velocity: 0 });
 
-    const thumbSize = 40;
+    const thumbSize = 42;
     const maxOffset = Math.max(0, trackWidth - thumbSize - 6);
     const progress = maxOffset === 0 ? 0 : offset / maxOffset;
 
@@ -57,6 +60,7 @@ export default function SwipeUnlock({
         setStartOffset(0);
         setStartX(0);
         activePointerId.current = null;
+        dragMeta.current = { lastX: 0, lastTs: 0, velocity: 0 };
     };
 
     const getEventClientX = (
@@ -74,10 +78,17 @@ export default function SwipeUnlock({
         setDragging(true);
         setStartX(clientX);
         setStartOffset(offset);
+        dragMeta.current = { lastX: clientX, lastTs: performance.now(), velocity: 0 };
     };
 
     const continueDrag = (clientX: number) => {
         if (!dragging || disabled || loading || completing) return;
+        const now = performance.now();
+        const dt = Math.max(1, now - dragMeta.current.lastTs);
+        const dx = clientX - dragMeta.current.lastX;
+        dragMeta.current.velocity = dx / dt;
+        dragMeta.current.lastX = clientX;
+        dragMeta.current.lastTs = now;
         const delta = clientX - startX;
         const nextOffset = clamp(startOffset + delta, 0, maxOffset);
         setOffset(nextOffset);
@@ -97,15 +108,19 @@ export default function SwipeUnlock({
     const finishDrag = async () => {
         if (!dragging || disabled || loading || completing) return;
         setDragging(false);
-        if (progress >= threshold) {
+        const progressReached = progress >= completionThreshold;
+        const flickReached = progress >= 0.32 && dragMeta.current.velocity >= flickVelocityThreshold;
+        if (progressReached || flickReached) {
             await complete();
             return;
         }
         setOffset(0);
+        dragMeta.current = { lastX: 0, lastTs: 0, velocity: 0 };
     };
 
     const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
         if (disabled || loading || completing) return;
+        event.preventDefault();
         activePointerId.current = event.pointerId;
         event.currentTarget.setPointerCapture(event.pointerId);
         beginDrag(getEventClientX(event));
@@ -113,24 +128,12 @@ export default function SwipeUnlock({
 
     const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
         if (activePointerId.current !== event.pointerId) return;
+        event.preventDefault();
         continueDrag(getEventClientX(event));
     };
 
     const handlePointerUp = async (event: React.PointerEvent<HTMLDivElement>) => {
         if (activePointerId.current !== event.pointerId) return;
-        await finishDrag();
-    };
-
-    const handleTouchStart = (event: React.TouchEvent<HTMLDivElement>) => {
-        beginDrag(getEventClientX(event));
-    };
-
-    const handleTouchMove = (event: React.TouchEvent<HTMLDivElement>) => {
-        event.preventDefault();
-        continueDrag(getEventClientX(event));
-    };
-
-    const handleTouchEnd = async () => {
         await finishDrag();
     };
 
@@ -145,16 +148,14 @@ export default function SwipeUnlock({
     return (
         <div
             ref={trackRef}
-            className={`relative h-12 w-full touch-pan-x select-none overflow-hidden rounded-full bg-[#A67AEB] text-base font-semibold text-white sm:text-lg ${
+            className={`relative h-12 w-full select-none overflow-hidden rounded-full bg-[#A67AEB] text-base font-semibold text-white sm:text-lg ${
                 disabled ? "opacity-60" : ""
             } ${className || ""}`}
+            style={{ touchAction: dragging ? "none" : "pan-y" }}
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
             onPointerCancel={reset}
-            onTouchStart={handleTouchStart}
-            onTouchMove={handleTouchMove}
-            onTouchEnd={handleTouchEnd}
         >
             <div
                 className="absolute inset-y-0 left-0 rounded-full bg-[#7b4fd0] transition-[width] duration-150"
@@ -168,7 +169,7 @@ export default function SwipeUnlock({
                 role="button"
                 aria-label={label}
                 tabIndex={isInteractive ? 0 : -1}
-                className={`absolute left-[3px] top-[3px] inline-flex h-10 w-10 items-center justify-center rounded-full bg-[#07070a] text-sm text-white transition-transform ${
+                className={`absolute left-[3px] top-[3px] inline-flex h-[42px] w-[42px] items-center justify-center rounded-full bg-[#07070a] text-sm text-white transition-transform ${
                     dragging ? "scale-105" : ""
                 } ${isInteractive ? "cursor-grab active:cursor-grabbing" : "cursor-not-allowed"}`}
                 style={{ transform: `translateX(${offset}px)`, transitionDuration: dragging ? "0ms" : "180ms" }}

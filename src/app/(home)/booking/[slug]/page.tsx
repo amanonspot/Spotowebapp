@@ -4,7 +4,7 @@ import React, { use, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import OwnerCard from "@/components/revamp/OwnerCard";
 import UnlockCard from "@/components/revamp/UnlockCard";
-import { authAdapter, propertyAdapter } from "@/lib/adapters";
+import { authAdapter, checkoutAdapter, propertyAdapter } from "@/lib/adapters";
 import { CheckoutState, PropertyDetail, UnlockPaymentContext, UnlockPaymentFlowState } from "@/lib/adapters/types";
 import { requireAuthThenContinue } from "@/lib/auth/requireAuthAction";
 import { rentalsService } from "@/lib/rentals/service";
@@ -31,6 +31,7 @@ export default function BookingDetailPage({ params }: PageProps) {
     const [paymentSessionId, setPaymentSessionId] = useState<string | null>(null);
     const [paymentBusy, setPaymentBusy] = useState(false);
     const [paymentError, setPaymentError] = useState<string | null>(null);
+    const [unlockBusy, setUnlockBusy] = useState(false);
     const [activePassInfo, setActivePassInfo] = useState<{
         type: "one_day" | "weekly";
         expiresAt: string | null;
@@ -40,12 +41,12 @@ export default function BookingDetailPage({ params }: PageProps) {
     const resumePassType: "one_day" | "weekly" = searchParams.get("passType") === "one_day" ? "one_day" : "weekly";
     const paymentAmount = 99;
 
-    const openPaymentFlow = (passType: "one_day" | "weekly" = "one_day") => {
+    const openPaymentFlow = (passType: "one_day" | "weekly" = "one_day", amount = paymentAmount) => {
         const context: UnlockPaymentContext = {
-            propertyId: slug,
+            propertyId: property?.id || slug,
             returnPath: `/booking/${slug}`,
             passType,
-            amount: paymentAmount,
+            amount,
         };
         setPaymentContext(context);
         setPaymentError(null);
@@ -100,7 +101,7 @@ export default function BookingDetailPage({ params }: PageProps) {
     }, [property, resumeAction, resumePassType, router, slug]);
 
     const handlePayNow = async () => {
-        if (property === null) return;
+        if (property === null || paymentBusy || unlockBusy) return;
         await requireAuthThenContinue({
             router,
             intent: {
@@ -108,13 +109,40 @@ export default function BookingDetailPage({ params }: PageProps) {
                 propertyId: property.id,
             },
             onAuthenticated: async () => {
-                openPaymentFlow("one_day");
+                setUnlockBusy(true);
+                setPaymentError(null);
+                try {
+                    const started = await checkoutAdapter.startUnlock({
+                        propertyId: property.id,
+                        amount: paymentAmount,
+                    });
+                    const result = await checkoutAdapter.confirmUnlock(started.id);
+                    setCheckoutState(result);
+
+                    if (result.status === "success") {
+                        setIsUnlocked(true);
+                        setPaymentFlowState("idle");
+                        return;
+                    }
+
+                    if (result.status === "paywall") {
+                        const oneDayPrice = result.paywall?.oneDay?.price || paymentAmount;
+                        openPaymentFlow("one_day", oneDayPrice);
+                        return;
+                    }
+
+                    setPaymentError(result.message || "Unable to unlock owner contact.");
+                } catch (error) {
+                    setPaymentError(error instanceof Error ? error.message : "Unable to unlock owner contact.");
+                } finally {
+                    setUnlockBusy(false);
+                }
             },
         });
     };
 
     const handleActivatePass = async (passType: "one_day" | "weekly") => {
-        if (property === null) return;
+        if (property === null || paymentBusy || unlockBusy) return;
         await requireAuthThenContinue({
             router,
             intent: {
@@ -399,7 +427,7 @@ export default function BookingDetailPage({ params }: PageProps) {
                         </div>
                         <button
                             onClick={handlePayNow}
-                            disabled={paymentBusy}
+                            disabled={paymentBusy || unlockBusy}
                             className="rounded-xl bg-[#A67AEB] px-3 py-2 text-sm font-semibold text-white disabled:opacity-50 shrink-0"
                         >
                             Unlock
@@ -409,14 +437,14 @@ export default function BookingDetailPage({ params }: PageProps) {
                     <div className="grid grid-cols-2 gap-2">
                         <button
                             onClick={() => handleActivatePass("one_day")}
-                            disabled={paymentBusy}
+                            disabled={paymentBusy || unlockBusy}
                             className="rounded-xl border border-[#B7F041]/40 bg-[#0d0d14] px-3 py-3 text-sm font-semibold text-[#DFF8A2] disabled:opacity-50"
                         >
                             {paymentBusy ? "..." : "Get ₹99 Pass"}
                         </button>
                         <button
                             onClick={() => handleActivatePass("weekly")}
-                            disabled={paymentBusy}
+                            disabled={paymentBusy || unlockBusy}
                             className="rounded-xl border border-[#A67AEB]/40 bg-[#0d0d14] px-3 py-3 text-sm font-semibold text-[#E9DCFF] disabled:opacity-50"
                         >
                             {paymentBusy ? "..." : "Get ₹249 Pass"}
