@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import BottomNavigation from "@/components/BottomNavigation";
 import Chip from "@/components/revamp/Chip";
@@ -9,6 +9,8 @@ import RevampPropertyCard from "@/components/revamp/PropertyCard";
 import { propertyAdapter } from "@/lib/adapters";
 import { HomeFeed, PropertyListItem } from "@/lib/adapters/types";
 import { requireAuthThenContinue } from "@/lib/auth/requireAuthAction";
+import { useAuth } from "@/lib/hooks/useAuth";
+import { rentalsService } from "@/lib/rentals/service";
 
 const initialFeed: HomeFeed = {
     categories: [],
@@ -28,12 +30,65 @@ const matchesCategory = (item: PropertyListItem, category: string) => {
     return true;
 };
 
+interface PassStatus {
+    free_contacts_used: number;
+    free_contacts_remaining: number;
+    has_one_day_active: boolean;
+    has_weekly_active: boolean;
+    one_day_pass_expires_at: string | null;
+    weekly_pass_expires_at: string | null;
+}
+
+function formatExpiry(iso: string | null): string {
+    if (!iso) return "";
+    const d = new Date(iso);
+    return d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
 export default function HomePage() {
     const router = useRouter();
+    const { isAuthenticated, user, logout } = useAuth();
     const [feed, setFeed] = useState<HomeFeed>(initialFeed);
     const [loading, setLoading] = useState(true);
     const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const [showProfileMenu, setShowProfileMenu] = useState(false);
+    const [passStatus, setPassStatus] = useState<PassStatus | null>(null);
+    const [passLoading, setPassLoading] = useState(false);
+    const profileMenuRef = useRef<HTMLDivElement>(null);
+
+    const handleProfileClick = async () => {
+        if (!isAuthenticated) {
+            router.push("/auth/login");
+            return;
+        }
+        const next = !showProfileMenu;
+        setShowProfileMenu(next);
+        if (next && !passStatus) {
+            setPassLoading(true);
+            try {
+                const res = await rentalsService.getMyPassStatus();
+                const data = (res as any)?.data ?? (res as any);
+                setPassStatus(data);
+            } catch {
+                // silently ignore
+            } finally {
+                setPassLoading(false);
+            }
+        }
+    };
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (profileMenuRef.current && !profileMenuRef.current.contains(event.target as Node)) {
+                setShowProfileMenu(false);
+            }
+        };
+        if (showProfileMenu) {
+            document.addEventListener("mousedown", handleClickOutside);
+        }
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, [showProfileMenu]);
 
     const handleListProperty = () => {
         void requireAuthThenContinue({
@@ -85,41 +140,153 @@ export default function HomePage() {
 
     return (
         <main className="min-h-screen bg-[#050507] pb-24 text-white">
-            <div className="mx-auto max-w-[1280px] px-4 pb-20 pt-3 sm:px-6 lg:px-8">
-                <section className="rounded-b-[36px] border-b border-[#7e59be] bg-[radial-gradient(circle_at_top,#241634,transparent_55%)] pb-8">
+            <div className="mx-auto max-w-[1280px] px-4 pb-10 pt-3 sm:px-6 lg:px-8">
+                <section className="rounded-b-[28px] border-b border-[#7e59be] bg-[radial-gradient(circle_at_top,#241634,transparent_55%)] pb-6 sm:rounded-b-[36px] sm:pb-8">
                     <div className="flex items-center justify-between gap-3 py-2">
                         <button
                             onClick={handleListProperty}
-                            className="rounded-full border border-white/30 px-4 py-2 text-sm transition hover:border-[#A67AEB] hover:text-[#E8DBFF] active:scale-[0.99]"
+                            className="rounded-full border border-white/30 px-3 py-1.5 text-xs transition hover:border-[#A67AEB] hover:text-[#E8DBFF] active:scale-[0.99] sm:px-4 sm:py-2 sm:text-sm"
                         >
                             List Your Property
                         </button>
-                        <button
-                            onClick={() => router.push("/auth/login")}
-                            className="h-10 w-10 rounded-full border border-white/30 text-lg transition hover:border-[#A67AEB] active:scale-[0.98]"
-                        >
-                            ⌾
-                        </button>
+                        <div className="relative" ref={profileMenuRef}>
+                            <button
+                                onClick={handleProfileClick}
+                                title={isAuthenticated ? "My Profile" : "Sign In"}
+                                className="h-10 w-10 rounded-full border border-white/30 text-lg transition hover:border-[#A67AEB] active:scale-[0.98]"
+                            >
+                                ⌾
+                            </button>
+
+                            {showProfileMenu && isAuthenticated && (
+                                <div className="absolute right-0 top-full mt-2 w-72 rounded-2xl border border-white/10 bg-[#0f0f13] shadow-2xl z-[100] overflow-hidden">
+                                    {/* Header */}
+                                    <div className="flex items-center gap-3 p-4 border-b border-white/10">
+                                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#AF7AEB] to-[#9575e6] flex items-center justify-center flex-shrink-0">
+                                            <span className="text-white text-sm font-bold">
+                                                {user?.first_name?.charAt(0) || user?.email?.charAt(0) || "U"}
+                                            </span>
+                                        </div>
+                                        <div className="min-w-0">
+                                            <p className="text-sm font-semibold text-white truncate">
+                                                {user?.first_name && user?.last_name
+                                                    ? `${user.first_name} ${user.last_name}`
+                                                    : user?.first_name || user?.email || "User"}
+                                            </p>
+                                            {user?.email && (
+                                                <p className="text-xs text-white/50 truncate">{user.email}</p>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Pass & Credits */}
+                                    <div className="p-4 space-y-3">
+                                        <p className="text-xs font-semibold text-white/40 uppercase tracking-wider">My Credits & Passes</p>
+
+                                        {passLoading ? (
+                                            <div className="flex items-center justify-center py-4">
+                                                <div className="w-5 h-5 rounded-full border-2 border-[#AF7AEB] border-t-transparent animate-spin" />
+                                            </div>
+                                        ) : passStatus ? (
+                                            <>
+                                                {/* Free Credits */}
+                                                <div className="flex items-center justify-between rounded-xl bg-white/5 px-3 py-2.5">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-lg">🎁</span>
+                                                        <div>
+                                                            <p className="text-sm font-medium text-white">Free Contacts</p>
+                                                        </div>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <span className="text-lg font-bold text-[#AF7AEB]">{passStatus.free_contacts_remaining}</span>
+                                                        <span className="text-xs text-white/40"> / 3</span>
+                                                    </div>
+                                                </div>
+
+                                                {/* One Day Pass */}
+                                                {passStatus.has_one_day_active ? (
+                                                    <div className="rounded-xl bg-gradient-to-r from-[#AF7AEB]/20 to-[#9575e6]/10 border border-[#AF7AEB]/30 px-3 py-2.5">
+                                                        <div className="flex items-center gap-2 mb-1">
+                                                            <span className="text-base">✅</span>
+                                                            <p className="text-sm font-semibold text-[#D4B0FF]">1-Day Unlimited Pass</p>
+                                                            <span className="ml-auto text-xs bg-[#AF7AEB]/30 text-[#D4B0FF] rounded-full px-2 py-0.5 font-medium">Active</span>
+                                                        </div>
+                                                        {passStatus.one_day_pass_expires_at && (
+                                                            <p className="text-xs text-white/50 pl-6">Expires: {formatExpiry(passStatus.one_day_pass_expires_at)}</p>
+                                                        )}
+                                                    </div>
+                                                ) : (
+                                                    <div className="rounded-xl bg-white/5 border border-white/10 px-3 py-2.5 flex items-center gap-2">
+                                                        <span className="text-base">⭕</span>
+                                                        <p className="text-sm text-white/40">1-Day Pass — Inactive</p>
+                                                    </div>
+                                                )}
+
+                                                {/* Weekly Pass */}
+                                                {passStatus.has_weekly_active ? (
+                                                    <div className="rounded-xl bg-gradient-to-r from-[#B7F041]/20 to-[#9be030]/10 border border-[#B7F041]/30 px-3 py-2.5">
+                                                        <div className="flex items-center gap-2 mb-1">
+                                                            <span className="text-base">⭐</span>
+                                                            <p className="text-sm font-semibold text-[#D8F88A]">7-Day Unlimited Pass</p>
+                                                            <span className="ml-auto text-xs bg-[#B7F041]/30 text-[#D8F88A] rounded-full px-2 py-0.5 font-medium">Active</span>
+                                                        </div>
+                                                        {passStatus.weekly_pass_expires_at && (
+                                                            <p className="text-xs text-white/50 pl-6">Expires: {formatExpiry(passStatus.weekly_pass_expires_at)}</p>
+                                                        )}
+                                                    </div>
+                                                ) : (
+                                                    <div className="rounded-xl bg-white/5 border border-white/10 px-3 py-2.5 flex items-center gap-2">
+                                                        <span className="text-base">⭕</span>
+                                                        <p className="text-sm text-white/40">7-Day Pass — Inactive</p>
+                                                    </div>
+                                                )}
+                                            </>
+                                        ) : (
+                                            <p className="text-xs text-white/40 text-center py-2">Could not load pass info</p>
+                                        )}
+                                    </div>
+
+                                    {/* Actions */}
+                                    <div className="px-4 pb-4 pt-3 border-t border-white/10 space-y-2">
+                                        <button
+                                            onClick={() => { setShowProfileMenu(false); router.push("/owner/dashboard"); }}
+                                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-white/70 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
+                                        >
+                                            <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                                            </svg>
+                                            Owner Dashboard
+                                        </button>
+                                        <button
+                                            onClick={async () => { setShowProfileMenu(false); await logout(); router.push("/auth/login"); }}
+                                            className="w-full px-3 py-2 text-sm bg-red-500/10 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
+                                        >
+                                            Logout
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
                     </div>
 
                     <button
                         onClick={() => router.push("/search")}
-                        className="mt-4 flex w-full items-center justify-between rounded-full border border-white/15 bg-[#121216] px-5 py-4 text-left transition hover:border-[#A67AEB]/70 active:scale-[0.995]"
+                        className="mt-4 flex w-full items-center justify-between rounded-full border border-white/15 bg-[#121216] px-4 py-3 text-left transition hover:border-[#A67AEB]/70 active:scale-[0.995] sm:px-5 sm:py-4"
                     >
-                        <span className="text-base text-white/85">Let's find your new <b>House</b></span>
-                        <span className="rounded-full bg-[#A67AEB] px-3 py-2 text-sm font-semibold">Search</span>
+                        <span className="text-sm text-white/85 sm:text-base">Let's find your new <b>House</b></span>
+                        <span className="rounded-full bg-[#A67AEB] px-3 py-1.5 text-xs font-semibold sm:py-2 sm:text-sm">Search</span>
                     </button>
 
-                    <div className="flex justify-center py-10">
-                        <h1 className="text-6xl font-black tracking-tight text-[#F1FFE3] drop-shadow-[0_0_16px_rgba(183,240,65,0.35)]">
+                    <div className="flex justify-center py-7 sm:py-10">
+                        <h1 className="text-5xl font-black tracking-tight text-[#F1FFE3] drop-shadow-[0_0_16px_rgba(183,240,65,0.35)] sm:text-6xl">
                             SPOTO
                         </h1>
                     </div>
                 </section>
 
-                <section className="mt-8">
-                    <h2 className="mb-4 text-center text-3xl font-semibold">What are you looking for?</h2>
-                    <div className="flex flex-wrap justify-center gap-3">
+                <section className="mt-6 sm:mt-8">
+                    <h2 className="mb-4 text-center text-2xl font-semibold">What are you looking for?</h2>
+                    <div className="flex flex-wrap justify-center gap-2 sm:gap-3">
                         {feed.categories.map((category) => (
                             <Chip
                                 key={category}
@@ -131,14 +298,16 @@ export default function HomePage() {
                     </div>
                 </section>
 
-                <section className="mt-6 rounded-2xl bg-[#A67AEB] p-5 text-[#1b1028]">
+                <section className="mt-5 rounded-2xl bg-[#A67AEB] p-5 text-[#1b1028]">
                     <p className="text-sm font-semibold text-[#523884]">Validity: 7 days</p>
-                    <p className="mt-2 text-3xl font-semibold">{feed.promoBannerText || "Find Verified Tenants with SPOTO for Free"}</p>
+                    <p className="mt-2 text-xl font-semibold leading-snug sm:text-2xl">
+                        {feed.promoBannerText || "Find Verified Tenants with SPOTO for Free"}
+                    </p>
                 </section>
 
-                <section className="mt-8">
-                    <h3 className="mb-4 text-center text-3xl font-semibold">Recommended Houses</h3>
-                    <div className="flex gap-4 overflow-x-auto pb-2">
+                <section className="mt-6 sm:mt-8">
+                    <h3 className="mb-4 text-center text-2xl font-semibold">Recommended Houses</h3>
+                    <div className="flex gap-3 overflow-x-auto pb-2 sm:gap-4">
                         {feed.recommended.map((property) => (
                             <RevampPropertyCard
                                 key={property.id}
@@ -150,29 +319,28 @@ export default function HomePage() {
                     </div>
                 </section>
 
-                <section className="mt-10">
+                <section className="mt-8 sm:mt-10">
                     <div className="mb-4 flex items-center justify-between">
-                        <h3 className="text-3xl font-semibold">Top Events</h3>
+                        <h3 className="text-2xl font-semibold">Top Listings</h3>
                         <button onClick={() => router.push("/search")} className="text-sm font-semibold text-[#c5acff]">
                             Sort by
                         </button>
                     </div>
-                    {error ? (
+                    {error && (
                         <div className="mb-4 rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-100">
                             {error}
                         </div>
-                    ) : null}
-
+                    )}
                     {loading ? (
-                        <div className="rounded-2xl border border-white/10 bg-[#0f0f13] p-6 text-center text-white/70">
+                        <div className="rounded-2xl border border-white/10 bg-[#0f0f13] p-6 text-center text-sm text-white/70">
                             Loading listings...
                         </div>
                     ) : visibleListings.length === 0 ? (
-                        <div className="rounded-2xl border border-white/10 bg-[#0f0f13] p-6 text-center text-white/70">
+                        <div className="rounded-2xl border border-white/10 bg-[#0f0f13] p-6 text-center text-sm text-white/70">
                             No properties available right now.
                         </div>
                     ) : (
-                        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+                        <div className="grid grid-cols-1 items-stretch gap-4 sm:grid-cols-2 sm:gap-5 xl:grid-cols-3">
                             {visibleListings.map((property) => (
                                 <RevampPropertyCard
                                     key={property.id}
@@ -184,9 +352,11 @@ export default function HomePage() {
                     )}
                 </section>
 
-                <section className="mt-10 rounded-2xl border border-[#B7F041]/40 bg-[#101212] p-6 text-center">
-                    <p className="text-sm text-[#B7F041]">Landlord Growth CTA</p>
-                    <h3 className="mt-2 text-3xl font-semibold">Get verified tenants in top Bengaluru localities</h3>
+                <section className="mt-8 rounded-2xl border border-[#B7F041]/40 bg-[#101212] p-5 text-center sm:mt-10 sm:p-6">
+                    <p className="text-sm text-[#B7F041]">For Landlords</p>
+                    <h3 className="mt-2 text-xl font-semibold leading-snug sm:text-2xl">
+                        Get verified tenants in top Bengaluru localities
+                    </h3>
                     <PrimaryButton className="mt-4" onClick={handleListProperty}>
                         Post Property for Free
                     </PrimaryButton>

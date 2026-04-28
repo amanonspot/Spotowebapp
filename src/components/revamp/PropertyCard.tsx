@@ -13,16 +13,16 @@ interface RevampPropertyCardProps {
 export default function RevampPropertyCard({ property, onClick, compact = false }: RevampPropertyCardProps) {
     return (
         <article
-            className={`overflow-hidden rounded-2xl border border-white/10 bg-[#0E0E10] transition-all hover:border-[#AF7AEB]/50 ${
-                compact ? "min-w-[280px]" : "w-full"
+            className={`flex flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0E0E10] transition-all hover:border-[#AF7AEB]/50 ${
+                compact ? "min-w-[240px] sm:min-w-[280px]" : "w-full"
             }`}
         >
             <button
                 type="button"
                 onClick={onClick}
-                className="w-full text-left transition active:scale-[0.995] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#AF7AEB] focus-visible:ring-offset-2 focus-visible:ring-offset-[#09090f]"
+                className="flex flex-1 flex-col w-full text-left transition active:scale-[0.995] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#AF7AEB] focus-visible:ring-offset-2 focus-visible:ring-offset-[#09090f]"
             >
-                <div className="relative h-56 w-full overflow-hidden">
+                <div className={`relative w-full overflow-hidden ${compact ? "h-40 sm:h-48" : "h-48 sm:h-56"}`}>
                     <BlurImage
                         src={property.image}
                         alt={property.title}
@@ -35,10 +35,13 @@ export default function RevampPropertyCard({ property, onClick, compact = false 
                     </div>
                 </div>
 
-                <div className="space-y-1 p-4">
-                    <h3 className="line-clamp-2 text-xl font-bold text-white">{property.title}</h3>
+                <div className="flex flex-1 flex-col justify-between space-y-1.5 p-4">
+                    <h3 className="line-clamp-2 text-lg font-bold text-white">{property.title}</h3>
                     <p className="text-sm text-[#AAAAAA]">{property.locality}</p>
-                    <p className="text-xl font-bold text-[#B7F041]">₹{property.pricePerMonth.toLocaleString("en-IN")} / Month</p>
+                    <p className="text-lg font-bold text-[#B7F041]">
+                        ₹{property.pricePerMonth.toLocaleString("en-IN")}
+                        <span className="text-sm font-medium text-[#B7F041]/80"> / Month</span>
+                    </p>
                     <p className="text-sm text-[#9A9A9A]">
                         ₹{property.deposit.toLocaleString("en-IN")} Deposit • {property.furnished ? "Furnished" : "Unfurnished"}
                     </p>

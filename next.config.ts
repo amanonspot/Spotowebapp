@@ -13,6 +13,8 @@ const connectSrcHosts = [
     "https://maps.googleapis.com",
     "https://maps.gstatic.com",
     "https://checkout.razorpay.com",
+    "https://api.razorpay.com",
+    "https://lumberjack.razorpay.com",
 ];
 
 const scriptSrc = [
@@ -38,7 +40,7 @@ const contentSecurityPolicy = [
     "img-src 'self' data: blob: https:",
     `connect-src ${Array.from(new Set(connectSrcHosts)).join(" ")}`,
     "font-src 'self' data: https://fonts.gstatic.com",
-    "frame-src 'self' https://checkout.razorpay.com https://maps.google.com https://www.google.com",
+    "frame-src 'self' https://checkout.razorpay.com https://api.razorpay.com https://razorpay.com https://maps.google.com https://www.google.com",
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",

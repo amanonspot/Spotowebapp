@@ -139,15 +139,6 @@ export const initiatePaymentSession = async (
 };
 
 /**
- * Get user bookings
- */
-export const getUserBookings = async (userId: string): Promise<any[]> => {
-  const url = `/api/tickets/?user_id=${userId}`;
-  const response = await api.get<any[]>(url);
-  return response;
-};
-
-/**
  * Get booking details by booking ID
  */
 export const getBookingDetails = async (bookingId: string): Promise<any> => {

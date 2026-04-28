@@ -273,6 +273,16 @@ export const rentalsService = {
             `/api/rental/admin/properties/reject/?property_id=${encodeURIComponent(propertyId)}`
         ),
 
+    getMyPassStatus: () =>
+        api.get<WireApiEnvelope<{
+            free_contacts_used: number;
+            free_contacts_remaining: number;
+            has_one_day_active: boolean;
+            has_weekly_active: boolean;
+            one_day_pass_expires_at: string | null;
+            weekly_pass_expires_at: string | null;
+        }>>("/api/rental/my/pass-status/"),
+
     listCities: () => api.get<WireApiEnvelope<RentalMasterOptionDto[]>>("/api/rental/masters/cities/", { skipAuth: true }),
     listLocalities: (cityId: string) =>
         api.get<WireApiEnvelope<RentalMasterOptionDto[]>>("/api/rental/masters/localities/", {

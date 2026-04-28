@@ -138,19 +138,35 @@ apiClient.interceptors.response.use(
 
         if (status === 401 && originalConfig && !originalConfig._retry && !skipAuth && refreshToken) {
             originalConfig._retry = true;
-            originalConfig.headers = originalConfig.headers || {};
-            const latestAccess = getAccessToken();
-            if (latestAccess) {
-                originalConfig.headers.Authorization = `Bearer ${latestAccess}`;
-            }
 
             try {
-                return await apiClient.request(originalConfig);
-            } catch (retryError) {
-                if (axios.isAxiosError(retryError) && retryError.response?.status === 401) {
-                    clearAuthTokens();
+                // Call the token refresh endpoint to get a new access token
+                const refreshResponse = await axios.post<{ access: string; refresh?: string }>(
+                    `${API_BASE_URL}/api/token/refresh/`,
+                    { refresh: refreshToken },
+                    { headers: { "Content-Type": "application/json" } }
+                );
+
+                const newAccessToken = refreshResponse.data.access;
+                const newRefreshToken = refreshResponse.data.refresh;
+
+                persistTokens(newAccessToken, newRefreshToken);
+
+                // Update auth-token cookie with new access token
+                if (typeof document !== "undefined") {
+                    document.cookie = `auth-token=${newAccessToken}; path=/; max-age=604800; SameSite=Strict`;
                 }
-                return Promise.reject(retryError);
+
+                // Retry the original request with the new access token
+                originalConfig.headers = originalConfig.headers || {};
+                originalConfig.headers.Authorization = `Bearer ${newAccessToken}`;
+                return await apiClient.request(originalConfig);
+            } catch {
+                clearAuthTokens();
+                if (typeof document !== "undefined") {
+                    document.cookie = "auth-token=; path=/; max-age=0; SameSite=Strict";
+                }
+                return Promise.reject(error);
             }
         }
 

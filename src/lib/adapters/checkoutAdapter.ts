@@ -278,7 +278,8 @@ class HybridCheckoutAdapter implements CheckoutAdapter {
                 paymentId: firstString(data?.payment_id),
                 razorpayOrderId: firstString(data?.razorpay_order_id),
                 razorpayKeyId: firstString(data?.razorpay_key_id),
-                amount: Number(data?.amount || 0),
+                // Backend returns amount in rupees; Razorpay checkout expects paise
+                amount: Number(data?.amount || 0) * 100,
                 currency: firstString(data?.currency, "INR"),
                 passType,
             };

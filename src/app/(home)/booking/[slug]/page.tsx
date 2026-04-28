@@ -9,6 +9,7 @@ import { authAdapter, checkoutAdapter, propertyAdapter } from "@/lib/adapters";
 import { CheckoutState, PropertyDetail } from "@/lib/adapters/types";
 import { requireAuthThenContinue } from "@/lib/auth/requireAuthAction";
 import { RENTALS_MOCK_MODE } from "@/lib/rentals";
+import { rentalsService } from "@/lib/rentals/service";
 
 interface PageProps {
     params: Promise<{ slug: string }>;
@@ -25,34 +26,55 @@ export default function BookingDetailPage({ params }: PageProps) {
     const [checkoutState, setCheckoutState] = useState<CheckoutState | null>(null);
     const [showCheckoutModal, setShowCheckoutModal] = useState(false);
     const [isUnlocked, setIsUnlocked] = useState(false);
+    const [canRetryUnlock, setCanRetryUnlock] = useState(false);
     const [activeImageIndex, setActiveImageIndex] = useState(0);
     const [unlocking, setUnlocking] = useState(false);
+    const [activePassInfo, setActivePassInfo] = useState<{
+        type: "one_day" | "weekly";
+        expiresAt: string | null;
+    } | null>(null);
     const resumeHandledRef = useRef(false);
     const resumeAction = searchParams.get("resume");
     const resumePassType = searchParams.get("passType") === "one_day" ? "one_day" : "weekly";
+
+    const loadRazorpayScript = (): Promise<void> => {
+        return new Promise<void>((resolve, reject) => {
+            // Already loaded
+            if ((window as unknown as { Razorpay?: unknown }).Razorpay) {
+                resolve();
+                return;
+            }
+            const existing = document.querySelector<HTMLScriptElement>(
+                'script[src="https://checkout.razorpay.com/v1/checkout.js"]'
+            );
+            if (existing) {
+                // Script tag exists but may still be loading — wait for it
+                if ((window as unknown as { Razorpay?: unknown }).Razorpay) {
+                    resolve();
+                } else {
+                    existing.addEventListener("load", () => resolve());
+                    existing.addEventListener("error", () => reject(new Error("Unable to load Razorpay checkout script.")));
+                }
+                return;
+            }
+            const script = document.createElement("script");
+            script.src = "https://checkout.razorpay.com/v1/checkout.js";
+            script.async = true;
+            script.onload = () => resolve();
+            script.onerror = () => reject(new Error("Unable to load Razorpay checkout script."));
+            document.body.appendChild(script);
+        });
+    };
 
     const openRazorpayCheckout = async (state: CheckoutState) => {
         if (!state.payment) return;
         if (typeof window === "undefined") return;
 
-        if (!(window as unknown as { Razorpay?: unknown }).Razorpay) {
-            await new Promise<void>((resolve, reject) => {
-                const existing = document.querySelector<HTMLScriptElement>('script[src="https://checkout.razorpay.com/v1/checkout.js"]');
-                if (existing) {
-                    resolve();
-                    return;
-                }
-                const script = document.createElement("script");
-                script.src = "https://checkout.razorpay.com/v1/checkout.js";
-                script.async = true;
-                script.onload = () => resolve();
-                script.onerror = () => reject(new Error("Unable to load Razorpay checkout script."));
-                document.body.appendChild(script);
-            });
-        }
+        await loadRazorpayScript();
 
-        const RazorpayCtor = (window as unknown as { Razorpay?: new (options: Record<string, unknown>) => { open: () => void } })
-            .Razorpay;
+        const RazorpayCtor = (
+            window as unknown as { Razorpay?: new (options: Record<string, unknown>) => { open: () => void } }
+        ).Razorpay;
 
         if (!RazorpayCtor) {
             throw new Error("Razorpay checkout is unavailable.");
@@ -65,17 +87,71 @@ export default function BookingDetailPage({ params }: PageProps) {
             currency: state.payment.currency,
             name: "SPOTO",
             description: "Rental pass purchase",
-            handler: () => {
+            handler: async (_response: { razorpay_payment_id: string; razorpay_order_id: string; razorpay_signature: string }) => {
+                // Show processing state while backend webhook activates the pass
                 setCheckoutState((prev) =>
                     prev
                         ? {
                               ...prev,
                               status: "pending",
-                              message: "Payment received. Your pass will activate shortly.",
+                              message: "Payment received. Activating your pass...",
                               updatedAt: new Date().toISOString(),
                           }
                         : prev
                 );
+
+                // Retry confirmUnlock — backend webhook may take a moment to activate the pass
+                const MAX_ATTEMPTS = 5;
+                const RETRY_DELAY_MS = 2000;
+
+                for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+                    if (attempt > 0) {
+                        await new Promise((res) => setTimeout(res, RETRY_DELAY_MS));
+                    }
+                    try {
+                        const resolved = await checkoutAdapter.confirmUnlock(state.id);
+                        if (resolved.status === "success") {
+                            setCheckoutState(resolved);
+                            setIsUnlocked(true);
+                            return;
+                        }
+                        // Not paywall means some other state — stop retrying
+                        if (resolved.status !== "paywall") {
+                            setCheckoutState(resolved);
+                            return;
+                        }
+                    } catch {
+                        // continue to next attempt
+                    }
+                }
+
+                // Pass still not activated after all retries — show retry button
+                setCanRetryUnlock(true);
+                setCheckoutState((prev) =>
+                    prev
+                        ? {
+                              ...prev,
+                              status: "pending",
+                              message: "Payment received! Tap 'Retry Unlock' below to reveal owner contact.",
+                              updatedAt: new Date().toISOString(),
+                          }
+                        : prev
+                );
+            },
+            modal: {
+                ondismiss: () => {
+                    // User closed the Razorpay modal without completing payment
+                    setCheckoutState((prev) =>
+                        prev && prev.status === "pending"
+                            ? {
+                                  ...prev,
+                                  status: "paywall",
+                                  message: "Payment was cancelled. Choose a pass to unlock owner contact.",
+                                  updatedAt: new Date().toISOString(),
+                              }
+                            : prev
+                    );
+                },
             },
             theme: { color: "#A67AEB" },
         });
@@ -233,9 +309,49 @@ export default function BookingDetailPage({ params }: PageProps) {
                 passType,
             },
             onAuthenticated: async () => {
-                await runPassActivation(passType);
+                if (isUnlocked) return;
+
+                // Check if user already has an active pass
+                setUnlocking(true);
+                try {
+                    const res = await rentalsService.getMyPassStatus();
+                    const status = (res as any)?.data ?? (res as any);
+                    const hasOneDay = Boolean(status?.has_one_day_active);
+                    const hasWeekly = Boolean(status?.has_weekly_active);
+
+                    if (hasOneDay || hasWeekly) {
+                        // Pass is active — show info, don't open payment
+                        setActivePassInfo({
+                            type: hasWeekly ? "weekly" : "one_day",
+                            expiresAt: hasWeekly
+                                ? (status?.weekly_pass_expires_at ?? null)
+                                : (status?.one_day_pass_expires_at ?? null),
+                        });
+                        return;
+                    }
+                } catch {
+                    // If check fails, proceed to payment anyway
+                } finally {
+                    setUnlocking(false);
+                }
+
+                // No active pass — go straight to payment (skip free credit consumption)
+                let baseState = checkoutState;
+                if (!baseState || baseState.status === "success") {
+                    baseState = await checkoutAdapter.startUnlock({
+                        propertyId: property.id,
+                        amount: property.unlockOffer.weeklyPassPrice,
+                    });
+                    setCheckoutState(baseState);
+                }
+                await runPassActivation(passType, baseState);
             },
         });
+    };
+
+    const handleRetryUnlock = async () => {
+        setCanRetryUnlock(false);
+        await runUnlockFlow();
     };
 
     const completeCheckout = async (outcome: "success" | "failed") => {
@@ -286,23 +402,26 @@ export default function BookingDetailPage({ params }: PageProps) {
 
     return (
         <main className="min-h-screen bg-[#050507] pb-28 text-white md:pb-10">
-            <div className="relative h-[320px] w-full md:h-[420px]">
+            {/* Hero image */}
+            <div className="relative h-56 w-full sm:h-72 md:h-[400px]">
                 <img src={activeImage} alt={property.title} className="h-full w-full object-cover" />
                 <button
                     onClick={() => router.back()}
-                    className="absolute left-4 top-4 rounded-full bg-black/50 px-3 py-2 text-sm font-semibold"
+                    className="absolute left-3 top-3 rounded-full bg-black/60 px-3 py-1.5 text-sm font-semibold backdrop-blur-sm md:left-4 md:top-4"
                 >
                     ← Back
                 </button>
             </div>
-            {galleryImages.length > 1 ? (
-                <div className="mx-auto mt-3 flex max-w-[1180px] gap-2 overflow-x-auto px-4 md:px-6 lg:px-8">
+
+            {/* Thumbnail strip */}
+            {galleryImages.length > 1 && (
+                <div className="mx-auto mt-2 flex max-w-[1180px] gap-2 overflow-x-auto px-4 md:px-6 lg:px-8">
                     {galleryImages.map((image, index) => (
                         <button
                             key={`${image}-${index}`}
                             type="button"
                             onClick={() => setActiveImageIndex(index)}
-                            className={`h-16 w-24 shrink-0 overflow-hidden rounded-lg border ${
+                            className={`h-14 w-20 shrink-0 overflow-hidden rounded-lg border transition-colors md:h-16 md:w-24 ${
                                 activeImageIndex === index ? "border-[#B7F041]" : "border-white/20"
                             }`}
                         >
@@ -310,63 +429,129 @@ export default function BookingDetailPage({ params }: PageProps) {
                         </button>
                     ))}
                 </div>
-            ) : null}
+            )}
 
-            <div className="mx-auto grid max-w-[1180px] grid-cols-1 gap-6 px-4 py-6 md:grid-cols-[1.4fr_0.9fr] md:px-6 lg:px-8">
-                <section className="space-y-6">
+            {/* Main content grid */}
+            <div className="mx-auto grid max-w-[1180px] grid-cols-1 gap-4 px-4 py-5 md:grid-cols-[1fr_360px] md:gap-6 md:px-6 md:py-6 lg:grid-cols-[1fr_380px] lg:px-8">
+                {/* Left — property details */}
+                <section className="space-y-4 md:space-y-5">
+                    {/* Title & price */}
                     <div>
-                        <h1 className="text-3xl font-bold md:text-4xl">{property.title}</h1>
-                        <p className="mt-2 text-lg text-[#AFAFAF]">{property.locality}, {property.city}</p>
-                        <p className="mt-3 text-2xl font-bold text-[#B7F041]">₹{property.pricePerMonth.toLocaleString("en-IN")} / Month</p>
-                        <p className="text-base text-[#B3B3B3]">₹{property.deposit.toLocaleString("en-IN")} Deposit • {property.furnished ? "Furnished" : "Unfurnished"}</p>
+                        <h1 className="text-2xl font-bold leading-tight md:text-3xl">{property.title}</h1>
+                        <p className="mt-1.5 text-base text-[#AFAFAF]">{property.locality}, {property.city}</p>
+                        <p className="mt-2 text-2xl font-bold text-[#B7F041]">
+                            ₹{property.pricePerMonth.toLocaleString("en-IN")} <span className="text-sm font-medium text-[#B7F041]/80">/ Month</span>
+                        </p>
+                        <p className="text-sm text-[#B3B3B3]">
+                            ₹{property.deposit.toLocaleString("en-IN")} Deposit &nbsp;•&nbsp; {property.furnished ? "Furnished" : "Unfurnished"}
+                        </p>
                     </div>
 
+                    {/* Map preview */}
                     <div className="rounded-2xl border border-white/15 bg-[#111116] p-4">
-                        <h2 className="text-xl font-semibold">Map Preview</h2>
-                        <div className="relative mt-3 h-52 overflow-hidden rounded-xl border border-white/10 bg-[linear-gradient(120deg,#1d1d24,#101015)]">
+                        <h2 className="text-lg font-semibold">Map Preview</h2>
+                        <div className="relative mt-3 h-44 overflow-hidden rounded-xl border border-white/10 bg-[linear-gradient(120deg,#1d1d24,#101015)] md:h-52">
                             <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(175,122,235,0.25),transparent_45%)]" />
-                            <div className="absolute bottom-3 left-3 right-3 rounded-lg bg-black/70 px-4 py-3 text-center">
+                            <div className="absolute bottom-3 left-3 right-3 rounded-lg bg-black/70 px-3 py-2.5 text-center">
                                 <p className="text-sm font-bold text-white">{property.mapPreviewLabel}</p>
-                                <p className="mt-1 text-sm text-[#B7F041]">{property.mapPreviewSubLabel}</p>
+                                <p className="mt-0.5 text-xs text-[#B7F041] md:text-sm">{property.mapPreviewSubLabel}</p>
                             </div>
                         </div>
-                        <p className="mt-3 text-sm text-white/70">{property.description}</p>
+                        <p className="mt-3 text-base text-white/70 leading-relaxed">{property.description}</p>
                     </div>
 
-                    <div className="rounded-2xl border border-white/15 bg-[#111116] p-4">
-                        <h2 className="text-2xl font-semibold">What this place offers</h2>
-                        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                            {property.amenities.map((amenity) => (
-                                <p key={amenity} className="text-base text-white/85">• {amenity}</p>
-                            ))}
+                    {/* Amenities */}
+                    {property.amenities.length > 0 && (
+                        <div className="rounded-2xl border border-white/15 bg-[#111116] p-4">
+                            <h2 className="text-lg font-semibold">What this place offers</h2>
+                            <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2">
+                                {property.amenities.map((amenity) => (
+                                    <p key={amenity} className="text-base text-white/80">• {amenity}</p>
+                                ))}
+                            </div>
                         </div>
-                    </div>
+                    )}
 
-                    <div className="rounded-2xl border border-white/15 bg-[#111116] p-4">
-                        <h2 className="text-2xl font-semibold">Highlights</h2>
-                        <div className="mt-3 space-y-2">
-                            {property.highlights.map((highlight) => (
-                                <p key={highlight} className="text-base text-white/85">• {highlight}</p>
-                            ))}
+                    {/* Highlights */}
+                    {property.highlights.length > 0 && (
+                        <div className="rounded-2xl border border-white/15 bg-[#111116] p-4">
+                            <h2 className="text-lg font-semibold">Highlights</h2>
+                            <div className="mt-3 space-y-2">
+                                {property.highlights.map((highlight) => (
+                                    <p key={highlight} className="text-base text-white/80">• {highlight}</p>
+                                ))}
+                            </div>
                         </div>
-                    </div>
+                    )}
                 </section>
 
-                <aside className="space-y-4 md:sticky md:top-4 md:h-fit">
-                    <OwnerCard owner={effectiveOwner} isUnlocked={isUnlocked} />
+                {/* Right — owner & unlock */}
+                <aside className="space-y-3 md:sticky md:top-4 md:h-fit">
+                    <OwnerCard owner={effectiveOwner} isUnlocked={isUnlocked} onUnlock={isUnlocked ? undefined : handlePayNow} />
+
                     <UnlockCard
                         offer={property.unlockOffer}
                         checkoutState={checkoutState}
                         onPayNow={handlePayNow}
                         onActivatePass={handleActivatePass}
+                        activePassInfo={activePassInfo && !isUnlocked ? activePassInfo : null}
                     />
+                    {canRetryUnlock && (
+                        <button
+                            onClick={handleRetryUnlock}
+                            disabled={unlocking}
+                            className="w-full rounded-xl border border-[#B7F041]/50 bg-[#B7F041]/10 px-4 py-3 text-base font-semibold text-[#B7F041] hover:bg-[#B7F041]/20 transition-colors disabled:opacity-50"
+                        >
+                            {unlocking ? "Unlocking..." : "Retry Unlock"}
+                        </button>
+                    )}
                 </aside>
             </div>
 
             <div className="fixed bottom-0 left-0 right-0 border-t border-white/10 bg-[#0c0c12] p-4 md:hidden">
-                <PrimaryButton onClick={handlePayNow} className="w-full text-lg">
-                    {unlocking ? "Unlocking..." : isUnlocked ? "Owner Contacts Unlocked" : "Get 99 Unlimited Pass"}
-                </PrimaryButton>
+                {isUnlocked ? null : canRetryUnlock ? (
+                    <button
+                        onClick={handleRetryUnlock}
+                        disabled={unlocking}
+                        className="w-full rounded-xl border border-[#B7F041]/50 bg-[#B7F041]/10 px-4 py-3 text-base font-semibold text-[#B7F041] disabled:opacity-50"
+                    >
+                        {unlocking ? "Unlocking..." : "Retry Unlock"}
+                    </button>
+                ) : activePassInfo ? (
+                    <div className="flex items-center gap-3 rounded-xl border border-[#B7F041]/30 bg-[#111116] px-4 py-3">
+                        <span className="text-lg">{activePassInfo.type === "weekly" ? "⭐" : "✅"}</span>
+                        <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-[#B7F041] truncate">
+                                {activePassInfo.type === "weekly" ? "7-Day Pass" : "1-Day Pass"} Active
+                            </p>
+                            <p className="text-xs text-white/50">Tap "Unlock to Contact" to reveal</p>
+                        </div>
+                        <button
+                            onClick={handlePayNow}
+                            disabled={unlocking}
+                            className="rounded-xl bg-[#A67AEB] px-3 py-2 text-sm font-semibold text-white disabled:opacity-50 shrink-0"
+                        >
+                            Unlock
+                        </button>
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-2 gap-2">
+                        <button
+                            onClick={() => handleActivatePass("one_day")}
+                            disabled={unlocking}
+                            className="rounded-xl border border-[#B7F041]/40 bg-[#0d0d14] px-3 py-3 text-sm font-semibold text-[#DFF8A2] disabled:opacity-50"
+                        >
+                            {unlocking ? "..." : "Get ₹99 Pass"}
+                        </button>
+                        <button
+                            onClick={() => handleActivatePass("weekly")}
+                            disabled={unlocking}
+                            className="rounded-xl border border-[#A67AEB]/40 bg-[#0d0d14] px-3 py-3 text-sm font-semibold text-[#E9DCFF] disabled:opacity-50"
+                        >
+                            {unlocking ? "..." : "Get ₹249 Pass"}
+                        </button>
+                    </div>
+                )}
             </div>
 
             {RENTALS_MOCK_MODE && showCheckoutModal ? (

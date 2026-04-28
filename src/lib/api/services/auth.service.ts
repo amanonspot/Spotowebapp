@@ -66,6 +66,8 @@ export const verifyOTP = async (otp: string, phone?: string): Promise<VerifyOTPR
       localStorage.removeItem('user_id');
     }
     localStorage.setItem('isAuthenticated', 'true');
+    // Set auth-token cookie so middleware can verify authentication server-side
+    document.cookie = `auth-token=${normalized.access}; path=/; max-age=604800; SameSite=Strict`;
   }
 
   return normalized;
@@ -97,6 +99,8 @@ export const googleSignIn = async (googleAccessToken: string): Promise<VerifyOTP
       localStorage.removeItem('user_id');
     }
     localStorage.setItem('isAuthenticated', 'true');
+    // Set auth-token cookie so middleware can verify authentication server-side
+    document.cookie = `auth-token=${normalized.access}; path=/; max-age=604800; SameSite=Strict`;
   }
   
   return normalized;
@@ -111,6 +115,8 @@ export const logout = (): void => {
     localStorage.removeItem('refresh_token');
     localStorage.removeItem('user_id');
     localStorage.removeItem('isAuthenticated');
+    // Clear auth-token cookie to align with middleware
+    document.cookie = 'auth-token=; path=/; max-age=0; SameSite=Strict';
   }
 };
 

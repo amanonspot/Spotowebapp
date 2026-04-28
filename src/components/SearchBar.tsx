@@ -20,7 +20,7 @@ export default function SearchBar({
         <div className="w-full px-4 z-20 relative">
             {/* Mobile Search Bar */}
             <div className="md:hidden">
-                <div className="mobile-search-bar rounded-2xl p-4 flex items-center gap-3 cursor-pointer hover:bg-white/20 transition-all duration-200 border border-white/10 shadow-lg shadow-black/20 backdrop-blur-md">
+                <div className="mobile-search-bar rounded-2xl p-4 flex items-center gap-3 cursor-pointer hover:bg-white/20 transition-all duration-200 border border-white/10 shadow-lg shadow-black/20 backdrop-blur-md" onClick={onSearch}>
                     {/* Search icon with glow effect */}
                     <div className="relative">
                         <svg

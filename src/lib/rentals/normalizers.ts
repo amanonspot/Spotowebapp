@@ -303,10 +303,16 @@ const normalizeKeywords = (wire: RentalPropertyDto): string[] => {
 
 const maskPhone = (phone: string) => {
     const digits = phone.replace(/\D/g, "");
-    if (digits.length < 6) return phone || "Contact locked";
-    const prefix = digits.slice(0, 2);
-    const suffix = digits.slice(-4);
-    return `+${prefix}-${"X".repeat(Math.max(0, digits.length - 6))}${suffix}`;
+    // Normalize to 10-digit Indian number (strip leading 91 if present)
+    const local = digits.length === 12 && digits.startsWith("91")
+        ? digits.slice(2)
+        : digits.length === 11 && digits.startsWith("0")
+        ? digits.slice(1)
+        : digits;
+    if (local.length < 6) return "+91 XXXXXXXXXX";
+    const visible = local.slice(-4);
+    const masked = "X".repeat(local.length - 4);
+    return `+91 ${masked.slice(0, 3)} ${masked.slice(3)}${visible}`;
 };
 
 const normalizeOwnerDocuments = (wire: RentalPropertyDto): OwnerDocument[] =>

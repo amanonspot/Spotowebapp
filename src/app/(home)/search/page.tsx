@@ -41,18 +41,23 @@ export default function SearchPage() {
     const [isAppending, setIsAppending] = useState(false);
     const loadMoreRef = useRef<HTMLDivElement | null>(null);
     const appendTimerRef = useRef<number | null>(null);
+    const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const latestFiltersRef = useRef<FilterState | null>(null);
 
     const runSearch = useCallback(async (nextFilters: FilterState) => {
         setLoading(true);
         setError(null);
         try {
             const data = await propertyAdapter.searchProperties(nextFilters);
+            // Discard stale results if a newer search has already been queued
+            if (latestFiltersRef.current !== nextFilters) return;
             setResults(data);
         } catch (searchError) {
+            if (latestFiltersRef.current !== nextFilters) return;
             setResults([]);
             setError(searchError instanceof Error ? searchError.message : "Unable to search properties");
         } finally {
-            setLoading(false);
+            if (latestFiltersRef.current === nextFilters) setLoading(false);
         }
     }, []);
 
@@ -123,7 +128,20 @@ export default function SearchPage() {
     }, []);
 
     useEffect(() => {
-        runSearch(filters);
+        if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+
+        latestFiltersRef.current = filters;
+
+        // Debounce only the text query — other filter changes run immediately
+        const delay = filters.query ? 400 : 0;
+
+        searchTimerRef.current = setTimeout(() => {
+            runSearch(filters);
+        }, delay);
+
+        return () => {
+            if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+        };
     }, [filters, runSearch]);
 
     useEffect(() => {
@@ -185,32 +203,32 @@ export default function SearchPage() {
     return (
         <main className="min-h-screen bg-[#050507] pb-24 text-white">
             <div className="mx-auto max-w-[1280px] px-4 pb-8 pt-4 sm:px-6 lg:px-8">
-                <div className="mb-5 flex items-center gap-3">
+                <div className="mb-4 flex items-center gap-3">
                     <button
                         onClick={() => router.push("/")}
-                        className="rounded-full border border-white/30 px-3 py-2 transition hover:border-[#A67AEB] active:scale-[0.98]"
+                        className="rounded-full border border-white/30 px-3 py-2 text-base transition hover:border-[#A67AEB] active:scale-[0.98]"
                     >
                         ←
                     </button>
                     <button
                         onClick={() => setShowPanel(true)}
-                        className="flex-1 rounded-full border border-white/25 bg-[#141417] px-5 py-4 text-left text-xl text-white/85 transition hover:border-[#A67AEB]/70 active:scale-[0.995]"
+                        className="flex-1 rounded-full border border-white/25 bg-[#141417] px-5 py-3 text-left text-base text-white/85 transition hover:border-[#A67AEB]/70 active:scale-[0.995]"
                     >
                         Edit House Preference
                     </button>
                 </div>
 
-                <div className="mb-5 rounded-2xl border border-white/10 bg-[#131318] px-4 py-3 transition focus-within:border-[#A67AEB]/80 hover:border-[#A67AEB]/30">
+                <div className="mb-4 rounded-2xl border border-white/10 bg-[#131318] px-4 py-3 transition focus-within:border-[#A67AEB]/80 hover:border-[#A67AEB]/30">
                     <input
                         value={filters.query}
                         onChange={(e) => setFilters((prev) => ({ ...prev, query: e.target.value }))}
-                        placeholder="Search locality"
-                        className="w-full bg-transparent text-lg outline-none"
+                        placeholder="Search locality, city or property..."
+                        className="w-full bg-transparent text-base outline-none"
                     />
                 </div>
 
-                <h2 className="mb-4 text-center text-5xl font-semibold">Sort by</h2>
-                <div className="mb-8 flex gap-3 overflow-x-auto pb-2">
+                <h2 className="mb-3 text-lg font-semibold text-white/80">Sort by</h2>
+                <div className="mb-5 flex gap-3 overflow-x-auto pb-2">
                     {sortOptions.map((option) => (
                         <Chip
                             key={option.value}
@@ -221,7 +239,7 @@ export default function SearchPage() {
                     ))}
                 </div>
 
-                <div className="mb-4 text-sm text-white/70">{loading ? "Searching..." : results.length + " results found"}</div>
+                <div className="mb-4 text-sm text-white/60">{loading ? "Searching..." : `${results.length} results found`}</div>
                 {error ? (
                     <div className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-100">
                         <p>{error}</p>
@@ -236,10 +254,10 @@ export default function SearchPage() {
                 ) : null}
 
                 {loading ? (
-                    <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 xl:grid-cols-3">
                         {Array.from({ length: 6 }).map((_, index) => (
                             <div key={`search-skeleton-${index}`} className="overflow-hidden rounded-2xl border border-white/10 bg-[#0E0E10]">
-                                <ShimmerBlock className="h-56 w-full" />
+                                <ShimmerBlock className="h-48 w-full sm:h-56" />
                                 <div className="space-y-2 p-4">
                                     <ShimmerBlock className="h-5 w-4/5 rounded-lg" />
                                     <ShimmerBlock className="h-4 w-1/3 rounded-lg" />
@@ -251,22 +269,22 @@ export default function SearchPage() {
                     </div>
                 ) : (
                     <div className="space-y-4">
-                        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
-                        {visibleResults.map((property) => (
-                            <RevampPropertyCard
-                                key={property.id}
-                                property={property}
-                                onClick={() => router.push("/booking/" + property.id)}
-                            />
-                        ))}
+                        <div className="grid grid-cols-1 items-stretch gap-4 sm:grid-cols-2 sm:gap-5 xl:grid-cols-3">
+                            {visibleResults.map((property) => (
+                                <RevampPropertyCard
+                                    key={property.id}
+                                    property={property}
+                                    onClick={() => router.push("/booking/" + property.id)}
+                                />
+                            ))}
                         </div>
                         {hasMoreVisible ? (
-                            <div ref={loadMoreRef} className="space-y-2 py-2">
-                                {isAppending ? (
-                                    <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+                            <div ref={loadMoreRef} className="py-2">
+                                {isAppending && (
+                                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 xl:grid-cols-3">
                                         {Array.from({ length: 3 }).map((_, index) => (
                                             <div key={`append-skeleton-${index}`} className="overflow-hidden rounded-2xl border border-white/10 bg-[#0E0E10]">
-                                                <ShimmerBlock className="h-56 w-full" />
+                                                <ShimmerBlock className="h-48 w-full sm:h-56" />
                                                 <div className="space-y-2 p-4">
                                                     <ShimmerBlock className="h-5 w-4/5 rounded-lg" />
                                                     <ShimmerBlock className="h-4 w-1/3 rounded-lg" />
@@ -274,12 +292,10 @@ export default function SearchPage() {
                                             </div>
                                         ))}
                                     </div>
-                                ) : (
-                                    <p className="text-center text-xs text-white/55">Scroll to load more results</p>
                                 )}
                             </div>
                         ) : results.length > 0 ? (
-                            <p className="text-center text-xs text-white/55">You have reached the end of results.</p>
+                            <p className="py-2 text-center text-xs text-white/55">You've seen all results.</p>
                         ) : (
                             <div className="rounded-2xl border border-white/10 bg-[#0f0f13] p-5 text-center text-sm text-white/65">
                                 No listings match these filters yet.

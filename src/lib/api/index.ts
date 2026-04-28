@@ -16,4 +16,5 @@ export * as eventService from './services/event.service';
 export * as bookingService from './services/booking.service';
 export * as paymentService from './services/payment.service';
 export * as insightsService from './services/insights.service';
+export * as wishlistService from './services/wishlist.service';
 

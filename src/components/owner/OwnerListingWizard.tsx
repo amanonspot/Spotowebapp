@@ -543,7 +543,7 @@ export default function OwnerListingWizard({ mode = "create", propertyId, initia
 
     const goBack = () => {
         if (step === 1) {
-            router.push("/owner/dashboard");
+            router.push("/");
             return;
         }
         setStep((prev) => Math.max(1, prev - 1));

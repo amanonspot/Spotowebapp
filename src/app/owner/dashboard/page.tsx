@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowUp, Bell, RotateCw, Search, UserCircle2, X } from "lucide-react";
+import { ArrowUp, RotateCw, Search, UserCircle2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import OwnerBottomNav from "@/components/owner/OwnerBottomNav";
 import BlurImage from "@/components/revamp/BlurImage";
@@ -40,22 +40,22 @@ const normalizeVerificationState = (listing: OwnerListingSummary): OwnerListingV
 const ListingStatusBadge = ({ state }: { state: OwnerListingVerificationState }) => {
     if (state === "live") {
         return (
-            <span className="absolute right-3 top-3 inline-flex items-center gap-3 rounded-2xl bg-[#7f7b77cc] px-4 py-2 text-xl font-semibold text-white">
-                LIVE <span className="h-4 w-4 rounded-full bg-[#b7f041]" />
+            <span className="absolute right-3 top-3 inline-flex items-center gap-2 rounded-xl bg-[#7f7b77cc] px-3 py-1.5 text-sm font-bold text-white">
+                LIVE <span className="h-3 w-3 rounded-full bg-[#b7f041]" />
             </span>
         );
     }
 
     if (state === "rejected") {
         return (
-            <span className="absolute right-3 top-3 inline-flex h-12 w-14 items-center justify-center rounded-2xl bg-[#7f7b77cc]">
-                <span className="h-4 w-4 rounded-full bg-[#ff3848]" />
+            <span className="absolute right-3 top-3 inline-flex items-center gap-2 rounded-xl bg-[#7f7b77cc] px-3 py-1.5 text-sm font-bold text-white">
+                Rejected <span className="h-3 w-3 rounded-full bg-[#ff3848]" />
             </span>
         );
     }
 
     return (
-        <span className="absolute right-3 top-3 inline-flex items-center gap-2 rounded-2xl bg-[#7f7b77cc] px-4 py-2 text-xl font-semibold text-white">
+        <span className="absolute right-3 top-3 inline-flex items-center gap-2 rounded-xl bg-[#7f7b77cc] px-3 py-1.5 text-sm font-bold text-white">
             In Review <span aria-hidden>⏳</span>
         </span>
     );
@@ -221,7 +221,7 @@ export default function OwnerDashboardPage() {
         if (state === "live") {
             return (
                 <div className="mt-4 flex items-center justify-between rounded-2xl border border-white/25 bg-[#0b0b10] px-4 py-3">
-                    <span className="text-[2rem] font-semibold leading-none">Approved</span>
+                    <span className="text-xl font-bold">Approved</span>
                     <span className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-[#b7f041] text-black">✓</span>
                 </div>
             );
@@ -230,7 +230,7 @@ export default function OwnerDashboardPage() {
         if (state === "rejected") {
             return (
                 <div className="mt-4 flex items-center justify-between rounded-2xl border border-white/25 bg-[#0b0b10] px-4 py-3">
-                    <span className="text-[2rem] font-semibold leading-none">Rejected</span>
+                    <span className="text-xl font-bold">Rejected</span>
                     <span className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-[#ff3848] text-black">
                         <X className="h-5 w-5" />
                     </span>
@@ -240,7 +240,7 @@ export default function OwnerDashboardPage() {
 
         return (
             <section className="mt-4">
-                <p className="mb-2 text-2xl font-semibold">SPOTO Employee Code - for Verification</p>
+                <p className="mb-2 text-lg font-semibold">SPOTO Employee Code — for Verification</p>
                 <div className="flex items-center rounded-2xl border border-white/30 bg-[#07070c] px-3 py-2">
                     <input
                         value={employeeCodeByListing[listing.id] || ""}
@@ -251,7 +251,7 @@ export default function OwnerDashboardPage() {
                             }))
                         }
                         placeholder={isVerifying ? "#verifying........" : "Enter Employee Code"}
-                        className="h-12 w-full bg-transparent text-[2rem] font-semibold leading-none text-white outline-none placeholder:text-white/65"
+                        className="h-12 w-full bg-transparent text-lg font-semibold text-white outline-none placeholder:text-white/65"
                         disabled={isVerifying}
                     />
                     <button
@@ -277,34 +277,25 @@ export default function OwnerDashboardPage() {
                     <div className="flex items-center justify-between">
                         <button
                             type="button"
-                            onClick={() => router.push("/owner/dashboard")}
+                            onClick={() => router.push("/")}
                             className="inline-flex h-12 w-12 items-center justify-center overflow-hidden rounded-full border border-white/20 bg-[#16161f] text-white/85 transition hover:border-[#A67AEB] hover:text-white active:scale-[0.98]"
-                            aria-label="Owner profile"
+                            aria-label="Back to home"
                         >
                             <UserCircle2 className="h-6 w-6" />
                         </button>
                         <button
                             type="button"
-                            onClick={() => router.push("/")}
-                            className="inline-flex h-12 w-12 items-center justify-center rounded-full border border-[#A67AEB]/70 bg-[#16161f] text-[#e8daff] transition hover:border-[#B991F4] hover:text-white active:scale-[0.98]"
-                            aria-label="Back to home"
+                            onClick={() => router.push("/owner/list-property")}
+                            className="rounded-full border border-[#A67AEB]/70 bg-[#A67AEB]/10 px-5 py-2 text-sm font-semibold text-[#e8daff] transition hover:border-[#B991F4] hover:bg-[#A67AEB]/20 active:scale-[0.98]"
                         >
-                            <Bell className="h-6 w-6" />
+                            + List Property
                         </button>
                     </div>
 
-                    <h1 className="mt-5 text-5xl font-semibold leading-tight">Welcome {dashboard.ownerName}</h1>
-                    <button
-                        type="button"
-                        onClick={() => router.push("/owner/list-property")}
-                        className="mt-5 rounded-full border border-white/30 bg-[#0b0b10] px-6 py-2 text-sm font-medium transition hover:border-[#A67AEB] active:scale-[0.98]"
-                    >
-                        List Your Property
-                    </button>
-
-                    <p className="mt-7 text-4xl font-semibold leading-none">{formatMonth()}</p>
-                    <span className="mt-4 inline-flex rounded-full border border-white/30 bg-[#0d0d14] px-5 py-2 text-2xl font-medium">
-                        Current Listing ({dashboard.listings.length})
+                    <h1 className="mt-5 text-3xl font-bold leading-tight">Welcome, {dashboard.ownerName}</h1>
+                    <p className="mt-1 text-base text-white/60">{formatMonth()}</p>
+                    <span className="mt-4 inline-flex rounded-full border border-white/30 bg-[#0d0d14] px-5 py-2 text-base font-medium">
+                        Current Listings ({dashboard.listings.length})
                     </span>
                 </header>
 
@@ -360,12 +351,12 @@ export default function OwnerDashboardPage() {
                                                 />
                                                 <ListingStatusBadge state={normalizeVerificationState(listing)} />
                                             </div>
-                                            <div className="p-3">
-                                                <h3 className="text-[1.9rem] font-semibold leading-tight">{listing.title}</h3>
-                                                <p className="text-sm text-white/70">
+                                            <div className="p-4">
+                                                <h3 className="text-xl font-bold leading-tight">{listing.title}</h3>
+                                                <p className="mt-1 text-sm text-white/70">
                                                     {listing.locality}, {listing.city}
                                                 </p>
-                                                <p className="mt-2 text-[1.75rem] font-semibold leading-none text-[#B7F041]">
+                                                <p className="mt-2 text-2xl font-bold leading-none text-[#B7F041]">
                                                     {formatCurrency(listing.rent)} / Month
                                                 </p>
                                                 <p className="mt-1 text-sm text-white/65">
@@ -399,12 +390,12 @@ export default function OwnerDashboardPage() {
 
                         <div className="my-7 h-px bg-white/12" />
 
-                        <span className="inline-flex rounded-full bg-[#A67AEB]/25 px-4 py-1 text-sm font-semibold text-[#d7c1ff]">
-                            Free Credit : {dashboard.creditsLeft} Left
+                        <span className="inline-flex rounded-full bg-[#A67AEB]/25 px-4 py-1.5 text-sm font-semibold text-[#d7c1ff]">
+                            Free Credits Left: {dashboard.creditsLeft}
                         </span>
 
                         <section className="mt-4">
-                            <h2 className="mb-4 text-[2rem] font-semibold leading-tight">{leadsHeading}</h2>
+                            <h2 className="mb-4 text-xl font-semibold leading-tight">{leadsHeading}</h2>
                             {visibleLeads.length === 0 ? (
                                 <div className="rounded-2xl border border-white/15 bg-[#101018] p-4 text-sm text-white/70">
                                     {dashboard.leads.length === 0 ? "No leads unlocked yet." : "No leads match your search."}
@@ -419,8 +410,8 @@ export default function OwnerDashboardPage() {
                                                 className="rounded-2xl border border-[#A67AEB]/60 bg-[#101019] p-4 shadow-[0_14px_30px_rgba(0,0,0,0.35)]"
                                             >
                                                 <p className="text-sm text-white/70">Tenant</p>
-                                                <h3 className="text-4xl font-semibold leading-none">{lead.tenantName}</h3>
-                                                <p className="mt-2 text-[1.6rem] font-semibold text-white/95">
+                                                <h3 className="text-xl font-bold leading-tight">{lead.tenantName}</h3>
+                                                <p className="mt-1 text-lg font-semibold text-white/95">
                                                     {locked ? lead.phoneMasked : lead.phone}
                                                 </p>
 
@@ -431,13 +422,13 @@ export default function OwnerDashboardPage() {
                                                                 href={`https://wa.me/${lead.phone.replace(/\D/g, "")}`}
                                                                 target="_blank"
                                                                 rel="noopener noreferrer"
-                                                                className="rounded-xl bg-[#A67AEB] px-3 py-2 text-center text-sm font-semibold text-white transition hover:brightness-105 active:scale-[0.99]"
+                                                                className="rounded-xl bg-[#A67AEB] px-3 py-2.5 text-center text-base font-semibold text-white transition hover:brightness-105 active:scale-[0.99]"
                                                             >
                                                                 WhatsApp
                                                             </a>
                                                             <a
                                                                 href={`tel:${lead.phone}`}
-                                                                className="rounded-xl border border-[#A67AEB] px-3 py-2 text-center text-sm font-semibold text-white transition hover:bg-[#A67AEB]/15 active:scale-[0.99]"
+                                                                className="rounded-xl border border-[#A67AEB] px-3 py-2.5 text-center text-base font-semibold text-white transition hover:bg-[#A67AEB]/15 active:scale-[0.99]"
                                                             >
                                                                 Call
                                                             </a>
@@ -447,7 +438,7 @@ export default function OwnerDashboardPage() {
                                                             type="button"
                                                             onClick={() => handleUnlock(lead.id)}
                                                             disabled={dashboard.creditsLeft <= 0 || syncing}
-                                                            className="relative h-12 w-full rounded-full bg-[#A67AEB] pl-14 pr-4 text-left text-xl font-semibold text-white transition hover:brightness-105 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
+                                                            className="relative h-12 w-full rounded-full bg-[#A67AEB] pl-14 pr-4 text-left text-base font-semibold text-white transition hover:brightness-105 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
                                                         >
                                                             <span className="absolute left-1 top-1/2 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-[#07070a]">
                                                                 ●

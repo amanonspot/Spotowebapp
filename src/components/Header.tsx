@@ -6,6 +6,22 @@ import { useAuth } from "@/lib/hooks/useAuth";
 import { userService } from "@/lib/api";
 import { useGooglePlaces } from "@/lib/hooks/useGooglePlaces";
 import toast from "react-hot-toast";
+import { rentalsService } from "@/lib/rentals/service";
+
+interface PassStatus {
+    free_contacts_used: number;
+    free_contacts_remaining: number;
+    has_one_day_active: boolean;
+    has_weekly_active: boolean;
+    one_day_pass_expires_at: string | null;
+    weekly_pass_expires_at: string | null;
+}
+
+function formatExpiry(iso: string | null): string {
+    if (!iso) return "";
+    const d = new Date(iso);
+    return d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+}
 
 interface HeaderProps {
     location?: string;
@@ -32,6 +48,8 @@ export default function Header({
     const [locationSearchQuery, setLocationSearchQuery] = useState("");
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+    const [passStatus, setPassStatus] = useState<PassStatus | null>(null);
+    const [passLoading, setPassLoading] = useState(false);
     const profileMenuRef = useRef<HTMLDivElement>(null);
     const locationMenuRef = useRef<HTMLDivElement>(null);
     
@@ -97,14 +115,27 @@ export default function Header({
         };
     }, [showProfileMenu, showLocationMenu]);
 
-    const handleProfileClick = (e: React.MouseEvent) => {
+    const handleProfileClick = async (e: React.MouseEvent) => {
         e.preventDefault();
         e.stopPropagation();
 
         if (!isAuthenticated) {
             router.push("/auth/login");
-        } else {
-            setShowProfileMenu(!showProfileMenu);
+            return;
+        }
+        const next = !showProfileMenu;
+        setShowProfileMenu(next);
+        if (next && !passStatus) {
+            setPassLoading(true);
+            try {
+                const res = await rentalsService.getMyPassStatus();
+                const data = (res as any)?.data ?? (res as any);
+                setPassStatus(data);
+            } catch {
+                // silently ignore
+            } finally {
+                setPassLoading(false);
+            }
         }
     };
 
@@ -428,6 +459,69 @@ export default function Header({
                                 </div>
                             </div>
 
+                            {/* Pass & Credits section */}
+                            <div className="mb-4">
+                                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+                                    My Credits &amp; Passes
+                                </h3>
+                                {passLoading ? (
+                                    <div className="flex justify-center py-3">
+                                        <div className="w-5 h-5 rounded-full border-2 border-[#AF7AEB] border-t-transparent animate-spin" />
+                                    </div>
+                                ) : passStatus ? (
+                                    <div className="space-y-2">
+                                        {/* Free Credits */}
+                                        <div className="flex items-center justify-between rounded-lg bg-gray-50 border border-gray-200 px-3 py-2">
+                                            <div className="flex items-center gap-2">
+                                                <span>🎁</span>
+                                                    <div>
+                                                            <p className="text-xs font-medium text-gray-800">Free Contacts</p>
+                                                        </div>
+                                            </div>
+                                            <span className="text-base font-bold text-[#AF7AEB]">{passStatus.free_contacts_remaining}<span className="text-xs text-gray-400 font-normal"> left</span></span>
+                                        </div>
+                                        {/* One Day Pass */}
+                                        {passStatus.has_one_day_active ? (
+                                            <div className="rounded-lg bg-purple-50 border border-[#AF7AEB]/40 px-3 py-2">
+                                                <div className="flex items-center gap-2">
+                                                    <span>✅</span>
+                                                    <p className="text-xs font-semibold text-[#7c3aed]">1-Day Unlimited Pass</p>
+                                                    <span className="ml-auto text-[10px] bg-purple-100 text-purple-700 rounded-full px-2 py-0.5 font-semibold">Active</span>
+                                                </div>
+                                                {passStatus.one_day_pass_expires_at && (
+                                                    <p className="text-[10px] text-gray-400 mt-1 pl-6">Expires: {formatExpiry(passStatus.one_day_pass_expires_at)}</p>
+                                                )}
+                                            </div>
+                                        ) : (
+                                            <div className="rounded-lg bg-gray-50 border border-gray-200 px-3 py-2 flex items-center gap-2">
+                                                <span className="text-gray-300">⭕</span>
+                                                <p className="text-xs text-gray-400">1-Day Pass — Inactive</p>
+                                            </div>
+                                        )}
+                                        {/* Weekly Pass */}
+                                        {passStatus.has_weekly_active ? (
+                                            <div className="rounded-lg bg-green-50 border border-green-300/60 px-3 py-2">
+                                                <div className="flex items-center gap-2">
+                                                    <span>⭐</span>
+                                                    <p className="text-xs font-semibold text-green-700">7-Day Unlimited Pass</p>
+                                                    <span className="ml-auto text-[10px] bg-green-100 text-green-700 rounded-full px-2 py-0.5 font-semibold">Active</span>
+                                                </div>
+                                                {passStatus.weekly_pass_expires_at && (
+                                                    <p className="text-[10px] text-gray-400 mt-1 pl-6">Expires: {formatExpiry(passStatus.weekly_pass_expires_at)}</p>
+                                                )}
+                                            </div>
+                                        ) : (
+                                            <div className="rounded-lg bg-gray-50 border border-gray-200 px-3 py-2 flex items-center gap-2">
+                                                <span className="text-gray-300">⭕</span>
+                                                <p className="text-xs text-gray-400">7-Day Pass — Inactive</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                ) : (
+                                    <p className="text-xs text-gray-400 text-center py-1">Could not load pass info</p>
+                                )}
+                            </div>
+
                             {/* Email update section */}
                             <div className="mb-4">
                                 <h3 className="text-sm font-semibold text-gray-900 mb-2">
@@ -488,28 +582,17 @@ export default function Header({
                                 )}
                             </div>
 
-                            {/* My Bookings option */}
-                            <div className="mb-4">
-                                <Link
-                                    href="/my-bookings"
-                                    onClick={() => setShowProfileMenu(false)}
-                                    className="flex items-center gap-3 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
+                            {/* Owner Dashboard */}
+                            <div className="mb-3">
+                                <button
+                                    onClick={() => { setShowProfileMenu(false); router.push("/owner/dashboard"); }}
+                                    className="w-full flex items-center gap-3 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
                                 >
-                                    <svg
-                                        className="w-4 h-4 text-gray-500"
-                                        fill="none"
-                                        stroke="currentColor"
-                                        viewBox="0 0 24 24"
-                                    >
-                                        <path
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                            strokeWidth={2}
-                                            d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
-                                        />
+                                    <svg className="w-4 h-4 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
                                     </svg>
-                                    <span>My Bookings</span>
-                                </Link>
+                                    <span>Owner Dashboard</span>
+                                </button>
                             </div>
 
                             {/* Delete Account button */}
@@ -526,7 +609,7 @@ export default function Header({
                             {/* Logout button */}
                             <button
                                 onClick={handleLogout}
-                                className="w-full px-3 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                                className="w-full mt-3 px-3 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
                             >
                                 Logout
                             </button>
