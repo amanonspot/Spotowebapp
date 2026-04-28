@@ -26,6 +26,9 @@ export default function SwipeUnlock({
     const [trackWidth, setTrackWidth] = useState(0);
     const [offset, setOffset] = useState(0);
     const [startX, setStartX] = useState(0);
+    const [startOffset, setStartOffset] = useState(0);
+    const [completing, setCompleting] = useState(false);
+    const activePointerId = useRef<number | null>(null);
 
     const thumbSize = 40;
     const maxOffset = Math.max(0, trackWidth - thumbSize - 6);
@@ -43,46 +46,92 @@ export default function SwipeUnlock({
     }, []);
 
     useEffect(() => {
-        if (disabled || loading) {
+        if (disabled || loading || completing) {
             setOffset(0);
         }
-    }, [disabled, loading]);
+    }, [disabled, loading, completing]);
 
     const reset = () => {
         setDragging(false);
         setOffset(0);
+        setStartOffset(0);
+        setStartX(0);
+        activePointerId.current = null;
     };
 
-    const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
-        if (disabled || loading) return;
-        const target = event.currentTarget;
-        target.setPointerCapture(event.pointerId);
+    const getEventClientX = (
+        event: React.PointerEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement> | React.MouseEvent<HTMLDivElement>
+    ): number => {
+        if ("touches" in event) {
+            const touch = event.touches[0] || event.changedTouches[0];
+            return touch ? touch.clientX : 0;
+        }
+        return event.clientX;
+    };
+
+    const beginDrag = (clientX: number) => {
+        if (disabled || loading || completing) return;
         setDragging(true);
-        setStartX(event.clientX - offset);
+        setStartX(clientX);
+        setStartOffset(offset);
     };
 
-    const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
-        if (!dragging || disabled || loading) return;
-        const nextOffset = clamp(event.clientX - startX, 0, maxOffset);
+    const continueDrag = (clientX: number) => {
+        if (!dragging || disabled || loading || completing) return;
+        const delta = clientX - startX;
+        const nextOffset = clamp(startOffset + delta, 0, maxOffset);
         setOffset(nextOffset);
     };
 
     const complete = async () => {
+        if (completing) return;
+        setCompleting(true);
         try {
             await onComplete();
         } finally {
+            setCompleting(false);
             reset();
         }
     };
 
-    const handlePointerUp = async () => {
-        if (!dragging || disabled || loading) return;
+    const finishDrag = async () => {
+        if (!dragging || disabled || loading || completing) return;
         setDragging(false);
         if (progress >= threshold) {
             await complete();
             return;
         }
         setOffset(0);
+    };
+
+    const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+        if (disabled || loading || completing) return;
+        activePointerId.current = event.pointerId;
+        event.currentTarget.setPointerCapture(event.pointerId);
+        beginDrag(getEventClientX(event));
+    };
+
+    const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+        if (activePointerId.current !== event.pointerId) return;
+        continueDrag(getEventClientX(event));
+    };
+
+    const handlePointerUp = async (event: React.PointerEvent<HTMLDivElement>) => {
+        if (activePointerId.current !== event.pointerId) return;
+        await finishDrag();
+    };
+
+    const handleTouchStart = (event: React.TouchEvent<HTMLDivElement>) => {
+        beginDrag(getEventClientX(event));
+    };
+
+    const handleTouchMove = (event: React.TouchEvent<HTMLDivElement>) => {
+        event.preventDefault();
+        continueDrag(getEventClientX(event));
+    };
+
+    const handleTouchEnd = async () => {
+        await finishDrag();
     };
 
     const fillWidth = useMemo(() => {
@@ -96,16 +145,23 @@ export default function SwipeUnlock({
     return (
         <div
             ref={trackRef}
-            className={`relative h-12 w-full overflow-hidden rounded-full bg-[#A67AEB] text-xl font-semibold text-white ${
+            className={`relative h-12 w-full touch-pan-x select-none overflow-hidden rounded-full bg-[#A67AEB] text-base font-semibold text-white sm:text-lg ${
                 disabled ? "opacity-60" : ""
             } ${className || ""}`}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={reset}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
         >
             <div
                 className="absolute inset-y-0 left-0 rounded-full bg-[#7b4fd0] transition-[width] duration-150"
                 style={{ width: fillWidth }}
             />
             <span className="pointer-events-none absolute inset-0 flex items-center justify-center px-12 text-center leading-none text-white/95">
-                {loading ? "Unlocking..." : label}
+                {loading || completing ? "Unlocking..." : label}
             </span>
 
             <div
@@ -116,15 +172,6 @@ export default function SwipeUnlock({
                     dragging ? "scale-105" : ""
                 } ${isInteractive ? "cursor-grab active:cursor-grabbing" : "cursor-not-allowed"}`}
                 style={{ transform: `translateX(${offset}px)`, transitionDuration: dragging ? "0ms" : "180ms" }}
-                onPointerDown={handlePointerDown}
-                onPointerMove={handlePointerMove}
-                onPointerUp={handlePointerUp}
-                onPointerCancel={reset}
-                onPointerLeave={() => {
-                    if (!dragging) return;
-                    setDragging(false);
-                    setOffset(0);
-                }}
                 onKeyDown={(event) => {
                     if (!isInteractive) return;
                     if (event.key !== "Enter" && event.key !== " ") return;

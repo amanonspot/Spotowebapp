@@ -2,7 +2,7 @@
 
 import React from "react";
 import { OwnerContact } from "@/lib/adapters/types";
-import PrimaryButton from "@/components/revamp/PrimaryButton";
+import SwipeUnlock from "@/components/revamp/SwipeUnlock";
 
 interface OwnerCardProps {
     owner: OwnerContact;
@@ -53,9 +53,13 @@ export default function OwnerCard({ owner, isUnlocked, onUnlock }: OwnerCardProp
                         </a>
                     </>
                 ) : (
-                    <PrimaryButton variant="ghost" className="w-full" onClick={onUnlock}>
-                        Unlock to Contact
-                    </PrimaryButton>
+                    <SwipeUnlock
+                        label="Swipe To Unlock"
+                        onComplete={async () => {
+                            if (!onUnlock) return;
+                            await onUnlock();
+                        }}
+                    />
                 )}
             </div>
         </section>
