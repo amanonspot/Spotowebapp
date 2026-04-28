@@ -129,6 +129,13 @@ export const getUserTickets = async (userId: string): Promise<any[]> => {
 };
 
 /**
+ * Backward-compatible alias used by my-bookings page
+ */
+export const getUserBookings = async (userId: string): Promise<any[]> => {
+  return getUserTickets(userId);
+};
+
+/**
  * Initiate payment session (Step 3)
  */
 export const initiatePaymentSession = async (
@@ -145,4 +152,3 @@ export const getBookingDetails = async (bookingId: string): Promise<any> => {
   const response = await api.get<any>(`/api/booking-details/${bookingId}/`);
   return response;
 };
-

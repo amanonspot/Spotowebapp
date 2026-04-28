@@ -7,6 +7,7 @@ import OwnerBottomNav from "@/components/owner/OwnerBottomNav";
 import BlurImage from "@/components/revamp/BlurImage";
 import PrimaryButton from "@/components/revamp/PrimaryButton";
 import ShimmerBlock from "@/components/revamp/ShimmerBlock";
+import SwipeUnlock from "@/components/revamp/SwipeUnlock";
 import { OwnerDashboardData, OwnerListingSummary, OwnerListingVerificationState } from "@/lib/adapters/types";
 import { ownerAdapter } from "@/lib/adapters";
 
@@ -434,17 +435,12 @@ export default function OwnerDashboardPage() {
                                                             </a>
                                                         </div>
                                                     ) : (
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => handleUnlock(lead.id)}
+                                                        <SwipeUnlock
+                                                            label={leadActionLabel(true)}
                                                             disabled={dashboard.creditsLeft <= 0 || syncing}
-                                                            className="relative h-12 w-full rounded-full bg-[#A67AEB] pl-14 pr-4 text-left text-base font-semibold text-white transition hover:brightness-105 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
-                                                        >
-                                                            <span className="absolute left-1 top-1/2 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-[#07070a]">
-                                                                ●
-                                                            </span>
-                                                            {leadActionLabel(true)}
-                                                        </button>
+                                                            loading={syncing}
+                                                            onComplete={() => handleUnlock(lead.id)}
+                                                        />
                                                     )}
                                                 </div>
                                             </article>

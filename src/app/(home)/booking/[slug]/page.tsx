@@ -4,12 +4,12 @@ import React, { use, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import OwnerCard from "@/components/revamp/OwnerCard";
 import UnlockCard from "@/components/revamp/UnlockCard";
-import PrimaryButton from "@/components/revamp/PrimaryButton";
-import { authAdapter, checkoutAdapter, propertyAdapter } from "@/lib/adapters";
-import { CheckoutState, PropertyDetail } from "@/lib/adapters/types";
+import { authAdapter, propertyAdapter } from "@/lib/adapters";
+import { CheckoutState, PropertyDetail, UnlockPaymentContext, UnlockPaymentFlowState } from "@/lib/adapters/types";
 import { requireAuthThenContinue } from "@/lib/auth/requireAuthAction";
-import { RENTALS_MOCK_MODE } from "@/lib/rentals";
 import { rentalsService } from "@/lib/rentals/service";
+import UnlockPaymentFlowOverlay from "@/app/(home)/booking/[slug]/_components/UnlockPaymentFlowOverlay";
+import { fakePaymentAdapter } from "@/lib/payments/fakePaymentAdapter";
 
 interface PageProps {
     params: Promise<{ slug: string }>;
@@ -24,138 +24,32 @@ export default function BookingDetailPage({ params }: PageProps) {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [checkoutState, setCheckoutState] = useState<CheckoutState | null>(null);
-    const [showCheckoutModal, setShowCheckoutModal] = useState(false);
     const [isUnlocked, setIsUnlocked] = useState(false);
-    const [canRetryUnlock, setCanRetryUnlock] = useState(false);
     const [activeImageIndex, setActiveImageIndex] = useState(0);
-    const [unlocking, setUnlocking] = useState(false);
+    const [paymentFlowState, setPaymentFlowState] = useState<UnlockPaymentFlowState>("idle");
+    const [paymentContext, setPaymentContext] = useState<UnlockPaymentContext | null>(null);
+    const [paymentSessionId, setPaymentSessionId] = useState<string | null>(null);
+    const [paymentBusy, setPaymentBusy] = useState(false);
+    const [paymentError, setPaymentError] = useState<string | null>(null);
     const [activePassInfo, setActivePassInfo] = useState<{
         type: "one_day" | "weekly";
         expiresAt: string | null;
     } | null>(null);
     const resumeHandledRef = useRef(false);
     const resumeAction = searchParams.get("resume");
-    const resumePassType = searchParams.get("passType") === "one_day" ? "one_day" : "weekly";
+    const resumePassType: "one_day" | "weekly" = searchParams.get("passType") === "one_day" ? "one_day" : "weekly";
+    const paymentAmount = 99;
 
-    const loadRazorpayScript = (): Promise<void> => {
-        return new Promise<void>((resolve, reject) => {
-            // Already loaded
-            if ((window as unknown as { Razorpay?: unknown }).Razorpay) {
-                resolve();
-                return;
-            }
-            const existing = document.querySelector<HTMLScriptElement>(
-                'script[src="https://checkout.razorpay.com/v1/checkout.js"]'
-            );
-            if (existing) {
-                // Script tag exists but may still be loading — wait for it
-                if ((window as unknown as { Razorpay?: unknown }).Razorpay) {
-                    resolve();
-                } else {
-                    existing.addEventListener("load", () => resolve());
-                    existing.addEventListener("error", () => reject(new Error("Unable to load Razorpay checkout script.")));
-                }
-                return;
-            }
-            const script = document.createElement("script");
-            script.src = "https://checkout.razorpay.com/v1/checkout.js";
-            script.async = true;
-            script.onload = () => resolve();
-            script.onerror = () => reject(new Error("Unable to load Razorpay checkout script."));
-            document.body.appendChild(script);
-        });
-    };
-
-    const openRazorpayCheckout = async (state: CheckoutState) => {
-        if (!state.payment) return;
-        if (typeof window === "undefined") return;
-
-        await loadRazorpayScript();
-
-        const RazorpayCtor = (
-            window as unknown as { Razorpay?: new (options: Record<string, unknown>) => { open: () => void } }
-        ).Razorpay;
-
-        if (!RazorpayCtor) {
-            throw new Error("Razorpay checkout is unavailable.");
-        }
-
-        const razorpay = new RazorpayCtor({
-            key: state.payment.razorpayKeyId,
-            order_id: state.payment.razorpayOrderId,
-            amount: state.payment.amount,
-            currency: state.payment.currency,
-            name: "SPOTO",
-            description: "Rental pass purchase",
-            handler: async (_response: { razorpay_payment_id: string; razorpay_order_id: string; razorpay_signature: string }) => {
-                // Show processing state while backend webhook activates the pass
-                setCheckoutState((prev) =>
-                    prev
-                        ? {
-                              ...prev,
-                              status: "pending",
-                              message: "Payment received. Activating your pass...",
-                              updatedAt: new Date().toISOString(),
-                          }
-                        : prev
-                );
-
-                // Retry confirmUnlock — backend webhook may take a moment to activate the pass
-                const MAX_ATTEMPTS = 5;
-                const RETRY_DELAY_MS = 2000;
-
-                for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-                    if (attempt > 0) {
-                        await new Promise((res) => setTimeout(res, RETRY_DELAY_MS));
-                    }
-                    try {
-                        const resolved = await checkoutAdapter.confirmUnlock(state.id);
-                        if (resolved.status === "success") {
-                            setCheckoutState(resolved);
-                            setIsUnlocked(true);
-                            return;
-                        }
-                        // Not paywall means some other state — stop retrying
-                        if (resolved.status !== "paywall") {
-                            setCheckoutState(resolved);
-                            return;
-                        }
-                    } catch {
-                        // continue to next attempt
-                    }
-                }
-
-                // Pass still not activated after all retries — show retry button
-                setCanRetryUnlock(true);
-                setCheckoutState((prev) =>
-                    prev
-                        ? {
-                              ...prev,
-                              status: "pending",
-                              message: "Payment received! Tap 'Retry Unlock' below to reveal owner contact.",
-                              updatedAt: new Date().toISOString(),
-                          }
-                        : prev
-                );
-            },
-            modal: {
-                ondismiss: () => {
-                    // User closed the Razorpay modal without completing payment
-                    setCheckoutState((prev) =>
-                        prev && prev.status === "pending"
-                            ? {
-                                  ...prev,
-                                  status: "paywall",
-                                  message: "Payment was cancelled. Choose a pass to unlock owner contact.",
-                                  updatedAt: new Date().toISOString(),
-                              }
-                            : prev
-                    );
-                },
-            },
-            theme: { color: "#A67AEB" },
-        });
-        razorpay.open();
+    const openPaymentFlow = (passType: "one_day" | "weekly" = "one_day") => {
+        const context: UnlockPaymentContext = {
+            propertyId: slug,
+            returnPath: `/booking/${slug}`,
+            passType,
+            amount: paymentAmount,
+        };
+        setPaymentContext(context);
+        setPaymentError(null);
+        setPaymentFlowState("paywall");
     };
 
     useEffect(() => {
@@ -197,65 +91,13 @@ export default function BookingDetailPage({ params }: PageProps) {
 
         resumeHandledRef.current = true;
 
-        const runResumeAction = async () => {
-            try {
-                if (resumeAction === "unlock") {
-                    await runUnlockFlow();
-                    return;
-                }
-
-                let baseState = checkoutState;
-                if (!baseState || (baseState.status !== "paywall" && baseState.status !== "pending")) {
-                    baseState = await runUnlockFlow();
-                }
-                if (baseState) {
-                    await runPassActivation(resumePassType, baseState);
-                }
-            } finally {
-                router.replace(`/booking/${slug}`);
-            }
+        const runResumeAction = () => {
+            openPaymentFlow(resumeAction === "buy_pass" ? resumePassType : "one_day");
+            router.replace(`/booking/${slug}`);
         };
 
-        void runResumeAction();
-    }, [checkoutState, property, resumeAction, resumePassType, router, slug]);
-
-    const runUnlockFlow = async (): Promise<CheckoutState | null> => {
-        if (property === null) return null;
-        setUnlocking(true);
-        try {
-            const pending = await checkoutAdapter.startUnlock({
-                propertyId: property.id,
-                amount: property.unlockOffer.weeklyPassPrice,
-            });
-            setCheckoutState(pending);
-
-            if (RENTALS_MOCK_MODE) {
-                setShowCheckoutModal(true);
-                return pending;
-            }
-
-            const resolved = await checkoutAdapter.confirmUnlock(pending.id);
-            setCheckoutState(resolved);
-            if (resolved.status === "success") {
-                setIsUnlocked(true);
-            }
-            return resolved;
-        } catch (unlockError) {
-            setCheckoutState((prev) =>
-                prev
-                    ? {
-                          ...prev,
-                          status: "failed",
-                          message: unlockError instanceof Error ? unlockError.message : "Unable to unlock owner contact.",
-                          updatedAt: new Date().toISOString(),
-                      }
-                    : prev
-            );
-            return null;
-        } finally {
-            setUnlocking(false);
-        }
-    };
+        runResumeAction();
+    }, [property, resumeAction, resumePassType, router, slug]);
 
     const handlePayNow = async () => {
         if (property === null) return;
@@ -266,37 +108,9 @@ export default function BookingDetailPage({ params }: PageProps) {
                 propertyId: property.id,
             },
             onAuthenticated: async () => {
-                await runUnlockFlow();
+                openPaymentFlow("one_day");
             },
         });
-    };
-
-    const runPassActivation = async (
-        passType: "one_day" | "weekly",
-        baseState: CheckoutState | null = checkoutState
-    ): Promise<CheckoutState | null> => {
-        if (!baseState) return null;
-        setUnlocking(true);
-        try {
-            const initiated = await checkoutAdapter.activatePass(baseState.id, passType);
-            setCheckoutState(initiated);
-            await openRazorpayCheckout(initiated);
-            return initiated;
-        } catch (passError) {
-            setCheckoutState((prev) =>
-                prev
-                    ? {
-                          ...prev,
-                          status: "failed",
-                          message: passError instanceof Error ? passError.message : "Unable to initiate pass payment.",
-                          updatedAt: new Date().toISOString(),
-                      }
-                    : prev
-            );
-            return null;
-        } finally {
-            setUnlocking(false);
-        }
     };
 
     const handleActivatePass = async (passType: "one_day" | "weekly") => {
@@ -310,62 +124,136 @@ export default function BookingDetailPage({ params }: PageProps) {
             },
             onAuthenticated: async () => {
                 if (isUnlocked) return;
-
-                // Check if user already has an active pass
-                setUnlocking(true);
-                try {
-                    const res = await rentalsService.getMyPassStatus();
-                    const status = (res as any)?.data ?? (res as any);
-                    const hasOneDay = Boolean(status?.has_one_day_active);
-                    const hasWeekly = Boolean(status?.has_weekly_active);
-
-                    if (hasOneDay || hasWeekly) {
-                        // Pass is active — show info, don't open payment
-                        setActivePassInfo({
-                            type: hasWeekly ? "weekly" : "one_day",
-                            expiresAt: hasWeekly
-                                ? (status?.weekly_pass_expires_at ?? null)
-                                : (status?.one_day_pass_expires_at ?? null),
-                        });
-                        return;
-                    }
-                } catch {
-                    // If check fails, proceed to payment anyway
-                } finally {
-                    setUnlocking(false);
-                }
-
-                // No active pass — go straight to payment (skip free credit consumption)
-                let baseState = checkoutState;
-                if (!baseState || baseState.status === "success") {
-                    baseState = await checkoutAdapter.startUnlock({
-                        propertyId: property.id,
-                        amount: property.unlockOffer.weeklyPassPrice,
-                    });
-                    setCheckoutState(baseState);
-                }
-                await runPassActivation(passType, baseState);
+                setActivePassInfo({
+                    type: passType,
+                    expiresAt: null,
+                });
+                openPaymentFlow(passType);
             },
         });
     };
 
-    const handleRetryUnlock = async () => {
-        setCanRetryUnlock(false);
-        await runUnlockFlow();
+    const handleOverlayPayNow = async () => {
+        if (!paymentContext) return;
+        setPaymentBusy(true);
+        setPaymentError(null);
+        setPaymentFlowState("payment_initiated");
+        try {
+            const session = await fakePaymentAdapter.initiate(paymentContext);
+            setPaymentSessionId(session.sessionId);
+            const resolved = await fakePaymentAdapter.resolve(session.sessionId);
+            if (resolved.lastOutcome === "success") {
+                setPaymentFlowState("payment_success");
+                setCheckoutState({
+                    id: session.sessionId,
+                    propertyId: paymentContext.propertyId,
+                    amount: paymentContext.amount,
+                    status: "success",
+                    message: "Payment successful. Owner contact unlocked.",
+                    updatedAt: new Date().toISOString(),
+                    unlockedPhone: property?.owner.whatsappNumber,
+                    unlockedName: property?.owner.ownerName,
+                    unlockedDocuments: property?.owner.documents || [],
+                });
+                setIsUnlocked(true);
+                return;
+            }
+            setPaymentFlowState("payment_failed");
+        } catch (err) {
+            setPaymentFlowState("payment_failed");
+            setPaymentError(err instanceof Error ? err.message : "Unable to process payment.");
+        } finally {
+            setPaymentBusy(false);
+        }
     };
 
-    const completeCheckout = async (outcome: "success" | "failed") => {
-        if (checkoutState === null) return;
+    const handleOverlayRetry = async () => {
+        if (!paymentSessionId) {
+            await handleOverlayPayNow();
+            return;
+        }
+        setPaymentBusy(true);
+        setPaymentError(null);
+        setPaymentFlowState("payment_initiated");
+        try {
+            const resolved = await fakePaymentAdapter.retry(paymentSessionId);
+            if (resolved.lastOutcome === "success") {
+                setPaymentFlowState("payment_success");
+                setCheckoutState({
+                    id: resolved.sessionId,
+                    propertyId: resolved.context.propertyId,
+                    amount: resolved.context.amount,
+                    status: "success",
+                    message: "Payment successful. Owner contact unlocked.",
+                    updatedAt: new Date().toISOString(),
+                    unlockedPhone: property?.owner.whatsappNumber,
+                    unlockedName: property?.owner.ownerName,
+                    unlockedDocuments: property?.owner.documents || [],
+                });
+                setIsUnlocked(true);
+                return;
+            }
+            setPaymentFlowState("payment_failed");
+        } catch (err) {
+            setPaymentFlowState("payment_failed");
+            setPaymentError(err instanceof Error ? err.message : "Unable to retry payment.");
+        } finally {
+            setPaymentBusy(false);
+        }
+    };
 
-        const resolved = await checkoutAdapter.confirmUnlock(checkoutState.id, outcome);
-        setCheckoutState(resolved);
+    const handleFlowContinueFromSuccess = () => {
+        setPaymentFlowState("idle");
+        setPaymentContext(null);
+        setPaymentSessionId(null);
+        setPaymentError(null);
+        router.replace(`/booking/${slug}`);
+    };
 
-        if (resolved.status === "success") {
+    useEffect(() => {
+        if (!isUnlocked) return;
+        const syncUnlockState = async () => {
+            try {
+                const status = await rentalsService.getMyPassStatus();
+                const data = (status as { data?: unknown }).data as
+                    | { has_one_day_active?: boolean; has_weekly_active?: boolean; one_day_pass_expires_at?: string; weekly_pass_expires_at?: string }
+                    | undefined;
+                if (!data) return;
+                if (data.has_weekly_active || data.has_one_day_active) {
+                    setActivePassInfo({
+                        type: data.has_weekly_active ? "weekly" : "one_day",
+                        expiresAt: data.has_weekly_active ? data.weekly_pass_expires_at || null : data.one_day_pass_expires_at || null,
+                    });
+                }
+            } catch {
+                // keep UI optimistic for fake payment mode
+            }
+        };
+        void syncUnlockState();
+    }, [isUnlocked]);
+
+    useEffect(() => {
+        if (checkoutState?.status === "success") {
             setIsUnlocked(true);
         }
+    }, [checkoutState?.status]);
 
-        setShowCheckoutModal(false);
+    const closePaywallToDropoff = () => {
+        setPaymentFlowState("dropoff_prompt");
     };
+
+    const dismissDropoff = () => {
+        setPaymentFlowState("idle");
+        setPaymentContext(null);
+        setPaymentSessionId(null);
+        setPaymentError(null);
+    };
+
+    const reopenPaywall = () => {
+        setPaymentFlowState("paywall");
+    };
+
+    const showMobilePayButtons = !isUnlocked && paymentFlowState === "idle";
 
     if (loading) {
         return (
@@ -492,32 +380,15 @@ export default function BookingDetailPage({ params }: PageProps) {
                     <UnlockCard
                         offer={property.unlockOffer}
                         checkoutState={checkoutState}
-                        onPayNow={handlePayNow}
+                        onPayNow={() => openPaymentFlow("one_day")}
                         onActivatePass={handleActivatePass}
                         activePassInfo={activePassInfo && !isUnlocked ? activePassInfo : null}
                     />
-                    {canRetryUnlock && (
-                        <button
-                            onClick={handleRetryUnlock}
-                            disabled={unlocking}
-                            className="w-full rounded-xl border border-[#B7F041]/50 bg-[#B7F041]/10 px-4 py-3 text-base font-semibold text-[#B7F041] hover:bg-[#B7F041]/20 transition-colors disabled:opacity-50"
-                        >
-                            {unlocking ? "Unlocking..." : "Retry Unlock"}
-                        </button>
-                    )}
                 </aside>
             </div>
 
             <div className="fixed bottom-0 left-0 right-0 border-t border-white/10 bg-[#0c0c12] p-4 md:hidden">
-                {isUnlocked ? null : canRetryUnlock ? (
-                    <button
-                        onClick={handleRetryUnlock}
-                        disabled={unlocking}
-                        className="w-full rounded-xl border border-[#B7F041]/50 bg-[#B7F041]/10 px-4 py-3 text-base font-semibold text-[#B7F041] disabled:opacity-50"
-                    >
-                        {unlocking ? "Unlocking..." : "Retry Unlock"}
-                    </button>
-                ) : activePassInfo ? (
+                {isUnlocked ? null : activePassInfo ? (
                     <div className="flex items-center gap-3 rounded-xl border border-[#B7F041]/30 bg-[#111116] px-4 py-3">
                         <span className="text-lg">{activePassInfo.type === "weekly" ? "⭐" : "✅"}</span>
                         <div className="flex-1 min-w-0">
@@ -528,55 +399,44 @@ export default function BookingDetailPage({ params }: PageProps) {
                         </div>
                         <button
                             onClick={handlePayNow}
-                            disabled={unlocking}
+                            disabled={paymentBusy}
                             className="rounded-xl bg-[#A67AEB] px-3 py-2 text-sm font-semibold text-white disabled:opacity-50 shrink-0"
                         >
                             Unlock
                         </button>
                     </div>
-                ) : (
+                ) : showMobilePayButtons ? (
                     <div className="grid grid-cols-2 gap-2">
                         <button
                             onClick={() => handleActivatePass("one_day")}
-                            disabled={unlocking}
+                            disabled={paymentBusy}
                             className="rounded-xl border border-[#B7F041]/40 bg-[#0d0d14] px-3 py-3 text-sm font-semibold text-[#DFF8A2] disabled:opacity-50"
                         >
-                            {unlocking ? "..." : "Get ₹99 Pass"}
+                            {paymentBusy ? "..." : "Get ₹99 Pass"}
                         </button>
                         <button
                             onClick={() => handleActivatePass("weekly")}
-                            disabled={unlocking}
+                            disabled={paymentBusy}
                             className="rounded-xl border border-[#A67AEB]/40 bg-[#0d0d14] px-3 py-3 text-sm font-semibold text-[#E9DCFF] disabled:opacity-50"
                         >
-                            {unlocking ? "..." : "Get ₹249 Pass"}
+                            {paymentBusy ? "..." : "Get ₹249 Pass"}
                         </button>
                     </div>
-                )}
+                ) : null}
             </div>
 
-            {RENTALS_MOCK_MODE && showCheckoutModal ? (
-                <div className="fixed inset-0 z-[120] bg-black/80 backdrop-blur-sm">
-                    <div className="mx-auto mt-24 w-[92%] max-w-md rounded-2xl border border-white/20 bg-[#121218] p-5 text-white">
-                        <h3 className="text-xl font-semibold">Prototype Checkout</h3>
-                        <p className="mt-2 text-sm text-white/70">Select a simulated outcome for this payment attempt.</p>
-
-                        <div className="mt-5 grid grid-cols-1 gap-3">
-                            <PrimaryButton onClick={() => completeCheckout("success")} variant="green">
-                                Simulate Success
-                            </PrimaryButton>
-                            <PrimaryButton onClick={() => completeCheckout("failed")} variant="ghost">
-                                Simulate Failure
-                            </PrimaryButton>
-                            <button
-                                onClick={() => setShowCheckoutModal(false)}
-                                className="rounded-xl border border-white/20 px-4 py-2 text-sm text-white/80"
-                            >
-                                Cancel
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            ) : null}
+            <UnlockPaymentFlowOverlay
+                state={paymentFlowState}
+                context={paymentContext}
+                busy={paymentBusy}
+                errorMessage={paymentError}
+                onClosePaywall={closePaywallToDropoff}
+                onReopenPaywall={reopenPaywall}
+                onDismissDropoff={dismissDropoff}
+                onPayNow={handleOverlayPayNow}
+                onRetryPayment={handleOverlayRetry}
+                onContinueFromSuccess={handleFlowContinueFromSuccess}
+            />
         </main>
     );
 }

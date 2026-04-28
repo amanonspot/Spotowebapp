@@ -70,6 +70,33 @@ const parseStringArray = (value: unknown): string[] => {
     return [];
 };
 
+const parseLooseUrlList = (value: unknown): string[] => {
+    if (Array.isArray(value)) {
+        return value
+            .map((item) => stringOrFallback(item))
+            .filter(Boolean);
+    }
+    if (typeof value !== "string") return [];
+
+    const trimmed = value.trim();
+    if (!trimmed) return [];
+    try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) {
+            return parsed
+                .map((item) => stringOrFallback(item))
+                .filter(Boolean);
+        }
+    } catch {
+        // fall through to delimiter parsing
+    }
+
+    return trimmed
+        .split(/[,\n]+/)
+        .map((part) => part.trim())
+        .filter(Boolean);
+};
+
 const unwrapData = (value: unknown): unknown => {
     const record = asRecord(value);
     if (!record) return value;
@@ -225,27 +252,56 @@ const toImageCandidates = (wire: RentalPropertyDto): Array<{ url: string; isPrim
     const mediaCandidates = [
         ...asArray<UnknownRecord>(wire.images),
         ...asArray<UnknownRecord>(wireRecord.image_files),
+        ...asArray<UnknownRecord>(wireRecord.property_images),
+        ...asArray<UnknownRecord>(wireRecord.photos),
         ...asArray<UnknownRecord>(wireRecord.media),
     ];
 
     const objectCandidates = mediaCandidates
         .map((candidate, index) => ({
-            url: firstString(candidate.image_url, candidate.url, candidate.image, candidate.file, candidate.media_file, candidate.src),
+            url: firstString(
+                candidate.image_url,
+                candidate.url,
+                candidate.image,
+                candidate.file,
+                candidate.media_file,
+                candidate.media_url,
+                candidate.src,
+                candidate.document_file_url,
+                candidate.file_url
+            ),
             isPrimary: Boolean(candidate.is_primary || candidate.is_cover || candidate.is_display || candidate.display_image),
             sortOrder: numberOrFallback(candidate.sort_order, index),
         }));
 
     const stringCandidates = [
-        ...asArray<string>(wireRecord.gallery_images),
-        ...asArray<string>(wireRecord.galleryImages),
-        ...asArray<string>(wireRecord.image_urls),
+        ...parseLooseUrlList(wireRecord.gallery_images),
+        ...parseLooseUrlList(wireRecord.galleryImages),
+        ...parseLooseUrlList(wireRecord.image_urls),
+        ...parseLooseUrlList(wireRecord.images_urls),
+        ...parseLooseUrlList(wireRecord.photo_urls),
+        ...parseLooseUrlList(wireRecord.photos_urls),
     ].map((url, index) => ({
         url: stringOrFallback(url),
         isPrimary: false,
         sortOrder: mediaCandidates.length + index,
     }));
 
-    const topLevelCandidates = [wireRecord.image_url, wireRecord.image, wireRecord.thumbnail, wireRecord.cover_image]
+    const topLevelImageObject = asRecord(wireRecord.image);
+    const topLevelCandidates = [
+        wireRecord.image_url,
+        wireRecord.image,
+        wireRecord.thumbnail,
+        wireRecord.cover_image,
+        wireRecord.cover_image_url,
+        wireRecord.display_image,
+        wireRecord.display_image_url,
+        wireRecord.primary_image,
+        wireRecord.primary_image_url,
+        wireRecord.file_url,
+        topLevelImageObject?.image_url,
+        topLevelImageObject?.url,
+    ]
         .map((url, index) => ({
             url: stringOrFallback(url),
             isPrimary: index === 0,

@@ -132,6 +132,21 @@ export interface AuthAdapter {
 
 export type CheckoutStatus = "idle" | "pending" | "paywall" | "success" | "failed";
 
+export type UnlockPaymentFlowState =
+    | "idle"
+    | "paywall"
+    | "payment_initiated"
+    | "dropoff_prompt"
+    | "payment_success"
+    | "payment_failed";
+
+export interface UnlockPaymentContext {
+    propertyId: string;
+    returnPath: string;
+    passType: "one_day" | "weekly";
+    amount: number;
+}
+
 export interface StartUnlockPayload {
     propertyId: string;
     amount: number;
