@@ -58,18 +58,18 @@ export default function HomePromoBannerRotator({ onBannerClick }: HomePromoBanne
                             <div className="arrow-motion pointer-events-none absolute right-4 top-4 z-10 text-2xl text-white/85 motion-safe:animate-[spotoArrowDrift_1800ms_ease-in-out_infinite]">
                                 ↗
                             </div>
-                            <div className="relative aspect-[1380/372] w-full">
-                            <Image
-                                src={failedIndices.includes(idx) ? BANNER_SOURCES[safeIndex].src : banner.src}
-                                alt={banner.alt}
-                                fill
-                                sizes="(max-width: 640px) 100vw, (max-width: 1024px) 90vw, 860px"
-                                className="object-cover transition-transform duration-500 group-active:scale-[0.995]"
-                                priority={idx === 0}
-                                onError={() =>
-                                    setFailedIndices((prev) => (prev.includes(idx) ? prev : [...prev, idx]))
-                                }
-                            />
+                            <div className="relative h-[clamp(110px,24vw,156px)] w-full sm:h-[clamp(126px,20vw,172px)] lg:h-[clamp(138px,16vw,186px)]">
+                                <Image
+                                    src={failedIndices.includes(idx) ? BANNER_SOURCES[safeIndex].src : banner.src}
+                                    alt={banner.alt}
+                                    fill
+                                    sizes="(max-width: 640px) 100vw, (max-width: 1024px) 90vw, 860px"
+                                    className="object-contain object-center transition-transform duration-500 group-active:scale-[0.995]"
+                                    priority={idx === 0}
+                                    onError={() =>
+                                        setFailedIndices((prev) => (prev.includes(idx) ? prev : [...prev, idx]))
+                                    }
+                                />
                             </div>
                         </button>
                     </div>
