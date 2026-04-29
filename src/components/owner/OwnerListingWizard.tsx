@@ -26,6 +26,7 @@ const EDIT_STEP_TITLES = [
 
 const sanitizeNumericInput = (value: string) => value.replace(/[^\d]/g, "");
 const sanitizeTextInput = (value: string) => value.replace(/\u0000/g, "");
+const PROPERTY_TITLE_MAX_LENGTH = 50;
 
 const emptyForm: OwnerListingFormInput = {
     propertyTitle: "",
@@ -526,7 +527,13 @@ export default function OwnerListingWizard({ mode = "create", propertyId, initia
     const stepValid = useMemo(() => {
         const availabilityValid = form.availabilityMode === "date" ? Boolean(form.availableFromDate) : Boolean(form.availabilityId);
         if (step === 1) return Boolean(form.propertyTypeId);
-        if (step === 2) return Boolean(form.propertyTitle.trim() && form.bhkId && form.furnishingId);
+        if (step === 2)
+            return Boolean(
+                form.propertyTitle.trim() &&
+                    form.propertyTitle.trim().length <= PROPERTY_TITLE_MAX_LENGTH &&
+                    form.bhkId &&
+                    form.furnishingId
+            );
         if (step === 3) return form.imageFiles.length > 0;
         if (step === 4) return Boolean(form.rent && form.deposit && form.builtUpAreaSqft && availabilityValid);
         if (step === 5)
@@ -720,9 +727,23 @@ export default function OwnerListingWizard({ mode = "create", propertyId, initia
                                     const nextTitle = sanitizeTextInput(event.target.value);
                                     updateField("propertyTitle", nextTitle);
                                 }}
+                                maxLength={PROPERTY_TITLE_MAX_LENGTH}
                                 placeholder="Property Title"
                                 className="h-12 w-full rounded-xl border border-white/20 bg-[#0d0d14] px-3 text-sm text-white/90 outline-none placeholder:text-white/35 focus:border-[#A67AEB]"
                             />
+                            <div className="mt-1 flex items-center justify-between text-xs">
+                                <span className={form.propertyTitle.trim().length > PROPERTY_TITLE_MAX_LENGTH ? "text-red-300" : "text-white/60"}>
+                                    Max {PROPERTY_TITLE_MAX_LENGTH} characters
+                                </span>
+                                <span className={form.propertyTitle.trim().length > PROPERTY_TITLE_MAX_LENGTH ? "text-red-300" : "text-white/60"}>
+                                    {form.propertyTitle.trim().length}/{PROPERTY_TITLE_MAX_LENGTH}
+                                </span>
+                            </div>
+                            {form.propertyTitle.trim().length > PROPERTY_TITLE_MAX_LENGTH ? (
+                                <p className="mt-2 rounded-lg border border-red-500/35 bg-red-500/10 px-2 py-1 text-xs text-red-200">
+                                    Property title cannot exceed {PROPERTY_TITLE_MAX_LENGTH} characters.
+                                </p>
+                            ) : null}
                             {renderFieldError("propertyTitle")}
 
                             <section className={sectionCardClass}>

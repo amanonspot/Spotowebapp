@@ -13,7 +13,7 @@ interface RevampPropertyCardProps {
 export default function RevampPropertyCard({ property, onClick, compact = false }: RevampPropertyCardProps) {
     return (
         <article
-            className={`group card-hover flex flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0E0E10] ${
+            className={`group card-hover flex h-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0E0E10] ${
                 compact ? "min-w-[240px] sm:min-w-[280px]" : "w-full"
             }`}
         >
@@ -47,23 +47,25 @@ export default function RevampPropertyCard({ property, onClick, compact = false 
                 </div>
 
                 {/* Content */}
-                <div className="flex flex-1 flex-col justify-between space-y-1.5 p-4">
-                    <h3 className="line-clamp-2 text-lg font-bold text-white transition-colors group-hover:text-[#E9DCFF]">
+                <div className="flex flex-1 flex-col p-4">
+                    <h3 className="line-clamp-2 min-h-[3.5rem] text-lg font-bold leading-7 text-white transition-colors group-hover:text-[#E9DCFF]">
                         {property.title}
                     </h3>
-                    <p className="flex items-center gap-1 text-sm text-[#AAAAAA]">
+                    <p className="mt-1 flex min-h-[1.25rem] items-center gap-1 text-sm text-[#AAAAAA]">
                         <span className="text-[10px]">📍</span>
                         {property.locality}
                     </p>
-                    <p className="text-lg font-bold text-[#B7F041]">
-                        ₹{property.pricePerMonth.toLocaleString("en-IN")}
-                        <span className="text-sm font-medium text-[#B7F041]/70"> / Month</span>
-                    </p>
-                    <p className="text-sm text-[#9A9A9A]">
-                        ₹{property.deposit.toLocaleString("en-IN")} Deposit
-                        <span className="mx-1.5 text-white/20">•</span>
-                        {property.furnished ? "Furnished" : "Unfurnished"}
-                    </p>
+                    <div className="mt-auto space-y-1">
+                        <p className="text-lg font-bold text-[#B7F041]">
+                            ₹{property.pricePerMonth.toLocaleString("en-IN")}
+                            <span className="text-sm font-medium text-[#B7F041]/70"> / Month</span>
+                        </p>
+                        <p className="line-clamp-1 min-h-[1.25rem] text-sm text-[#9A9A9A]">
+                            ₹{property.deposit.toLocaleString("en-IN")} Deposit
+                            <span className="mx-1.5 text-white/20">•</span>
+                            {property.furnished ? "Furnished" : "Unfurnished"}
+                        </p>
+                    </div>
                 </div>
             </button>
         </article>

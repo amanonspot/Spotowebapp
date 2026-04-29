@@ -73,21 +73,25 @@ export default function UnlockCard({ offer, checkoutState, onActivatePass, activ
                 </div>
             )}
 
-            {/* Buttons */}
+            {/* Buttons / Active state */}
             <div className="grid gap-2.5 px-4 pb-4 pt-3">
-
-                {/* Active pass badge */}
-                {activePassInfo && (
-                    <div className="animate-fade-up flex items-start gap-3 rounded-xl border border-[#B7F041]/25 bg-[#B7F041]/5 px-3 py-3 ring-1 ring-[#B7F041]/10">
-                        <span className="mt-0.5 text-lg">
-                            {activePassInfo.type === "weekly" ? "⭐" : "✅"}
-                        </span>
-                        <div>
-                            <p className="text-sm font-bold text-[#B7F041]">
-                                {activePassInfo.type === "weekly" ? "7-Day Unlimited Pass" : "1-Day Unlimited Pass"} — Active
+                {activePassInfo ? (
+                    <div className="animate-fade-up overflow-hidden rounded-xl border border-white/15 bg-[#0d0d14] ring-1 ring-white/10">
+                        <div className="bg-white/15 px-4 py-2.5 text-center text-base font-semibold text-[#B7F041]">
+                            {activePassInfo.type === "weekly" ? "WEEKLY Pass is Activated" : "DAY Pass is Activated"}
+                        </div>
+                        <div className="relative px-4 py-4">
+                            <span className="absolute right-4 top-3 text-xl" aria-hidden="true">
+                                📍
+                            </span>
+                            <p className="text-sm text-white/70">
+                                Your {activePassInfo.type === "weekly" ? "7-day" : "24-hour"} pass is active.
+                            </p>
+                            <p className="mt-1 text-sm font-semibold text-white/90">
+                                Direct owner contact + exact map location unlocked
                             </p>
                             {activePassInfo.expiresAt ? (
-                                <p className="mt-0.5 text-xs text-white/45">
+                                <p className="mt-2 text-xs text-white/45">
                                     Expires:{" "}
                                     {new Date(activePassInfo.expiresAt).toLocaleDateString("en-IN", {
                                         day: "numeric",
@@ -98,37 +102,41 @@ export default function UnlockCard({ offer, checkoutState, onActivatePass, activ
                                     })}
                                 </p>
                             ) : (
-                                <p className="mt-0.5 text-xs text-white/45">Unlimited contacts while active</p>
+                                <p className="mt-2 text-xs text-white/45">
+                                    Unlimited contacts while pass is active
+                                </p>
                             )}
                         </div>
                     </div>
+                ) : (
+                    <>
+                        {/* 99 Pass button */}
+                        <button
+                            type="button"
+                            onClick={() => onActivatePass?.("one_day")}
+                            className="btn-shimmer group relative rounded-xl border border-[#B7F041]/35 bg-[#0d0d14] px-4 py-3 text-center text-base font-semibold text-[#DFF8A2] hover:border-[#B7F041]/60 hover:bg-[#B7F041]/8 active:scale-[0.97]"
+                        >
+                            <span className="flex items-center justify-center gap-2">
+                                <span className="text-base">⚡</span>
+                                Get ₹99 Day Pass
+                                <span className="ml-auto rounded-full bg-[#B7F041]/15 px-2 py-0.5 text-xs text-[#B7F041]">24hrs</span>
+                            </span>
+                        </button>
+
+                        {/* 249 Pass button */}
+                        <button
+                            type="button"
+                            onClick={() => onActivatePass?.("weekly")}
+                            className="btn-shimmer group relative rounded-xl border border-[#A67AEB]/35 bg-[#0d0d14] px-4 py-3 text-center text-base font-semibold text-[#E9DCFF] hover:border-[#A67AEB]/60 hover:bg-[#A67AEB]/8 active:scale-[0.97]"
+                        >
+                            <span className="flex items-center justify-center gap-2">
+                                <span className="text-base">🌟</span>
+                                Get ₹249 Weekly Pass
+                                <span className="ml-auto rounded-full bg-[#A67AEB]/15 px-2 py-0.5 text-xs text-[#A67AEB]">7 days</span>
+                            </span>
+                        </button>
+                    </>
                 )}
-
-                {/* 99 Pass button */}
-                <button
-                    type="button"
-                    onClick={() => onActivatePass?.("one_day")}
-                    className="btn-shimmer group relative rounded-xl border border-[#B7F041]/35 bg-[#0d0d14] px-4 py-3 text-center text-base font-semibold text-[#DFF8A2] hover:border-[#B7F041]/60 hover:bg-[#B7F041]/8 active:scale-[0.97]"
-                >
-                    <span className="flex items-center justify-center gap-2">
-                        <span className="text-base">⚡</span>
-                        Get ₹99 Day Pass
-                        <span className="ml-auto rounded-full bg-[#B7F041]/15 px-2 py-0.5 text-xs text-[#B7F041]">24hrs</span>
-                    </span>
-                </button>
-
-                {/* 249 Pass button */}
-                <button
-                    type="button"
-                    onClick={() => onActivatePass?.("weekly")}
-                    className="btn-shimmer group relative rounded-xl border border-[#A67AEB]/35 bg-[#0d0d14] px-4 py-3 text-center text-base font-semibold text-[#E9DCFF] hover:border-[#A67AEB]/60 hover:bg-[#A67AEB]/8 active:scale-[0.97]"
-                >
-                    <span className="flex items-center justify-center gap-2">
-                        <span className="text-base">🌟</span>
-                        Get ₹249 Weekly Pass
-                        <span className="ml-auto rounded-full bg-[#A67AEB]/15 px-2 py-0.5 text-xs text-[#A67AEB]">7 days</span>
-                    </span>
-                </button>
             </div>
         </section>
     );

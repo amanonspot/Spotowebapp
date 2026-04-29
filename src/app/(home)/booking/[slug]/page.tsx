@@ -308,26 +308,38 @@ export default function BookingDetailPage({ params }: PageProps) {
     };
 
     useEffect(() => {
-        if (!isUnlocked) return;
+        const session = authAdapter.getSession();
+        if (!session.isAuthenticated) {
+            setActivePassInfo(null);
+            return;
+        }
+
         const syncUnlockState = async () => {
             try {
                 const status = await rentalsService.getMyPassStatus();
                 const data = (status as { data?: unknown }).data as
                     | { has_one_day_active?: boolean; has_weekly_active?: boolean; one_day_pass_expires_at?: string; weekly_pass_expires_at?: string }
                     | undefined;
-                if (!data) return;
+
+                if (!data) {
+                    setActivePassInfo(null);
+                    return;
+                }
+
                 if (data.has_weekly_active || data.has_one_day_active) {
                     setActivePassInfo({
                         type: data.has_weekly_active ? "weekly" : "one_day",
                         expiresAt: data.has_weekly_active ? data.weekly_pass_expires_at || null : data.one_day_pass_expires_at || null,
                     });
+                } else {
+                    setActivePassInfo(null);
                 }
             } catch {
                 // keep UI optimistic for fake payment mode
             }
         };
         void syncUnlockState();
-    }, [isUnlocked]);
+    }, [property?.id, isUnlocked]);
 
     useEffect(() => {
         if (checkoutState?.status === "success") {
@@ -517,7 +529,7 @@ export default function BookingDetailPage({ params }: PageProps) {
                         checkoutState={checkoutState}
                         onPayNow={() => openPaymentFlow("one_day")}
                         onActivatePass={handleActivatePass}
-                        activePassInfo={activePassInfo && !isUnlocked ? activePassInfo : null}
+                        activePassInfo={activePassInfo}
                     />
                 </aside>
             </div>
