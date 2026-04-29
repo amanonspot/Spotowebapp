@@ -39,7 +39,7 @@ export default function HomePromoBannerRotator({ onBannerClick }: HomePromoBanne
     }, [activeIndex, failedIndices]);
 
     return (
-        <div className="relative w-full overflow-hidden rounded-2xl border border-white/10 bg-[#A67AEB]/15">
+        <div className="relative w-full overflow-hidden rounded-2xl border border-white/10">
             <div
                 className="flex transition-transform duration-700 ease-in-out"
                 style={{ transform: `translateX(-${activeIndex * 100}%)` }}
@@ -52,19 +52,20 @@ export default function HomePromoBannerRotator({ onBannerClick }: HomePromoBanne
                             className="group relative block w-full overflow-hidden rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B7F041]/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#050507]"
                             aria-label="Open SPOTO day pass paywall"
                         >
-                            <div className="star-motion pointer-events-none absolute left-4 top-4 z-10 text-2xl motion-safe:animate-[spotoStarFloat_2200ms_ease-in-out_infinite]">
+                            <div className="star-motion pointer-events-none absolute left-2 top-2 z-10 text-lg motion-safe:animate-[spotoStarFloat_2200ms_ease-in-out_infinite] sm:left-4 sm:top-4 sm:text-2xl">
                                 ✨
                             </div>
-                            <div className="arrow-motion pointer-events-none absolute right-4 top-4 z-10 text-2xl text-white/85 motion-safe:animate-[spotoArrowDrift_1800ms_ease-in-out_infinite]">
+                            <div className="arrow-motion pointer-events-none absolute right-2 top-2 z-10 text-lg text-white/85 motion-safe:animate-[spotoArrowDrift_1800ms_ease-in-out_infinite] sm:right-4 sm:top-4 sm:text-2xl">
                                 ↗
                             </div>
-                            <div className="relative h-[clamp(110px,24vw,156px)] w-full sm:h-[clamp(126px,20vw,172px)] lg:h-[clamp(138px,16vw,186px)]">
+                            <div className="relative w-full">
                                 <Image
                                     src={failedIndices.includes(idx) ? BANNER_SOURCES[safeIndex].src : banner.src}
                                     alt={banner.alt}
-                                    fill
+                                    width={1380}
+                                    height={372}
                                     sizes="(max-width: 640px) 100vw, (max-width: 1024px) 90vw, 860px"
-                                    className="object-contain object-center transition-transform duration-500 group-active:scale-[0.995]"
+                                    className="h-auto w-full object-contain transition-transform duration-500 group-active:scale-[0.995]"
                                     priority={idx === 0}
                                     onError={() =>
                                         setFailedIndices((prev) => (prev.includes(idx) ? prev : [...prev, idx]))
