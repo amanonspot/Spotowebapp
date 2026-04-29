@@ -273,43 +273,50 @@ export default function OwnerDashboardPage() {
 
     return (
         <main className="min-h-screen bg-[#050507] pb-28 text-white">
-            <div className="mx-auto w-full max-w-[420px] px-4 py-4">
-                <header>
-                    <div className="flex items-center justify-between">
+            <div className="mx-auto w-full max-w-[520px] px-4 py-4 sm:max-w-2xl lg:max-w-5xl lg:px-8">
+
+                {/* Header */}
+                <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex items-center gap-3">
                         <button
                             type="button"
                             onClick={() => router.push("/")}
-                            className="inline-flex h-12 w-12 items-center justify-center overflow-hidden rounded-full border border-white/20 bg-[#16161f] text-white/85 transition hover:border-[#A67AEB] hover:text-white active:scale-[0.98]"
+                            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-white/20 bg-[#16161f] text-white/85 transition hover:border-[#A67AEB] hover:text-white active:scale-[0.98]"
                             aria-label="Back to home"
                         >
-                            <UserCircle2 className="h-6 w-6" />
+                            <UserCircle2 className="h-5 w-5" />
                         </button>
+                        <div>
+                            <h1 className="text-2xl font-bold leading-tight sm:text-3xl">Welcome, {dashboard.ownerName}</h1>
+                            <p className="text-sm text-white/50">{formatMonth()}</p>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <span className="rounded-full border border-white/20 bg-[#0d0d14] px-4 py-1.5 text-sm font-medium">
+                            {dashboard.listings.length} Listing{dashboard.listings.length !== 1 ? "s" : ""}
+                        </span>
                         <button
                             type="button"
                             onClick={() => router.push("/owner/list-property")}
-                            className="rounded-full border border-[#A67AEB]/70 bg-[#A67AEB]/10 px-5 py-2 text-sm font-semibold text-[#e8daff] transition hover:border-[#B991F4] hover:bg-[#A67AEB]/20 active:scale-[0.98]"
+                            className="btn-shimmer rounded-full border border-[#A67AEB]/70 bg-[#A67AEB]/10 px-5 py-2 text-sm font-semibold text-[#e8daff] transition hover:border-[#B991F4] hover:bg-[#A67AEB]/20 active:scale-[0.98]"
                         >
                             + List Property
                         </button>
                     </div>
-
-                    <h1 className="mt-5 text-3xl font-bold leading-tight">Welcome, {dashboard.ownerName}</h1>
-                    <p className="mt-1 text-base text-white/60">{formatMonth()}</p>
-                    <span className="mt-4 inline-flex rounded-full border border-white/30 bg-[#0d0d14] px-5 py-2 text-base font-medium">
-                        Current Listings ({dashboard.listings.length})
-                    </span>
                 </header>
 
-                <div className="mt-5 flex items-center gap-2 rounded-xl border border-white/15 bg-[#0d0d14] px-3 py-2">
-                    <Search className="h-4 w-4 text-white/45" />
+                {/* Search */}
+                <div className="input-glow mt-5 flex items-center gap-2 rounded-xl border border-white/12 bg-[#0d0d14] px-4 py-2.5">
+                    <Search className="h-4 w-4 shrink-0 text-white/40" />
                     <input
                         value={searchQuery}
                         onChange={(event) => setSearchQuery(event.target.value)}
-                        placeholder="Search listings or leads"
-                        className="w-full bg-transparent text-sm text-white/90 outline-none placeholder:text-white/40"
+                        placeholder="Search listings or leads..."
+                        className="w-full bg-transparent text-sm text-white/90 outline-none placeholder:text-white/35"
                     />
                 </div>
 
+                {/* Error */}
                 {error ? (
                     <div className="mt-4 rounded-xl border border-red-500/35 bg-red-500/10 px-3 py-3 text-sm text-red-100">
                         <p>{error}</p>
@@ -328,45 +335,49 @@ export default function OwnerDashboardPage() {
                         <DashboardSkeleton />
                     </div>
                 ) : (
-                    <>
-                        <section className="mt-4">
+                    /* 2-column layout on lg screens */
+                    <div className="mt-5 lg:grid lg:grid-cols-[1fr_380px] lg:gap-8 xl:grid-cols-[1fr_420px]">
+
+                        {/* LEFT — Listings */}
+                        <section>
+                            <h2 className="mb-4 text-lg font-semibold text-white/70">Your Listings</h2>
                             {visibleListings.length === 0 ? (
-                                <div className="rounded-2xl border border-white/15 bg-[#101018] p-4 text-sm text-white/70">
+                                <div className="rounded-2xl border border-white/15 bg-[#101018] p-5 text-sm text-white/70">
                                     {dashboard.listings.length === 0
                                         ? "You have no listings yet. Start by publishing one property."
                                         : "No listings match your search."}
                                 </div>
                             ) : (
-                                <div className="space-y-6">
+                                <div className="space-y-5 sm:grid sm:grid-cols-2 sm:gap-5 sm:space-y-0 lg:grid-cols-1 lg:space-y-5">
                                     {visibleListings.map((listing) => (
                                         <article
                                             key={listing.id}
-                                            className="overflow-hidden rounded-2xl border border-white/15 bg-[#101018] shadow-[0_16px_40px_rgba(0,0,0,0.35)]"
+                                            className="card-hover overflow-hidden rounded-2xl border border-white/12 bg-[#101018] shadow-[0_8px_32px_rgba(0,0,0,0.35)]"
                                         >
-                                            <div className="relative h-[290px]">
+                                            <div className="relative h-52 sm:h-56">
                                                 <BlurImage
                                                     src={listing.image}
                                                     alt={listing.title}
                                                     wrapperClassName="h-full w-full"
-                                                    className="h-full w-full"
+                                                    className="img-zoom h-full w-full"
                                                 />
                                                 <ListingStatusBadge state={normalizeVerificationState(listing)} />
                                             </div>
                                             <div className="p-4">
-                                                <h3 className="text-xl font-bold leading-tight">{listing.title}</h3>
-                                                <p className="mt-1 text-sm text-white/70">
+                                                <h3 className="text-lg font-bold leading-tight">{listing.title}</h3>
+                                                <p className="mt-0.5 text-sm text-white/60">
                                                     {listing.locality}, {listing.city}
                                                 </p>
-                                                <p className="mt-2 text-2xl font-bold leading-none text-[#B7F041]">
-                                                    {formatCurrency(listing.rent)} / Month
+                                                <p className="mt-2 text-xl font-bold text-[#B7F041]">
+                                                    {formatCurrency(listing.rent)}<span className="text-sm font-medium text-[#B7F041]/70"> / Month</span>
                                                 </p>
-                                                <p className="mt-1 text-sm text-white/65">
+                                                <p className="text-sm text-white/55">
                                                     {formatCurrency(listing.deposit)} Deposit
                                                 </p>
 
                                                 <div className="mt-4 flex items-center gap-2">
                                                     <PrimaryButton
-                                                        className="h-11 min-w-[122px] px-6 py-0 text-base"
+                                                        className="h-10 min-w-[100px] px-5 py-0 text-sm"
                                                         onClick={() => router.push(`/owner/property/${listing.id}/edit`)}
                                                     >
                                                         Edit
@@ -375,7 +386,7 @@ export default function OwnerDashboardPage() {
                                                         type="button"
                                                         onClick={() => handleDeleteListing(listing.id)}
                                                         disabled={deletingListingId === listing.id}
-                                                        className="h-11 rounded-xl border border-red-400/45 px-4 text-sm font-semibold text-red-200 transition hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-60"
+                                                        className="h-10 rounded-xl border border-red-400/40 px-4 text-sm font-semibold text-red-300 transition hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-60"
                                                     >
                                                         {deletingListingId === listing.id ? "Deleting..." : "Delete"}
                                                     </button>
@@ -389,47 +400,58 @@ export default function OwnerDashboardPage() {
                             )}
                         </section>
 
-                        <div className="my-7 h-px bg-white/12" />
-
-                        <span className="inline-flex rounded-full bg-[#A67AEB]/25 px-4 py-1.5 text-sm font-semibold text-[#d7c1ff]">
-                            Free Credits Left: {dashboard.creditsLeft}
-                        </span>
-
-                        <section className="mt-4">
-                            <h2 className="mb-4 text-xl font-semibold leading-tight">{leadsHeading}</h2>
+                        {/* RIGHT — Leads */}
+                        <section className="mt-8 lg:mt-0">
+                            <div className="flex items-center justify-between mb-4">
+                                <h2 className="text-lg font-semibold text-white/70">Tenant Leads</h2>
+                                <span className="rounded-full bg-[#A67AEB]/20 px-3 py-1 text-xs font-semibold text-[#d7c1ff]">
+                                    {dashboard.creditsLeft} credits left
+                                </span>
+                            </div>
+                            <p className="mb-4 text-sm font-medium text-white/85">{leadsHeading}</p>
                             {visibleLeads.length === 0 ? (
-                                <div className="rounded-2xl border border-white/15 bg-[#101018] p-4 text-sm text-white/70">
+                                <div className="rounded-2xl border border-white/15 bg-[#101018] p-5 text-sm text-white/70">
                                     {dashboard.leads.length === 0 ? "No leads unlocked yet." : "No leads match your search."}
                                 </div>
                             ) : (
-                                <div className="space-y-4">
+                                <div className="space-y-3">
                                     {visibleLeads.map((lead) => {
                                         const locked = lead.state !== "unlocked";
                                         return (
                                             <article
                                                 key={lead.id}
-                                                className="rounded-2xl border border-[#A67AEB]/60 bg-[#101019] p-4 shadow-[0_14px_30px_rgba(0,0,0,0.35)]"
+                                                className="rounded-2xl border border-[#A67AEB]/40 bg-[#101019] p-4 shadow-[0_8px_24px_rgba(0,0,0,0.3)]"
                                             >
-                                                <p className="text-sm text-white/70">Tenant</p>
-                                                <h3 className="text-xl font-bold leading-tight">{lead.tenantName}</h3>
-                                                <p className="mt-1 text-lg font-semibold text-white/95">
-                                                    {locked ? lead.phoneMasked : lead.phone}
-                                                </p>
+                                                <div className="flex items-start justify-between gap-2">
+                                                    <div className="min-w-0">
+                                                        <p className="text-xs text-white/50">Tenant</p>
+                                                        <h3 className="text-base font-bold leading-tight">{lead.tenantName}</h3>
+                                                        <p className={`mt-1 text-base font-semibold ${locked ? "select-none" : "text-white"}`}
+                                                           style={locked ? { filter: "blur(4px)", userSelect: "none" } : {}}>
+                                                            {locked ? lead.phoneMasked : lead.phone}
+                                                        </p>
+                                                    </div>
+                                                    {!locked && (
+                                                        <span className="shrink-0 rounded-full bg-green-500/10 px-2.5 py-1 text-xs font-semibold text-green-400 ring-1 ring-green-500/20">
+                                                            Unlocked
+                                                        </span>
+                                                    )}
+                                                </div>
 
-                                                <div className="mt-4">
+                                                <div className="mt-3">
                                                     {!locked ? (
                                                         <div className="grid grid-cols-2 gap-2">
                                                             <a
                                                                 href={`https://wa.me/${lead.phone.replace(/\D/g, "")}`}
                                                                 target="_blank"
                                                                 rel="noopener noreferrer"
-                                                                className="rounded-xl bg-[#A67AEB] px-3 py-2.5 text-center text-base font-semibold text-white transition hover:brightness-105 active:scale-[0.99]"
+                                                                className="btn-shimmer rounded-xl bg-[#A67AEB] px-3 py-2.5 text-center text-sm font-bold text-white"
                                                             >
                                                                 WhatsApp
                                                             </a>
                                                             <a
                                                                 href={`tel:${lead.phone}`}
-                                                                className="rounded-xl border border-[#A67AEB] px-3 py-2.5 text-center text-base font-semibold text-white transition hover:bg-[#A67AEB]/15 active:scale-[0.99]"
+                                                                className="btn-shimmer rounded-xl border border-[#A67AEB]/50 px-3 py-2.5 text-center text-sm font-bold text-white hover:bg-[#A67AEB]/10"
                                                             >
                                                                 Call
                                                             </a>
@@ -448,11 +470,11 @@ export default function OwnerDashboardPage() {
                                     })}
                                 </div>
                             )}
-                            {syncing ? (
-                                <p className="mt-2 text-xs text-white/55">Syncing latest lead state...</p>
-                            ) : null}
+                            {syncing && (
+                                <p className="mt-2 text-xs text-white/45">Syncing latest lead state...</p>
+                            )}
                         </section>
-                    </>
+                    </div>
                 )}
             </div>
 

@@ -3,10 +3,18 @@ import type { NextRequest } from "next/server";
 
 // Routes that don't require authentication
 const publicRoutes = [
+    "/",
     "/auth/login",
     "/auth/otp",
+    "/search",
+    "/booking",
     "/privacy-policy",
     "/terms-of-service",
+];
+
+// Routes that ALWAYS require authentication (even if prefix matches a public route)
+const protectedRoutes = [
+    "/owner",
 ];
 
 export function middleware(request: NextRequest) {
@@ -15,9 +23,14 @@ export function middleware(request: NextRequest) {
     // Check if the user is authenticated via cookie
     const isAuthenticated = request.cookies.get("auth-token");
 
-    // Check if the current route is public
-    const isPublicRoute = publicRoutes.some((route) =>
+    // Protected routes always require auth
+    const isProtectedRoute = protectedRoutes.some((route) =>
         pathname.startsWith(route)
+    );
+
+    // Check if the current route is public
+    const isPublicRoute = !isProtectedRoute && publicRoutes.some((route) =>
+        pathname === route || pathname.startsWith(route + "/") || pathname.startsWith(route + "?")
     );
 
     // If not authenticated and trying to access a protected route

@@ -14,7 +14,7 @@ export default function TenantContactsPage() {
     }, []);
 
     return (
-        <main className="min-h-screen bg-[#050507] pb-24 text-white">
+        <main className="min-h-screen bg-[#040405] pb-24 text-white">
             <div className="mx-auto max-w-5xl px-4 py-4 md:px-6">
                 <header className="mb-5 rounded-2xl border border-white/15 bg-[#101018] p-4">
                     <div className="flex items-center justify-between gap-3">

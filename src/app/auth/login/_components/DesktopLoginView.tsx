@@ -63,9 +63,9 @@ export default function DesktopLoginView({
     };
 
     return (
-        <div className="min-h-screen bg-black flex items-center justify-center p-8 font-opensans">
+        <div className="min-h-screen bg-black flex items-center justify-center p-4 sm:p-8 font-opensans">
             {/* Desktop Card Container */}
-            <div className="bg-[#1a1a1a] rounded-2xl pt-0 px-8 pb-8 w-full max-w-[400px] shadow-2xl relative">
+            <div className="animate-scale-in bg-[#111118] rounded-2xl pt-0 px-6 pb-8 sm:px-8 w-full max-w-[420px] shadow-[0_24px_64px_rgba(0,0,0,0.7)] border border-white/8 relative">
                 {otpSent && (
                     /* Back Button for OTP screen */
                     <button
@@ -159,7 +159,7 @@ export default function DesktopLoginView({
                             </p>
                         </div>
 
-                        {/* OTP Input Fields - 4 separate boxes */}
+                        {/* OTP Input Fields */}
                         <div className="flex gap-3 justify-center mb-8">
                             {otpDigits.map((digit, index) => (
                                 <input
@@ -171,7 +171,8 @@ export default function DesktopLoginView({
                                     value={digit}
                                     onChange={(e) => handleOtpDigitChange(index, e.target.value)}
                                     onKeyDown={(e) => handleKeyDown(index, e)}
-                                    className="w-14 h-14 bg-[#2A2A2A] border-2 border-gray-600 rounded-lg text-white text-center text-2xl font-semibold focus:border-purple-500 focus:outline-none transition-colors"
+                                    className="w-14 h-14 bg-[#1e1e28] border-2 border-white/15 rounded-xl text-white text-center text-2xl font-bold focus:border-[#A67AEB] focus:shadow-[0_0_0_3px_rgba(166,122,235,0.2)] focus:outline-none transition-all duration-200"
+                                    style={{ userSelect: "text" }}
                                     autoFocus={index === 0}
                                 />
                             ))}
@@ -181,11 +182,11 @@ export default function DesktopLoginView({
                         <button
                             onClick={onVerifyOTP}
                             disabled={otp.length !== 4 || loading}
-                            className="w-full bg-[#8A63D2] hover:bg-[#7952C0] text-white font-semibold py-3.5 rounded-xl disabled:bg-gray-600 disabled:cursor-not-allowed transition-all duration-200 mb-4"
+                            className="btn-shimmer w-full bg-[#A67AEB] text-white font-bold py-3.5 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 mb-4"
                         >
                             {loading ? (
                                 <div className="flex items-center justify-center gap-2">
-                                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                                    <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
                                     <span>Verifying...</span>
                                 </div>
                             ) : (
@@ -197,7 +198,7 @@ export default function DesktopLoginView({
                         <button
                             onClick={onResendOTP}
                             disabled={loading}
-                            className="w-full bg-transparent border-2 border-gray-600 text-white font-semibold py-3.5 rounded-xl hover:bg-white/5 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 mb-6"
+                            className="w-full bg-transparent border border-white/20 text-white font-semibold py-3.5 rounded-xl hover:bg-white/5 hover:border-white/35 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 mb-6"
                         >
                             Resend link
                         </button>

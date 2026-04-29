@@ -201,34 +201,50 @@ export default function SearchPage() {
     };
 
     return (
-        <main className="min-h-screen bg-[#050507] pb-24 text-white">
+        <main className="min-h-screen bg-[#040405] pb-24 text-white">
             <div className="mx-auto max-w-[1280px] px-4 pb-8 pt-4 sm:px-6 lg:px-8">
                 <div className="mb-4 flex items-center gap-3">
                     <button
                         onClick={() => router.push("/")}
-                        className="rounded-full border border-white/30 px-3 py-2 text-base transition hover:border-[#A67AEB] active:scale-[0.98]"
+                        className="btn-shimmer flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/20 text-base hover:border-[#A67AEB] active:scale-[0.95]"
                     >
                         ←
                     </button>
                     <button
                         onClick={() => setShowPanel(true)}
-                        className="flex-1 rounded-full border border-white/25 bg-[#141417] px-5 py-3 text-left text-base text-white/85 transition hover:border-[#A67AEB]/70 active:scale-[0.995]"
+                        className="input-glow flex-1 rounded-full border border-white/15 bg-[#141417] px-5 py-3 text-left text-base text-white/80 hover:text-white/95 active:scale-[0.995]"
                     >
-                        Edit House Preference
+                        <span className="flex items-center gap-2">
+                            <svg className="h-4 w-4 shrink-0 text-white/35" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                            </svg>
+                            Edit House Preference
+                        </span>
                     </button>
                 </div>
 
-                <div className="mb-4 rounded-2xl border border-white/10 bg-[#131318] px-4 py-3 transition focus-within:border-[#A67AEB]/80 hover:border-[#A67AEB]/30">
+                <div className="input-glow mb-4 flex items-center gap-2 rounded-2xl border border-white/10 bg-[#131318] px-4 py-3">
+                    <svg className="h-4 w-4 shrink-0 text-white/35" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
                     <input
                         value={filters.query}
                         onChange={(e) => setFilters((prev) => ({ ...prev, query: e.target.value }))}
                         placeholder="Search locality, city or property..."
-                        className="w-full bg-transparent text-base outline-none"
+                        className="w-full bg-transparent text-base outline-none placeholder:text-white/35"
                     />
+                    {filters.query && (
+                        <button
+                            onClick={() => setFilters((prev) => ({ ...prev, query: "" }))}
+                            className="shrink-0 text-white/40 hover:text-white/70 transition-colors"
+                        >
+                            ✕
+                        </button>
+                    )}
                 </div>
 
-                <h2 className="mb-3 text-lg font-semibold text-white/80">Sort by</h2>
-                <div className="mb-5 flex gap-3 overflow-x-auto pb-2">
+                <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-white/45">Sort by</h2>
+                <div className="scrollbar-hide mb-5 flex gap-2.5 overflow-x-auto pb-2">
                     {sortOptions.map((option) => (
                         <Chip
                             key={option.value}
@@ -239,7 +255,18 @@ export default function SearchPage() {
                     ))}
                 </div>
 
-                <div className="mb-4 text-sm text-white/60">{loading ? "Searching..." : `${results.length} results found`}</div>
+                <div className="animate-fade-in mb-4 flex items-center gap-2 text-sm text-white/50">
+                    {loading ? (
+                        <>
+                            <span className="h-3 w-3 animate-spin rounded-full border-2 border-[#A67AEB] border-t-transparent" />
+                            <span>Searching...</span>
+                        </>
+                    ) : (
+                        <span>
+                            <span className="font-bold text-white/80">{results.length}</span> results found
+                        </span>
+                    )}
+                </div>
                 {error ? (
                     <div className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-100">
                         <p>{error}</p>
@@ -270,12 +297,17 @@ export default function SearchPage() {
                 ) : (
                     <div className="space-y-4">
                         <div className="grid grid-cols-1 items-stretch gap-4 sm:grid-cols-2 sm:gap-5 xl:grid-cols-3">
-                            {visibleResults.map((property) => (
-                                <RevampPropertyCard
+                            {visibleResults.map((property, idx) => (
+                                <div
                                     key={property.id}
-                                    property={property}
-                                    onClick={() => router.push("/booking/" + property.id)}
-                                />
+                                    className="animate-card"
+                                    style={{ animationDelay: `${Math.min(idx * 0.05, 0.35)}s` }}
+                                >
+                                    <RevampPropertyCard
+                                        property={property}
+                                        onClick={() => router.push("/booking/" + property.id)}
+                                    />
+                                </div>
                             ))}
                         </div>
                         {hasMoreVisible ? (

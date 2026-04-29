@@ -1,7 +1,7 @@
 import { Metadata } from "next";
 import { Suspense } from "react";
 import AuthLayoutWrapper from "@/components/AuthLayoutWrapper";
-
+import SiteFooter from "@/components/legal/SiteFooter";
 export const metadata: Metadata = {
     title: "Spoto: Book Full Homes at Budget Hotel Prices",
     description: "Book Full Homes at Budget Hotel Prices",
@@ -28,12 +28,15 @@ export default function HomeLayout({
         <AuthLayoutWrapper>
             <Suspense
                 fallback={
-                    <div className="w-full h-screen bg-black flex items-center justify-center">
-                        <div className="text-white text-xl">Loading...</div>
+                    <div className="flex h-screen w-full items-center justify-center bg-[#040405]">
+                        <div className="text-xl text-white">Loading...</div>
                     </div>
                 }
             >
-                <div className="w-full min-h-screen bg-black">{children}</div>
+                <div className="flex min-h-screen w-full flex-col bg-[#040405]">
+                    <div className="flex-1">{children}</div>
+                    <SiteFooter />
+                </div>
             </Suspense>
         </AuthLayoutWrapper>
     );

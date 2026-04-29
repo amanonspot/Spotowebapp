@@ -149,7 +149,7 @@ export default function SwipeUnlock({
         <div
             ref={trackRef}
             className={`relative h-12 w-full select-none overflow-hidden rounded-full bg-[#A67AEB] text-base font-semibold text-white sm:text-lg ${
-                disabled ? "opacity-60" : ""
+                disabled ? "opacity-60" : "animate-pulse-glow"
             } ${className || ""}`}
             style={{ touchAction: dragging ? "none" : "pan-y" }}
             onPointerDown={handlePointerDown}
@@ -157,22 +157,31 @@ export default function SwipeUnlock({
             onPointerUp={handlePointerUp}
             onPointerCancel={reset}
         >
+            {/* Fill track */}
             <div
                 className="absolute inset-y-0 left-0 rounded-full bg-[#7b4fd0] transition-[width] duration-150"
                 style={{ width: fillWidth }}
             />
-            <span className="pointer-events-none absolute inset-0 flex items-center justify-center px-12 text-center leading-none text-white/95">
-                {loading || completing ? "Unlocking..." : label}
+
+            {/* Label */}
+            <span className="pointer-events-none absolute inset-0 flex items-center justify-center px-14 text-center text-sm leading-none text-white/90 sm:text-base">
+                {loading || completing ? (
+                    <span className="flex items-center gap-2">
+                        <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                        Unlocking...
+                    </span>
+                ) : label}
             </span>
 
+            {/* Thumb */}
             <div
                 role="button"
                 aria-label={label}
                 tabIndex={isInteractive ? 0 : -1}
-                className={`absolute left-[3px] top-[3px] inline-flex h-[42px] w-[42px] items-center justify-center rounded-full bg-[#07070a] text-sm text-white transition-transform ${
-                    dragging ? "scale-105" : ""
+                className={`absolute left-[3px] top-[3px] inline-flex h-[42px] w-[42px] items-center justify-center rounded-full bg-[#07070a] text-base text-white shadow-[0_2px_8px_rgba(0,0,0,0.5)] ${
+                    dragging ? "scale-110" : "scale-100"
                 } ${isInteractive ? "cursor-grab active:cursor-grabbing" : "cursor-not-allowed"}`}
-                style={{ transform: `translateX(${offset}px)`, transitionDuration: dragging ? "0ms" : "180ms" }}
+                style={{ transform: `translateX(${offset}px)`, transitionDuration: dragging ? "0ms" : "180ms", transition: dragging ? "none" : "transform 180ms ease" }}
                 onKeyDown={(event) => {
                     if (!isInteractive) return;
                     if (event.key !== "Enter" && event.key !== " ") return;
@@ -180,7 +189,7 @@ export default function SwipeUnlock({
                     void complete();
                 }}
             >
-                ●
+                →
             </div>
         </div>
     );

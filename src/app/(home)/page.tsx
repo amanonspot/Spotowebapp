@@ -68,7 +68,8 @@ export default function HomePage() {
     const bannerResumeHandledRef = useRef(false);
     const resumeAction = searchParams.get("resume");
     const resumePassType: "one_day" | "weekly" = searchParams.get("passType") === "weekly" ? "weekly" : "one_day";
-    const globalPassAmount = 99;
+    const globalPassOneDayAmount = 99;
+    const globalPassWeeklyAmount = 249;
 
     const handleProfileClick = async () => {
         if (!isAuthenticated) {
@@ -116,7 +117,8 @@ export default function HomePage() {
         });
     };
 
-    const openHomePassFlow = (passType: "one_day" | "weekly" = "one_day", amount = globalPassAmount) => {
+    const openHomePassFlow = (passType: "one_day" | "weekly" = "one_day") => {
+        const amount = passType === "weekly" ? globalPassWeeklyAmount : globalPassOneDayAmount;
         setHomePaymentContext({
             propertyId: "global_pass",
             returnPath: "/",
@@ -254,27 +256,36 @@ export default function HomePage() {
     };
 
     return (
-        <main className="min-h-screen bg-[#050507] pb-24 text-white">
-            <div className="mx-auto max-w-[1280px] px-4 pb-10 pt-3 sm:px-6 lg:px-8">
-                <section className="rounded-b-[28px] border-b border-[#7e59be] bg-[radial-gradient(circle_at_top,#241634,transparent_55%)] pb-6 sm:rounded-b-[36px] sm:pb-8">
-                    <div className="flex items-center justify-between gap-3 py-2">
-                        <button
-                            onClick={handleListProperty}
-                            className="rounded-full border border-white/30 px-3 py-1.5 text-xs transition hover:border-[#A67AEB] hover:text-[#E8DBFF] active:scale-[0.99] sm:px-4 sm:py-2 sm:text-sm"
-                        >
-                            List Your Property
-                        </button>
-                        <div className="relative" ref={profileMenuRef}>
+        <main className="min-h-screen bg-[#040405] pb-24 text-white">
+            <section
+                className="w-full rounded-b-[28px] border-b border-[#7e59be]/55 pt-3 pb-6 sm:rounded-b-[36px] sm:pb-8"
+                style={{
+                    background: `
+                        radial-gradient(ellipse 165% 115% at 50% 48%, rgba(167, 113, 246, 0.035) 0%, rgba(74, 29, 74, 0.012) 30%, rgba(4, 4, 5, 0) 46%),
+                        radial-gradient(ellipse 95% 72% at 50% 58%, rgba(120, 62, 170, 0.09) 0%, rgba(74, 29, 74, 0.05) 34%, rgba(45, 27, 54, 0.02) 44%, rgba(4, 4, 5, 1) 64%, #040405 100%)
+                    `,
+                }}
+            >
+                <div className="mx-auto max-w-[1280px] px-4 sm:px-6 lg:px-8">
+                    <div className="relative">
+                        <div className="flex items-center justify-between gap-3 py-2">
                             <button
-                                onClick={handleProfileClick}
-                                title={isAuthenticated ? "My Profile" : "Sign In"}
-                                className="h-10 w-10 rounded-full border border-white/30 text-lg transition hover:border-[#A67AEB] active:scale-[0.98]"
+                                onClick={handleListProperty}
+                                className="btn-shimmer rounded-full border border-white/25 px-3 py-1.5 text-xs hover:border-[#A67AEB] hover:text-[#E8DBFF] active:scale-[0.98] sm:px-4 sm:py-2 sm:text-sm"
                             >
-                                ⌾
+                                List Your Property
                             </button>
+                            <div className="relative" ref={profileMenuRef}>
+                                <button
+                                    onClick={handleProfileClick}
+                                    title={isAuthenticated ? "My Profile" : "Sign In"}
+                                    className="h-10 w-10 rounded-full border border-white/30 text-lg transition hover:border-[#A67AEB] active:scale-[0.98]"
+                                >
+                                    ⌾
+                                </button>
 
                             {showProfileMenu && isAuthenticated && (
-                                <div className="absolute right-0 top-full mt-2 w-72 rounded-2xl border border-white/10 bg-[#0f0f13] shadow-2xl z-[100] overflow-hidden">
+                                <div className="animate-scale-in absolute right-0 top-full mt-2 w-[min(288px,calc(100vw-1.5rem))] rounded-2xl border border-white/10 bg-[#0f0f13] shadow-[0_20px_60px_rgba(0,0,0,0.7)] z-[100] overflow-hidden">
                                     {/* Header */}
                                     <div className="flex items-center gap-3 p-4 border-b border-white/10">
                                         <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#AF7AEB] to-[#9575e6] flex items-center justify-center flex-shrink-0">
@@ -373,6 +384,24 @@ export default function HomePage() {
                                             Owner Dashboard
                                         </button>
                                         <button
+                                            type="button"
+                                            onClick={() => {
+                                                setShowProfileMenu(false);
+                                                router.push("/delete-account");
+                                            }}
+                                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-white/55 hover:text-amber-200/95 hover:bg-amber-500/10 rounded-lg border border-white/10 transition-colors"
+                                        >
+                                            <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                    strokeWidth={2}
+                                                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                                />
+                                            </svg>
+                                            Delete account
+                                        </button>
+                                        <button
                                             onClick={async () => { setShowProfileMenu(false); await logout(); router.push("/auth/login"); }}
                                             className="w-full px-3 py-2 text-sm bg-red-500/10 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
                                         >
@@ -386,26 +415,39 @@ export default function HomePage() {
 
                     <button
                         onClick={() => router.push("/search")}
-                        className="mt-4 flex w-full items-center justify-between rounded-full border border-white/15 bg-[#121216] px-4 py-3 text-left transition hover:border-[#A67AEB]/70 active:scale-[0.995] sm:px-5 sm:py-4"
+                        className="input-glow mt-4 flex w-full items-center justify-between rounded-full border border-white/12 bg-[#121216] px-4 py-3 text-left sm:px-5 sm:py-4"
+                        style={{ transition: "border-color 0.2s, box-shadow 0.2s" }}
                     >
-                        <span className="text-sm text-white/85 sm:text-base">Let's find your new <b>House</b></span>
-                        <span className="rounded-full bg-[#A67AEB] px-3 py-1.5 text-xs font-semibold sm:py-2 sm:text-sm">Search</span>
+                        <span className="flex min-w-0 items-center gap-2 text-sm text-white/75 sm:text-base">
+                            <svg className="h-4 w-4 shrink-0 text-white/40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                            </svg>
+                            Let&apos;s find your new <b className="ml-1 text-white/90">House</b>
+                        </span>
+                        <span className="btn-shimmer shrink-0 rounded-full bg-[#A67AEB] px-3 py-1.5 text-xs font-bold sm:py-2 sm:text-sm">Search</span>
                     </button>
 
                     <div className="flex justify-center py-7 sm:py-10">
-                        <h1 className="text-5xl font-black tracking-tight text-[#F1FFE3] drop-shadow-[0_0_16px_rgba(183,240,65,0.35)] sm:text-6xl">
+                        <h1
+                            className="text-4xl font-black tracking-tight text-[#FAFAF9] sm:text-5xl md:text-6xl"
+                            style={{ animation: "spoto-text-glow 3s ease-in-out infinite" }}
+                        >
                             SPOTO
                         </h1>
                     </div>
-                </section>
+                    </div>
+                </div>
+            </section>
 
-                <section className="mt-6 sm:mt-8">
-                    <h2 className="mb-4 text-center text-2xl font-semibold">What are you looking for?</h2>
-                    <div className="flex flex-wrap justify-center gap-2 sm:gap-3">
+            <div className="mx-auto max-w-[1280px] px-4 pb-10 pt-3 sm:px-6 lg:px-8">
+                <section className="animate-fade-up mt-8 sm:mt-10">
+                    <h2 className="mb-5 text-center text-xl font-bold text-white sm:text-2xl">What are you looking for?</h2>
+                    <div className="scrollbar-hide flex gap-2.5 overflow-x-auto pb-1 sm:flex-wrap sm:justify-center sm:overflow-visible sm:gap-3">
                         {feed.categories.map((category) => (
                             <Chip
                                 key={category}
                                 label={category}
+                                tone="hero"
                                 selected={selectedCategory === category}
                                 onClick={() => setSelectedCategory((prev) => (prev === category ? null : category))}
                             />
@@ -419,14 +461,15 @@ export default function HomePage() {
 
                 <section className="mt-6 sm:mt-8">
                     <h3 className="mb-4 text-center text-2xl font-semibold">Recommended Houses</h3>
-                    <div className="flex gap-3 overflow-x-auto pb-2 sm:gap-4">
+                    <div className="scrollbar-hide -mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 sm:-mx-6 sm:px-6 sm:gap-4 lg:mx-0 lg:px-0">
                         {feed.recommended.map((property) => (
-                            <RevampPropertyCard
-                                key={property.id}
-                                property={property}
-                                compact
-                                onClick={() => router.push(`/booking/${property.id}`)}
-                            />
+                            <div key={property.id} className="snap-start">
+                                <RevampPropertyCard
+                                    property={property}
+                                    compact
+                                    onClick={() => router.push(`/booking/${property.id}`)}
+                                />
+                            </div>
                         ))}
                     </div>
                 </section>
@@ -434,8 +477,11 @@ export default function HomePage() {
                 <section className="mt-8 sm:mt-10">
                     <div className="mb-4 flex items-center justify-between">
                         <h3 className="text-2xl font-semibold">Top Listings</h3>
-                        <button onClick={() => router.push("/search")} className="text-sm font-semibold text-[#c5acff]">
-                            Sort by
+                        <button
+                            onClick={() => router.push("/search")}
+                            className="text-sm font-semibold text-[#c5acff] transition-colors hover:text-white"
+                        >
+                            View All →
                         </button>
                     </div>
                     {error && (
@@ -444,8 +490,18 @@ export default function HomePage() {
                         </div>
                     )}
                     {loading ? (
-                        <div className="rounded-2xl border border-white/10 bg-[#0f0f13] p-6 text-center text-sm text-white/70">
-                            Loading listings...
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 xl:grid-cols-3">
+                            {Array.from({ length: 6 }).map((_, i) => (
+                                <div key={i} className="overflow-hidden rounded-2xl border border-white/10 bg-[#0E0E10]">
+                                    <div className="spoto-shimmer h-48 w-full sm:h-56" />
+                                    <div className="space-y-2 p-4">
+                                        <div className="spoto-shimmer h-5 w-4/5 rounded-lg" />
+                                        <div className="spoto-shimmer h-4 w-1/3 rounded-lg" />
+                                        <div className="spoto-shimmer h-5 w-1/2 rounded-lg" />
+                                        <div className="spoto-shimmer h-4 w-2/3 rounded-lg" />
+                                    </div>
+                                </div>
+                            ))}
                         </div>
                     ) : visibleListings.length === 0 ? (
                         <div className="rounded-2xl border border-white/10 bg-[#0f0f13] p-6 text-center text-sm text-white/70">
@@ -453,24 +509,29 @@ export default function HomePage() {
                         </div>
                     ) : (
                         <div className="grid grid-cols-1 items-stretch gap-4 sm:grid-cols-2 sm:gap-5 xl:grid-cols-3">
-                            {visibleListings.map((property) => (
-                                <RevampPropertyCard
+                            {visibleListings.map((property, idx) => (
+                                <div
                                     key={property.id}
-                                    property={property}
-                                    onClick={() => router.push(`/booking/${property.id}`)}
-                                />
+                                    className="animate-card"
+                                    style={{ animationDelay: `${Math.min(idx * 0.06, 0.4)}s` }}
+                                >
+                                    <RevampPropertyCard
+                                        property={property}
+                                        onClick={() => router.push(`/booking/${property.id}`)}
+                                    />
+                                </div>
                             ))}
                         </div>
                     )}
                 </section>
 
-                <section className="mt-8 rounded-2xl border border-[#B7F041]/40 bg-[#101212] p-5 text-center sm:mt-10 sm:p-6">
-                    <p className="text-sm text-[#B7F041]">For Landlords</p>
+                <section className="group mt-8 cursor-pointer rounded-2xl border border-[#B7F041]/30 bg-gradient-to-br from-[#0e1410] to-[#101212] p-5 text-center transition-all duration-300 hover:border-[#B7F041]/60 hover:shadow-[0_8px_32px_rgba(183,240,65,0.12)] sm:mt-10 sm:p-6">
+                    <p className="text-sm font-semibold text-[#B7F041]">For Landlords</p>
                     <h3 className="mt-2 text-xl font-semibold leading-snug sm:text-2xl">
                         Get verified tenants in top Bengaluru localities
                     </h3>
-                    <PrimaryButton className="mt-4" onClick={handleListProperty}>
-                        Post Property for Free
+                    <PrimaryButton className="mt-4" variant="green" onClick={handleListProperty}>
+                        Post Property for Free →
                     </PrimaryButton>
                 </section>
             </div>

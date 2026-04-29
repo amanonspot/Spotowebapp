@@ -617,29 +617,41 @@ export default function OwnerListingWizard({ mode = "create", propertyId, initia
 
     return (
         <main className="min-h-screen bg-[#050507] text-white">
-            <div className="mx-auto w-full max-w-[420px] px-4 pb-8 pt-4">
-                <div className="mb-4 flex items-center justify-between">
+            <div className="mx-auto w-full max-w-[520px] px-4 pb-8 pt-4 sm:max-w-xl md:max-w-2xl lg:px-8">
+                {/* Step header */}
+                <div className="mb-5 flex items-center justify-between gap-3">
                     <button
                         type="button"
                         onClick={goBack}
-                        className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/20 text-white/90"
+                        className="btn-shimmer inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/20 text-white/90 hover:border-[#A67AEB] active:scale-95"
                     >
                         <ChevronLeft className="h-5 w-5" />
                     </button>
-                    <p className="text-[11px] text-white/55">
-                        Step {step} / {totalSteps}
-                    </p>
+
+                    {/* Progress bar */}
+                    <div className="flex flex-1 flex-col gap-1">
+                        <div className="flex h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+                            <div
+                                className="h-full rounded-full bg-[#A67AEB] transition-all duration-500"
+                                style={{ width: `${((step - 1) / (totalSteps - 1)) * 100}%` }}
+                            />
+                        </div>
+                        <p className="text-center text-[11px] text-white/45">
+                            Step {step} of {totalSteps} — {stepTitles[step - 1]}
+                        </p>
+                    </div>
+
                     <button
                         type="button"
                         onClick={() => router.push("/owner/dashboard")}
-                        className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/20 text-white/90"
+                        className="btn-shimmer inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/20 text-white/90 hover:border-[#A67AEB] active:scale-95"
                     >
                         <Bell className="h-5 w-5" />
                     </button>
                 </div>
 
-                <h1 className="text-3xl font-semibold leading-tight">{stepTitles[step - 1]}</h1>
-                <p className="mt-1 text-sm text-white/60">SPOTO · List Your Property</p>
+                <h1 className="text-2xl font-semibold leading-tight sm:text-3xl">{stepTitles[step - 1]}</h1>
+                <p className="mt-1 text-sm text-white/50">SPOTO · List Your Property</p>
 
                 {loadingInitial ? (
                     <div className="mt-5 rounded-xl border border-white/20 bg-[#0d0d14] px-3 py-3">
@@ -663,8 +675,8 @@ export default function OwnerListingWizard({ mode = "create", propertyId, initia
                 <div className="mt-5 space-y-4">
                     {step === 1 && (
                         <section className={sectionCardClass}>
-                            <p className="mb-3 text-lg font-semibold">Select Property Type</p>
-                            <div className="space-y-3">
+                            <p className="mb-4 text-lg font-semibold">Select Property Type</p>
+                            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                                 {propertyTypeOptions.map((option, index) => {
                                     const active = form.propertyTypeId === option.id;
                                     return (
@@ -672,15 +684,15 @@ export default function OwnerListingWizard({ mode = "create", propertyId, initia
                                             key={option.id}
                                             type="button"
                                             onClick={() => updateField("propertyTypeId", option.id)}
-                                            className={`w-full rounded-2xl border px-4 py-5 text-left transition ${
+                                            className={`w-full rounded-2xl border px-4 py-5 text-left transition active:scale-[0.97] ${
                                                 active
-                                                    ? "border-[#B7F041] bg-[#B7F041] text-[#111]"
-                                                    : "border-white/20 bg-[#15151d] text-white"
+                                                    ? "border-[#B7F041] bg-[#B7F041] text-[#111] shadow-[0_4px_16px_rgba(183,240,65,0.3)]"
+                                                    : "border-white/15 bg-[#15151d] text-white hover:border-[#A67AEB]/50"
                                             }`}
                                         >
                                             <div className="flex flex-col items-center justify-center gap-3">
                                                 {propertyTypeIcon(index)}
-                                                <span className="text-base font-semibold">{option.name}</span>
+                                                <span className="text-sm font-semibold sm:text-base">{option.name}</span>
                                             </div>
                                         </button>
                                     );

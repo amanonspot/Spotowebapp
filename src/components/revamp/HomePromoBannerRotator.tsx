@@ -1,20 +1,22 @@
 "use client";
 
-import Image from "next/image";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 
-const BANNER_SOURCES = [
+const SLIDES = [
     {
-        src: "/assets/banners/home-pass-banner-1.png",
-        alt: "Directly connect with homeowners day pass banner",
+        passType: "one_day" as const,
+        eyebrow: "Zero Brokerage · Verified Home Owners",
+        headline: "Unlimited Day Pass ₹99",
     },
     {
-        src: "/assets/banners/home-pass-banner-2.png",
-        alt: "Zero brokerage verified homeowners day pass banner",
+        passType: "weekly" as const,
+        eyebrow: "Zero Brokerage · Verified Home Owners",
+        headline: "7-Day Unlimited Pass ₹249",
     },
 ];
 
-const ROTATION_MS = 20_000;
+/** Fast enough to notice both passes; slow enough to read */
+const ROTATION_MS = 6500;
 
 interface HomePromoBannerRotatorProps {
     onBannerClick?: (passType: "one_day" | "weekly") => void;
@@ -22,96 +24,54 @@ interface HomePromoBannerRotatorProps {
 
 export default function HomePromoBannerRotator({ onBannerClick }: HomePromoBannerRotatorProps) {
     const [activeIndex, setActiveIndex] = useState(0);
-    const [failedIndices, setFailedIndices] = useState<number[]>([]);
 
     useEffect(() => {
         const interval = window.setInterval(() => {
-            setActiveIndex((prev) => (prev + 1) % BANNER_SOURCES.length);
+            setActiveIndex((prev) => (prev + 1) % SLIDES.length);
         }, ROTATION_MS);
-
         return () => window.clearInterval(interval);
     }, []);
 
-    const safeIndex = useMemo(() => {
-        if (!failedIndices.includes(activeIndex)) return activeIndex;
-        const fallback = activeIndex === 0 ? 1 : 0;
-        return failedIndices.includes(fallback) ? activeIndex : fallback;
-    }, [activeIndex, failedIndices]);
-
     return (
-        <div className="relative w-full overflow-hidden rounded-2xl border border-white/10">
-            <div
-                className="flex transition-transform duration-700 ease-in-out"
-                style={{ transform: `translateX(-${activeIndex * 100}%)` }}
-            >
-                {BANNER_SOURCES.map((banner, idx) => (
-                    <div key={banner.src} className="relative w-full flex-shrink-0">
-                        <button
-                            type="button"
-                            onClick={() => onBannerClick?.("one_day")}
-                            className="group relative block w-full overflow-hidden rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B7F041]/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#050507]"
-                            aria-label="Open SPOTO day pass paywall"
-                        >
-                            <div className="star-motion pointer-events-none absolute left-2 top-2 z-10 text-lg motion-safe:animate-[spotoStarFloat_2200ms_ease-in-out_infinite] sm:left-4 sm:top-4 sm:text-2xl">
-                                ✨
-                            </div>
-                            <div className="arrow-motion pointer-events-none absolute right-2 top-2 z-10 text-lg text-white/85 motion-safe:animate-[spotoArrowDrift_1800ms_ease-in-out_infinite] sm:right-4 sm:top-4 sm:text-2xl">
-                                ↗
-                            </div>
-                            <div className="relative w-full">
-                                <Image
-                                    src={failedIndices.includes(idx) ? BANNER_SOURCES[safeIndex].src : banner.src}
-                                    alt={banner.alt}
-                                    width={1380}
-                                    height={372}
-                                    sizes="(max-width: 640px) 100vw, (max-width: 1024px) 90vw, 860px"
-                                    className="h-auto w-full object-contain transition-transform duration-500 group-active:scale-[0.995]"
-                                    priority={idx === 0}
-                                    onError={() =>
-                                        setFailedIndices((prev) => (prev.includes(idx) ? prev : [...prev, idx]))
-                                    }
-                                />
-                            </div>
-                        </button>
-                    </div>
+        <div className="relative w-full rounded-[28px] border border-[#A67AEB]/40 bg-[#A67AEB] shadow-[0_12px_40px_rgba(0,0,0,0.35)] transition-all duration-300 hover:border-white/25 hover:shadow-[0_16px_48px_rgba(166,122,235,0.35)] sm:rounded-[32px]">
+            <div className="overflow-hidden rounded-[28px] sm:rounded-[32px]">
+                <div
+                    className="flex transition-transform duration-700 ease-in-out"
+                    style={{ transform: `translateX(-${activeIndex * 100}%)` }}
+                >
+                    {SLIDES.map((slide) => (
+                        <div key={slide.passType} className="relative w-full flex-shrink-0">
+                            <button
+                                type="button"
+                                onClick={() => onBannerClick?.(slide.passType)}
+                                className="group flex w-full min-h-[70px] flex-col items-center justify-center gap-0.5 px-5 py-4 text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#A67AEB] sm:min-h-[82px] md:min-h-[88px] lg:min-h-[92px] sm:py-4"
+                                aria-label={
+                                    slide.passType === "weekly"
+                                        ? "Open SPOTO 7-day pass paywall"
+                                        : "Open SPOTO 1-day pass paywall"
+                                }
+                            >
+                                <span className="text-[11px] font-medium tracking-wide text-white/95 sm:text-xs">
+                                    {slide.eyebrow}
+                                </span>
+                                <span className="text-base font-bold leading-tight tracking-tight text-[#14141a] sm:text-lg md:text-xl">
+                                    {slide.headline}
+                                </span>
+                            </button>
+                        </div>
+                    ))}
+                </div>
+            </div>
+            <div className="flex justify-center gap-1.5 pb-2 pt-0.5" aria-hidden>
+                {SLIDES.map((_, i) => (
+                    <span
+                        key={i}
+                        className={`h-1 rounded-full transition-all duration-300 ${
+                            i === activeIndex ? "w-4 bg-white/90" : "w-1 bg-black/25"
+                        }`}
+                    />
                 ))}
             </div>
-            <style jsx>{`
-                @keyframes spotoStarFloat {
-                    0% {
-                        transform: translate3d(0, 0, 0) scale(1);
-                        opacity: 0.9;
-                    }
-                    50% {
-                        transform: translate3d(0, -3px, 0) scale(1.07);
-                        opacity: 1;
-                    }
-                    100% {
-                        transform: translate3d(0, 0, 0) scale(1);
-                        opacity: 0.9;
-                    }
-                }
-                @keyframes spotoArrowDrift {
-                    0% {
-                        transform: translate3d(0, 0, 0) rotate(0deg);
-                        opacity: 0.85;
-                    }
-                    50% {
-                        transform: translate3d(1px, -3px, 0) rotate(4deg);
-                        opacity: 1;
-                    }
-                    100% {
-                        transform: translate3d(0, 0, 0) rotate(0deg);
-                        opacity: 0.85;
-                    }
-                }
-                @media (prefers-reduced-motion: reduce) {
-                    .star-motion,
-                    .arrow-motion {
-                        animation: none !important;
-                    }
-                }
-            `}</style>
         </div>
     );
 }

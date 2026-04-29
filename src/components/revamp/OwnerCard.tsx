@@ -24,34 +24,51 @@ const formatPhone = (phone: string) => {
 
 export default function OwnerCard({ owner, isUnlocked, onUnlock }: OwnerCardProps) {
     return (
-        <section className="rounded-2xl border border-white/15 bg-[#111116] p-4">
-            <p className="text-sm text-white/60">Owner</p>
-            <h3 className="mt-0.5 text-xl font-semibold text-white">{owner.ownerName}</h3>
+        <section className="overflow-hidden rounded-2xl border border-white/15 bg-[#111116] shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
+            <div className="p-4">
+                {/* Owner name */}
+                <p className="text-xs font-semibold uppercase tracking-wider text-white/40">Owner</p>
+                <h3 className="mt-1 text-xl font-bold text-white">{owner.ownerName}</h3>
 
-            <p className="mt-3 text-sm text-white/60">Phone no</p>
-            <p className="mt-0.5 text-xl font-semibold tracking-wide text-white">
-                {isUnlocked ? formatPhone(owner.whatsappNumber) : owner.maskedPhone}
-            </p>
+                {/* Phone */}
+                <p className="mt-3 text-xs font-semibold uppercase tracking-wider text-white/40">Phone</p>
+                <p
+                    className={`mt-1 text-xl font-bold tracking-wide text-white transition-all duration-500 ${
+                        isUnlocked ? "animate-unlock" : "select-none opacity-80"
+                    }`}
+                    style={isUnlocked ? {} : { filter: "blur(5px)" }}
+                >
+                    {isUnlocked ? formatPhone(owner.whatsappNumber) : owner.maskedPhone}
+                </p>
 
+                {/* Unlocked indicator */}
+                {isUnlocked && (
+                    <div className="animate-fade-up mt-2 inline-flex items-center gap-1.5 rounded-full bg-green-500/10 px-2.5 py-1 text-xs font-semibold text-green-400 ring-1 ring-green-500/20">
+                        <span className="h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse" />
+                        Contact Unlocked
+                    </div>
+                )}
+            </div>
 
-            <div className="mt-4 flex gap-2">
+            {/* Action buttons */}
+            <div className="border-t border-white/8 p-4 pt-3">
                 {isUnlocked ? (
-                    <>
+                    <div className="flex gap-2.5">
                         <a
                             href={`https://wa.me/${owner.whatsappNumber.replace(/\D/g, "")}`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="flex-1 rounded-xl bg-[#A67AEB] px-4 py-3 text-center text-base font-semibold text-white transition-opacity hover:opacity-90"
+                            className="btn-shimmer flex-1 rounded-xl bg-[#A67AEB] px-4 py-3 text-center text-base font-bold text-white"
                         >
                             WhatsApp
                         </a>
                         <a
                             href={`tel:${owner.whatsappNumber}`}
-                            className="flex-1 rounded-xl border border-[#A67AEB] px-4 py-3 text-center text-base font-semibold text-white transition-colors hover:bg-[#A67AEB]/10"
+                            className="btn-shimmer flex-1 rounded-xl border border-[#A67AEB]/50 px-4 py-3 text-center text-base font-bold text-white hover:bg-[#A67AEB]/10"
                         >
                             Call
                         </a>
-                    </>
+                    </div>
                 ) : (
                     <SwipeUnlock
                         label="Swipe To Unlock"

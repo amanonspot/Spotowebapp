@@ -890,6 +890,155 @@ input[type="number"]:-webkit-autofill {
     }
 }
 
+/* ── Smooth scroll ──────────────────────────────────────────────── */
+html {
+    scroll-behavior: smooth;
+}
+
+/* ── Dark custom scrollbar ──────────────────────────────────────── */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+::-webkit-scrollbar-thumb {
+    background: rgba(166, 122, 235, 0.3);
+    border-radius: 99px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(166, 122, 235, 0.55);
+}
+
+/* ── Text selection ─────────────────────────────────────────────── */
+::selection {
+    background: rgba(166, 122, 235, 0.35);
+    color: #fff;
+}
+
+/* ── Global animation keyframes ─────────────────────────────────── */
+@keyframes spoto-fade-up {
+    from { opacity: 0; transform: translateY(18px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes spoto-fade-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+@keyframes spoto-scale-in {
+    from { opacity: 0; transform: scale(0.93); }
+    to   { opacity: 1; transform: scale(1); }
+}
+@keyframes spoto-slide-right {
+    from { opacity: 0; transform: translateX(-16px); }
+    to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes spoto-card-appear {
+    from { opacity: 0; transform: translateY(22px) scale(0.97); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes spoto-pulse-glow {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(166,122,235,0.3); }
+    50%       { box-shadow: 0 0 0 10px rgba(166,122,235,0); }
+}
+@keyframes spoto-text-glow {
+    0%, 100% {
+        text-shadow:
+            0 0 18px rgba(255, 255, 255, 0.45),
+            0 0 42px rgba(255, 255, 255, 0.2),
+            0 0 72px rgba(230, 230, 255, 0.08);
+    }
+    50% {
+        text-shadow:
+            0 0 28px rgba(255, 255, 255, 0.65),
+            0 0 56px rgba(255, 255, 255, 0.3),
+            0 0 88px rgba(245, 245, 255, 0.12);
+    }
+}
+@keyframes spoto-unlock-reveal {
+    0%   { filter: blur(8px); opacity: 0.4; letter-spacing: 0.3em; }
+    100% { filter: blur(0);   opacity: 1;   letter-spacing: 0.04em; }
+}
+@keyframes spoto-border-spin {
+    0%   { background-position: 0% 50%; }
+    50%  { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+
+/* ── Animation utility classes ──────────────────────────────────── */
+.animate-fade-up   { animation: spoto-fade-up   0.42s cubic-bezier(0.22,1,0.36,1) both; }
+.animate-fade-in   { animation: spoto-fade-in   0.3s ease both; }
+.animate-scale-in  { animation: spoto-scale-in  0.35s cubic-bezier(0.22,1,0.36,1) both; }
+.animate-card      { animation: spoto-card-appear 0.38s cubic-bezier(0.22,1,0.36,1) both; }
+.animate-slide-r   { animation: spoto-slide-right 0.35s cubic-bezier(0.22,1,0.36,1) both; }
+.animate-unlock    { animation: spoto-unlock-reveal 0.55s cubic-bezier(0.22,1,0.36,1) both; }
+.animate-pulse-glow { animation: spoto-pulse-glow 2.4s ease-in-out infinite; }
+
+/* Staggered card delays */
+.delay-1  { animation-delay: 0.05s; }
+.delay-2  { animation-delay: 0.10s; }
+.delay-3  { animation-delay: 0.15s; }
+.delay-4  { animation-delay: 0.20s; }
+.delay-5  { animation-delay: 0.25s; }
+.delay-6  { animation-delay: 0.30s; }
+
+/* ── Card hover utility ─────────────────────────────────────────── */
+.card-hover {
+    transition: transform 0.22s cubic-bezier(0.22,1,0.36,1),
+                box-shadow 0.22s cubic-bezier(0.22,1,0.36,1),
+                border-color 0.22s ease;
+}
+.card-hover:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 16px 40px rgba(0,0,0,0.5), 0 0 0 1px rgba(166,122,235,0.3);
+}
+
+/* ── Input glow on focus ────────────────────────────────────────── */
+.input-glow {
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+.input-glow:focus-within {
+    border-color: rgba(166,122,235,0.7) !important;
+    box-shadow: 0 0 0 3px rgba(166,122,235,0.12);
+}
+
+/* ── Shimmer sweep on buttons ───────────────────────────────────── */
+.btn-shimmer {
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.15s, box-shadow 0.15s, filter 0.15s;
+}
+.btn-shimmer::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(105deg, transparent 35%, rgba(255,255,255,0.18) 50%, transparent 65%);
+    background-size: 200% 100%;
+    background-position: -200% 0;
+    transition: background-position 0s;
+}
+.btn-shimmer:hover::after {
+    background-position: 200% 0;
+    transition: background-position 0.55s ease;
+}
+.btn-shimmer:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 8px 24px rgba(166,122,235,0.35);
+}
+.btn-shimmer:active {
+    transform: scale(0.97);
+    box-shadow: none;
+}
+
+/* ── Image zoom group ───────────────────────────────────────────── */
+.img-zoom {
+    transition: transform 0.5s cubic-bezier(0.22,1,0.36,1);
+}
+.group:hover .img-zoom {
+    transform: scale(1.06);
+}
+
 @keyframes spoto-shimmer {
     0% {
         background-position: -200% 0;

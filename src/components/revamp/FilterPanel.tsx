@@ -81,28 +81,29 @@ export default function FilterPanel({
     return (
         <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm">
             <div className="mx-auto flex h-full w-full max-w-2xl flex-col overflow-hidden bg-[#090909] text-white">
-                <div className="flex items-center justify-between border-b border-white/10 px-6 py-4">
-                    <h2 className="text-lg font-semibold">Your House Hunting starts here</h2>
-                    <button onClick={onClose} className="rounded-full border border-[#AF7AEB] p-2 text-[#AF7AEB]">
+                <div className="flex items-center justify-between border-b border-white/10 px-4 py-3 sm:px-6 sm:py-4">
+                    <h2 className="text-base font-semibold sm:text-lg">Your House Hunting starts here</h2>
+                    <button onClick={onClose} className="flex h-9 w-9 items-center justify-center rounded-full border border-[#AF7AEB] text-sm text-[#AF7AEB] transition-colors hover:bg-[#AF7AEB]/10">
                         ✕
                     </button>
                 </div>
 
-                <div className="flex-1 space-y-7 overflow-y-auto px-6 py-6">
-                    <section className="rounded-3xl border border-[#B7F041] bg-[#121217] p-5">
-                        <h3 className="text-4xl font-light leading-tight text-white/90">
+                <div className="flex-1 space-y-5 overflow-y-auto px-4 py-5 sm:space-y-7 sm:px-6 sm:py-6">
+                    <section className="rounded-2xl border border-[#B7F041] bg-[#121217] p-4 sm:rounded-3xl sm:p-5">
+                        <h3 className="text-2xl font-light leading-tight text-white/90 sm:text-3xl">
                             Let&apos;s find your new <span className="font-bold">House</span>
                         </h3>
-                        <div className="mt-4 rounded-2xl bg-[#E7E7E7] px-4 py-3 text-black">
+                        <div className="mt-4 rounded-xl bg-[#E7E7E7] px-4 py-2.5 text-black sm:rounded-2xl sm:py-3">
                             <input
                                 value={filters.query}
                                 onChange={(e) => onChange({ ...filters, query: e.target.value })}
                                 placeholder="Search Locality"
-                                className="w-full bg-transparent text-lg font-semibold outline-none"
+                                className="w-full bg-transparent text-base font-semibold outline-none sm:text-lg"
+                                style={{ userSelect: "text" }}
                             />
                         </div>
 
-                        <p className="mt-4 text-3xl text-white/80">Currently Live in:</p>
+                        <p className="mt-4 text-lg text-white/80 sm:text-2xl">Currently Live in:</p>
                         <div className="mt-3 flex flex-wrap gap-3">
                             {filteredLocalities.map((locality) => (
                                 <Chip
@@ -121,8 +122,8 @@ export default function FilterPanel({
                         </div>
                     </section>
 
-                    <section className="rounded-3xl border border-white/30 bg-[#121217] p-5">
-                        <h3 className="text-2xl font-semibold">BHK type</h3>
+                    <section className="rounded-2xl border border-white/30 bg-[#121217] p-4 sm:rounded-3xl sm:p-5">
+                        <h3 className="text-xl font-semibold sm:text-2xl">BHK type</h3>
                         <div className="mt-4 flex flex-wrap gap-3">
                             {resolvedBhkTypes.map((option) => (
                                 <Chip
@@ -141,9 +142,9 @@ export default function FilterPanel({
                         </div>
                     </section>
 
-                    <section className="rounded-3xl border border-white/30 bg-[#121217] p-5">
-                        <h3 className="text-2xl font-semibold">Budget</h3>
-                        <div className="mt-3 flex items-center justify-between text-3xl text-white/80">
+                    <section className="rounded-2xl border border-white/30 bg-[#121217] p-4 sm:rounded-3xl sm:p-5">
+                        <h3 className="text-xl font-semibold sm:text-2xl">Budget</h3>
+                        <div className="mt-3 flex items-center justify-between text-xl text-white/80 sm:text-2xl">
                             <span>{formatBudget(filters.budgetMin)}</span>
                             <span>{formatBudget(filters.budgetMax)}</span>
                         </div>
@@ -165,8 +166,8 @@ export default function FilterPanel({
                         />
                     </section>
 
-                    <section className="rounded-3xl border border-white/30 bg-[#121217] p-5">
-                        <h3 className="text-2xl font-semibold">Property Type</h3>
+                    <section className="rounded-2xl border border-white/30 bg-[#121217] p-4 sm:rounded-3xl sm:p-5">
+                        <h3 className="text-xl font-semibold sm:text-2xl">Property Type</h3>
                         <div className="mt-4 flex flex-wrap gap-3">
                             {resolvedPropertyTypes.map((option) => (
                                 <Chip
@@ -185,8 +186,8 @@ export default function FilterPanel({
                         </div>
                     </section>
 
-                    <section className="rounded-3xl border border-white/30 bg-[#121217] p-5">
-                        <h3 className="text-2xl font-semibold">Amenities</h3>
+                    <section className="rounded-2xl border border-white/30 bg-[#121217] p-4 sm:rounded-3xl sm:p-5">
+                        <h3 className="text-xl font-semibold sm:text-2xl">Amenities</h3>
                         <div className="mt-4 flex flex-wrap gap-3">
                             {amenities.map((option) => (
                                 <Chip
@@ -202,8 +203,8 @@ export default function FilterPanel({
                         </div>
                     </section>
 
-                    <section className="rounded-3xl border border-white/30 bg-[#121217] p-5">
-                        <h3 className="text-2xl font-semibold">Keywords</h3>
+                    <section className="rounded-2xl border border-white/30 bg-[#121217] p-4 sm:rounded-3xl sm:p-5">
+                        <h3 className="text-xl font-semibold sm:text-2xl">Keywords</h3>
                         {resolvedKeywordSuggestions.length > 0 ? (
                             <div className="mt-4 flex flex-wrap gap-3">
                                 {resolvedKeywordSuggestions.map((keyword) => {
@@ -270,8 +271,8 @@ export default function FilterPanel({
                         ) : null}
                     </section>
 
-                    <section className="rounded-3xl border border-white/30 bg-[#121217] p-5">
-                        <h3 className="text-2xl font-semibold">Proximity Search (Optional)</h3>
+                    <section className="rounded-2xl border border-white/30 bg-[#121217] p-4 sm:rounded-3xl sm:p-5">
+                        <h3 className="text-xl font-semibold sm:text-2xl">Proximity Search (Optional)</h3>
                         <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
                             <input
                                 value={filters.proximityLat || ""}
@@ -295,7 +296,7 @@ export default function FilterPanel({
                     </section>
 
                     <section>
-                        <h3 className="text-2xl font-semibold">Move In by</h3>
+                        <h3 className="text-xl font-semibold sm:text-2xl">Move In by</h3>
                         <div className="mt-4 flex flex-wrap gap-3">
                             {moveInOptions.map((option) => (
                                 <Chip
@@ -309,12 +310,12 @@ export default function FilterPanel({
                     </section>
                 </div>
 
-                <div className="border-t border-white/10 px-6 py-4">
+                <div className="border-t border-white/10 px-4 py-3 sm:px-6 sm:py-4">
                     <div className="flex items-center justify-between gap-3">
-                        <button onClick={onSkip} className="text-lg font-bold underline underline-offset-4">
+                        <button onClick={onSkip} className="text-base font-bold underline underline-offset-4 sm:text-lg">
                             Skip
                         </button>
-                        <PrimaryButton onClick={onApply} className="min-w-[180px]">
+                        <PrimaryButton onClick={onApply} className="min-w-[140px] sm:min-w-[180px]">
                             Next
                         </PrimaryButton>
                     </div>
