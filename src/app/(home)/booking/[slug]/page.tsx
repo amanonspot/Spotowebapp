@@ -1,6 +1,6 @@
 "use client";
 
-import React, { use, useEffect, useRef, useState } from "react";
+import React, { use, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import OwnerCard from "@/components/revamp/OwnerCard";
 import UnlockCard from "@/components/revamp/UnlockCard";
@@ -13,6 +13,13 @@ import UnlockPaymentFlowOverlay from "@/app/(home)/booking/[slug]/_components/Un
 interface PageProps {
     params: Promise<{ slug: string }>;
 }
+
+type PassStatusDto = {
+    has_one_day_active?: boolean;
+    has_weekly_active?: boolean;
+    one_day_pass_expires_at?: string | null;
+    weekly_pass_expires_at?: string | null;
+};
 
 export default function BookingDetailPage({ params }: PageProps) {
     const router = useRouter();
@@ -34,6 +41,7 @@ export default function BookingDetailPage({ params }: PageProps) {
         type: "one_day" | "weekly";
         expiresAt: string | null;
     } | null>(null);
+    const [passStatusHydrated, setPassStatusHydrated] = useState(false);
     const resumeHandledRef = useRef(false);
     const resumeAction = searchParams.get("resume");
     const resumePassType: "one_day" | "weekly" = searchParams.get("passType") === "one_day" ? "one_day" : "weekly";
@@ -50,6 +58,47 @@ export default function BookingDetailPage({ params }: PageProps) {
         setPaymentError(null);
         setPaymentFlowState("paywall");
     };
+
+    const mapPassStatusToInfo = (data: PassStatusDto | undefined | null) => {
+        if (!data) return null;
+        if (data.has_weekly_active) {
+            return {
+                type: "weekly" as const,
+                expiresAt: data.weekly_pass_expires_at || null,
+            };
+        }
+        if (data.has_one_day_active) {
+            return {
+                type: "one_day" as const,
+                expiresAt: data.one_day_pass_expires_at || null,
+            };
+        }
+        return null;
+    };
+
+    const refreshPassStatus = useCallback(async () => {
+        const session = authAdapter.getSession();
+        if (!session.isAuthenticated) {
+            setActivePassInfo(null);
+            setPassStatusHydrated(true);
+            return null;
+        }
+
+        try {
+            const response = await rentalsService.getMyPassStatus();
+            const data = (response as { data?: unknown }).data as PassStatusDto | undefined;
+            const mapped = mapPassStatusToInfo(data);
+            setActivePassInfo(mapped);
+            setPassStatusHydrated(true);
+            return mapped;
+        } catch {
+            // Keep previous known backend truth; fallback to inactive only when no status has ever been hydrated.
+            if (!passStatusHydrated) {
+                setActivePassInfo(null);
+            }
+            return null;
+        }
+    }, [passStatusHydrated]);
 
     useEffect(() => {
         let mounted = true;
@@ -133,6 +182,7 @@ export default function BookingDetailPage({ params }: PageProps) {
                 } catch (error) {
                     setPaymentError(error instanceof Error ? error.message : "Unable to unlock owner contact.");
                 } finally {
+                    void refreshPassStatus();
                     setUnlockBusy(false);
                 }
             },
@@ -154,23 +204,9 @@ export default function BookingDetailPage({ params }: PageProps) {
                 // Check if user already has an active pass
                 setUnlockBusy(true);
                 try {
-                    const res = await rentalsService.getMyPassStatus();
-                    const status = (res as { data?: unknown }).data as {
-                        has_one_day_active?: boolean;
-                        has_weekly_active?: boolean;
-                        one_day_pass_expires_at?: string | null;
-                        weekly_pass_expires_at?: string | null;
-                    } | undefined;
-                    const hasOneDay = Boolean(status?.has_one_day_active);
-                    const hasWeekly = Boolean(status?.has_weekly_active);
-                    if (hasOneDay || hasWeekly) {
+                    const activePass = await refreshPassStatus();
+                    if (activePass) {
                         // Pass already active — show info, don't open payment
-                        setActivePassInfo({
-                            type: hasWeekly ? "weekly" : "one_day",
-                            expiresAt: hasWeekly
-                                ? (status?.weekly_pass_expires_at ?? null)
-                                : (status?.one_day_pass_expires_at ?? null),
-                        });
                         return;
                     }
                 } catch {
@@ -283,7 +319,7 @@ export default function BookingDetailPage({ params }: PageProps) {
             if (unlocked.status === "success") {
                 setIsUnlocked(true);
                 setPaymentFlowState("payment_success");
-                setActivePassInfo({ type: paymentContext.passType, expiresAt: null });
+                await refreshPassStatus();
             } else {
                 setPaymentFlowState("payment_failed");
                 setPaymentError("Payment received. Contact will unlock shortly — please refresh.");
@@ -308,38 +344,8 @@ export default function BookingDetailPage({ params }: PageProps) {
     };
 
     useEffect(() => {
-        const session = authAdapter.getSession();
-        if (!session.isAuthenticated) {
-            setActivePassInfo(null);
-            return;
-        }
-
-        const syncUnlockState = async () => {
-            try {
-                const status = await rentalsService.getMyPassStatus();
-                const data = (status as { data?: unknown }).data as
-                    | { has_one_day_active?: boolean; has_weekly_active?: boolean; one_day_pass_expires_at?: string; weekly_pass_expires_at?: string }
-                    | undefined;
-
-                if (!data) {
-                    setActivePassInfo(null);
-                    return;
-                }
-
-                if (data.has_weekly_active || data.has_one_day_active) {
-                    setActivePassInfo({
-                        type: data.has_weekly_active ? "weekly" : "one_day",
-                        expiresAt: data.has_weekly_active ? data.weekly_pass_expires_at || null : data.one_day_pass_expires_at || null,
-                    });
-                } else {
-                    setActivePassInfo(null);
-                }
-            } catch {
-                // keep UI optimistic for fake payment mode
-            }
-        };
-        void syncUnlockState();
-    }, [property?.id, isUnlocked]);
+        void refreshPassStatus();
+    }, [property?.id, isUnlocked, refreshPassStatus]);
 
     useEffect(() => {
         if (checkoutState?.status === "success") {
