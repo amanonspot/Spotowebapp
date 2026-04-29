@@ -1,16 +1,19 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import BottomNavigation from "@/components/BottomNavigation";
 import Chip from "@/components/revamp/Chip";
+import HomePromoBannerRotator from "@/components/revamp/HomePromoBannerRotator";
 import PrimaryButton from "@/components/revamp/PrimaryButton";
 import RevampPropertyCard from "@/components/revamp/PropertyCard";
 import { propertyAdapter } from "@/lib/adapters";
-import { HomeFeed, PropertyListItem } from "@/lib/adapters/types";
+import { HomeFeed, PropertyListItem, UnlockPaymentContext, UnlockPaymentFlowState } from "@/lib/adapters/types";
 import { requireAuthThenContinue } from "@/lib/auth/requireAuthAction";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { rentalsService } from "@/lib/rentals/service";
+import UnlockPaymentFlowOverlay from "@/app/(home)/booking/[slug]/_components/UnlockPaymentFlowOverlay";
+import { fakePaymentAdapter } from "@/lib/payments/fakePaymentAdapter";
 
 const initialFeed: HomeFeed = {
     categories: [],
@@ -47,6 +50,7 @@ function formatExpiry(iso: string | null): string {
 
 export default function HomePage() {
     const router = useRouter();
+    const searchParams = useSearchParams();
     const { isAuthenticated, user, logout } = useAuth();
     const [feed, setFeed] = useState<HomeFeed>(initialFeed);
     const [loading, setLoading] = useState(true);
@@ -55,7 +59,16 @@ export default function HomePage() {
     const [showProfileMenu, setShowProfileMenu] = useState(false);
     const [passStatus, setPassStatus] = useState<PassStatus | null>(null);
     const [passLoading, setPassLoading] = useState(false);
+    const [homePaymentFlowState, setHomePaymentFlowState] = useState<UnlockPaymentFlowState>("idle");
+    const [homePaymentContext, setHomePaymentContext] = useState<UnlockPaymentContext | null>(null);
+    const [homePaymentSessionId, setHomePaymentSessionId] = useState<string | null>(null);
+    const [homePaymentBusy, setHomePaymentBusy] = useState(false);
+    const [homePaymentError, setHomePaymentError] = useState<string | null>(null);
     const profileMenuRef = useRef<HTMLDivElement>(null);
+    const bannerResumeHandledRef = useRef(false);
+    const resumeAction = searchParams.get("resume");
+    const resumePassType: "one_day" | "weekly" = searchParams.get("passType") === "weekly" ? "weekly" : "one_day";
+    const globalPassAmount = 99;
 
     const handleProfileClick = async () => {
         if (!isAuthenticated) {
@@ -103,6 +116,30 @@ export default function HomePage() {
         });
     };
 
+    const openHomePassFlow = (passType: "one_day" | "weekly" = "one_day", amount = globalPassAmount) => {
+        setHomePaymentContext({
+            propertyId: "global_pass",
+            returnPath: "/",
+            passType,
+            amount,
+        });
+        setHomePaymentError(null);
+        setHomePaymentFlowState("paywall");
+    };
+
+    const handleBannerClick = (passType: "one_day" | "weekly") => {
+        void requireAuthThenContinue({
+            router,
+            intent: {
+                type: "buy_pass_global",
+                passType,
+            },
+            onAuthenticated: () => {
+                openHomePassFlow(passType);
+            },
+        });
+    };
+
     useEffect(() => {
         let mounted = true;
 
@@ -133,10 +170,88 @@ export default function HomePage() {
         };
     }, []);
 
+    useEffect(() => {
+        if (!isAuthenticated || !resumeAction || bannerResumeHandledRef.current) return;
+        if (resumeAction !== "buy_pass_global") return;
+        bannerResumeHandledRef.current = true;
+        openHomePassFlow(resumePassType);
+        router.replace("/");
+    }, [isAuthenticated, resumeAction, resumePassType, router]);
+
     const visibleListings = useMemo(() => {
         if (!selectedCategory) return feed.listings;
         return feed.listings.filter((item) => matchesCategory(item, selectedCategory));
     }, [feed.listings, selectedCategory]);
+
+    const handleHomeOverlayPayNow = async () => {
+        if (!homePaymentContext || homePaymentBusy) return;
+        setHomePaymentBusy(true);
+        setHomePaymentError(null);
+        setHomePaymentFlowState("payment_initiated");
+        try {
+            const session = await fakePaymentAdapter.initiate(homePaymentContext);
+            setHomePaymentSessionId(session.sessionId);
+            const resolved = await fakePaymentAdapter.resolve(session.sessionId);
+            if (resolved.lastOutcome === "success") {
+                setHomePaymentFlowState("payment_success");
+                try {
+                    const status = await rentalsService.getMyPassStatus();
+                    const liveData = (status as { data?: PassStatus }).data;
+                    if (liveData) setPassStatus(liveData);
+                } catch {
+                    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+                    setPassStatus((prev) => ({
+                        free_contacts_used: prev?.free_contacts_used ?? 0,
+                        free_contacts_remaining: prev?.free_contacts_remaining ?? 0,
+                        has_one_day_active: homePaymentContext.passType === "one_day" || Boolean(prev?.has_one_day_active),
+                        has_weekly_active: homePaymentContext.passType === "weekly" || Boolean(prev?.has_weekly_active),
+                        one_day_pass_expires_at:
+                            homePaymentContext.passType === "one_day" ? expiresAt : prev?.one_day_pass_expires_at ?? null,
+                        weekly_pass_expires_at:
+                            homePaymentContext.passType === "weekly" ? expiresAt : prev?.weekly_pass_expires_at ?? null,
+                    }));
+                }
+                return;
+            }
+            setHomePaymentFlowState("payment_failed");
+        } catch (err) {
+            setHomePaymentFlowState("payment_failed");
+            setHomePaymentError(err instanceof Error ? err.message : "Unable to process payment.");
+        } finally {
+            setHomePaymentBusy(false);
+        }
+    };
+
+    const handleHomeOverlayRetry = async () => {
+        if (!homePaymentSessionId) {
+            await handleHomeOverlayPayNow();
+            return;
+        }
+        setHomePaymentBusy(true);
+        setHomePaymentError(null);
+        setHomePaymentFlowState("payment_initiated");
+        try {
+            const resolved = await fakePaymentAdapter.retry(homePaymentSessionId);
+            if (resolved.lastOutcome === "success") {
+                setHomePaymentFlowState("payment_success");
+                return;
+            }
+            setHomePaymentFlowState("payment_failed");
+        } catch (err) {
+            setHomePaymentFlowState("payment_failed");
+            setHomePaymentError(err instanceof Error ? err.message : "Unable to retry payment.");
+        } finally {
+            setHomePaymentBusy(false);
+        }
+    };
+
+    const resetHomePaymentFlow = () => {
+        setHomePaymentFlowState("idle");
+        setHomePaymentContext(null);
+        setHomePaymentSessionId(null);
+        setHomePaymentError(null);
+        setHomePaymentBusy(false);
+    };
 
     return (
         <main className="min-h-screen bg-[#050507] pb-24 text-white">
@@ -298,11 +413,8 @@ export default function HomePage() {
                     </div>
                 </section>
 
-                <section className="mt-5 rounded-2xl bg-[#A67AEB] p-5 text-[#1b1028]">
-                    <p className="text-sm font-semibold text-[#523884]">Validity: 7 days</p>
-                    <p className="mt-2 text-xl font-semibold leading-snug sm:text-2xl">
-                        {feed.promoBannerText || "Find Verified Tenants with SPOTO for Free"}
-                    </p>
+                <section className="mt-5">
+                    <HomePromoBannerRotator onBannerClick={handleBannerClick} />
                 </section>
 
                 <section className="mt-6 sm:mt-8">
@@ -364,6 +476,18 @@ export default function HomePage() {
             </div>
 
             <BottomNavigation onSearchClick={() => router.push("/search")} />
+            <UnlockPaymentFlowOverlay
+                state={homePaymentFlowState}
+                context={homePaymentContext}
+                busy={homePaymentBusy}
+                errorMessage={homePaymentError}
+                onClosePaywall={() => setHomePaymentFlowState("dropoff_prompt")}
+                onReopenPaywall={() => setHomePaymentFlowState("paywall")}
+                onDismissDropoff={resetHomePaymentFlow}
+                onPayNow={handleHomeOverlayPayNow}
+                onRetryPayment={handleHomeOverlayRetry}
+                onContinueFromSuccess={resetHomePaymentFlow}
+            />
         </main>
     );
 }

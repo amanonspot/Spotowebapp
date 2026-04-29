@@ -147,6 +147,20 @@ export interface UnlockPaymentContext {
     amount: number;
 }
 
+export type HomePassFlowState =
+    | "idle"
+    | "paywall"
+    | "payment_initiated"
+    | "dropoff_prompt"
+    | "payment_success"
+    | "payment_failed";
+
+export interface HomePassFlowContext {
+    passType: "one_day" | "weekly";
+    amount: number;
+    returnPath: "/";
+}
+
 export interface StartUnlockPayload {
     propertyId: string;
     amount: number;

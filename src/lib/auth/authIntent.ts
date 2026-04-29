@@ -1,6 +1,6 @@
 "use client";
 
-export type AuthIntentType = "owner_list_property" | "unlock_contact" | "buy_pass" | "search";
+export type AuthIntentType = "owner_list_property" | "unlock_contact" | "buy_pass" | "buy_pass_global" | "search";
 
 export interface AuthIntentPayload {
     type: AuthIntentType;
@@ -23,7 +23,7 @@ const sanitizeIntent = (value: unknown): AuthIntentPayload | null => {
     if (!record) return null;
 
     const type = `${record.type || ""}` as AuthIntentType;
-    if (!["owner_list_property", "unlock_contact", "buy_pass", "search"].includes(type)) return null;
+    if (!["owner_list_property", "unlock_contact", "buy_pass", "buy_pass_global", "search"].includes(type)) return null;
 
     const createdAt = Number(record.createdAt || 0);
     if (!Number.isFinite(createdAt) || createdAt <= 0) return null;
@@ -102,6 +102,11 @@ export const toIntentDestination = (intent: AuthIntentPayload | null): string | 
     if (intent.type === "buy_pass" && intent.propertyId) {
         const passType = intent.passType === "one_day" || intent.passType === "weekly" ? intent.passType : "weekly";
         return `/booking/${intent.propertyId}?resume=buy_pass&passType=${passType}`;
+    }
+
+    if (intent.type === "buy_pass_global") {
+        const passType = intent.passType === "weekly" ? "weekly" : "one_day";
+        return `/?resume=buy_pass_global&passType=${passType}`;
     }
 
     if (intent.type === "search") return "/search";
