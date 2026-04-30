@@ -1,5 +1,6 @@
 import React from "react";
 import Image from "next/image";
+import Logo from "@/components/Logo";
 import loginIcon from "../../../../../public/assets/images/login-icon.svg";
 import PhoneInput from "./PhoneInput";
 import ContinueButton from "./ContinueButton";
@@ -18,6 +19,7 @@ interface DesktopLoginViewProps {
     onResendOTP?: () => void;
     onChangeNumber?: () => void;
     showOtpSentMessage?: boolean;
+    resendLoading?: boolean;
 }
 
 export default function DesktopLoginView({
@@ -33,6 +35,7 @@ export default function DesktopLoginView({
     onResendOTP,
     onChangeNumber,
     showOtpSentMessage = false,
+    resendLoading = false,
 }: DesktopLoginViewProps) {
     const [otpDigits, setOtpDigits] = React.useState(['', '', '', '']);
     const inputRefs = [
@@ -80,20 +83,13 @@ export default function DesktopLoginView({
                 
                 {/* Logo */}
                 <div className="flex items-center justify-center -mb-16 -mt-4">
-                    <Image
-                        src="/logos/light.png"
-                        alt="Logo"
-                        width={220}
-                        height={75}
-                        className="h-auto"
-                        priority
-                    />
+                    <Logo className="!w-[220px]" />
                 </div>
 
                 {!otpSent && (
                     /* Tagline - Only on Login page */
                     <p className="text-white text-center text-sm -mb-4">
-                        Book your spot at the perfect stay and experience ✨🛌
+                        Let's find a new House ✨🛌
                     </p>
                 )}
 
@@ -194,13 +190,14 @@ export default function DesktopLoginView({
                             )}
                         </button>
 
-                        {/* Resend Link Button */}
+                        {/* Resend OTP */}
                         <button
-                            onClick={onResendOTP}
-                            disabled={loading}
+                            type="button"
+                            onClick={() => onResendOTP?.()}
+                            disabled={loading || resendLoading || !onResendOTP}
                             className="w-full bg-transparent border border-white/20 text-white font-semibold py-3.5 rounded-xl hover:bg-white/5 hover:border-white/35 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 mb-6"
                         >
-                            Resend link
+                            {resendLoading ? "Sending OTP…" : "Resend OTP"}
                         </button>
 
                         {/* OTP Validity Note */}

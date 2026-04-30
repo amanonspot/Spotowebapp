@@ -55,7 +55,6 @@ export interface PropertyListItem {
 }
 
 export interface UnlockOffer {
-    weeklyPassPrice: number;
     headline: string;
     subHeadline: string;
     bullets: string[];
@@ -84,6 +83,15 @@ export interface PropertyDetail extends PropertyListItem {
     latitude?: string;
     longitude?: string;
     availableFrom?: string;
+    /** Owner-entered address (public listing; exact pin may still be pass-gated in UI) */
+    addressLine?: string;
+    builtUpAreaSqft?: number | null;
+    propertyTypeLabel?: string;
+    bhkLabel?: string;
+    furnishingLabel?: string;
+    availabilityLabel?: string;
+    /** When listing was created via employee flow */
+    listedByEmployeeName?: string;
     amenities: string[];
     amenityIds?: string[];
     highlights: string[];
@@ -143,7 +151,7 @@ export type UnlockPaymentFlowState =
 export interface UnlockPaymentContext {
     propertyId: string;
     returnPath: string;
-    passType: "one_day" | "weekly";
+    passType: "one_day";
     amount: number;
 }
 
@@ -156,7 +164,7 @@ export type HomePassFlowState =
     | "payment_failed";
 
 export interface HomePassFlowContext {
-    passType: "one_day" | "weekly";
+    passType: "one_day";
     amount: number;
     returnPath: "/";
 }
@@ -179,7 +187,6 @@ export interface CheckoutState {
     creditsRemaining?: number;
     paywall?: {
         oneDay: { passType: "one_day"; price: number; currency: string; durationDays: number };
-        weekly: { passType: "weekly"; price: number; currency: string; durationDays: number };
     };
     payment?: {
         paymentId: string;
@@ -187,14 +194,14 @@ export interface CheckoutState {
         razorpayKeyId: string;
         amount: number;
         currency: string;
-        passType: "one_day" | "weekly";
+        passType: "one_day";
     };
 }
 
 export interface CheckoutAdapter {
     startUnlock(payload: StartUnlockPayload): Promise<CheckoutState>;
     confirmUnlock(id: string, outcome?: "success" | "failed"): Promise<CheckoutState>;
-    activatePass(id: string, passType: "one_day" | "weekly"): Promise<CheckoutState>;
+    activatePass(id: string): Promise<CheckoutState>;
     getUnlockStatus(id: string): Promise<CheckoutState | null>;
 }
 

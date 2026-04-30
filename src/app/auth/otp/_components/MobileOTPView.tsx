@@ -18,6 +18,7 @@ interface MobileOTPViewProps {
     onLogin: () => void;
     onResend: () => void;
     loading?: boolean;
+    resendLoading?: boolean;
     error?: string;
 }
 
@@ -29,6 +30,7 @@ export default function MobileOTPView({
     onLogin,
     onResend,
     loading = false,
+    resendLoading = false,
     error,
 }: MobileOTPViewProps) {
     const router = useRouter();
@@ -104,8 +106,7 @@ export default function MobileOTPView({
                         loading={loading}
                     />
 
-                    {/* Resend Link */}
-                    <ResendButton onClick={onResend} disabled={timer > 0} />
+                    <ResendButton onClick={onResend} disabled={timer > 0} loading={resendLoading} />
 
                     {/* Timer Text */}
                     <OTPTimer timer={timer} />

@@ -3,9 +3,12 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Bell, Building2, ChevronLeft, House, Plus, Upload, X } from "lucide-react";
+import OwnerMapPinPicker from "@/components/owner/OwnerMapPinPicker";
 import PrimaryButton from "@/components/revamp/PrimaryButton";
 import ShimmerBlock from "@/components/revamp/ShimmerBlock";
+import config from "@/config/config";
 import { ownerAdapter } from "@/lib/adapters";
+import { extractLatLngFromGoogleMapsUrl } from "@/lib/maps/parseGoogleMapsUrl";
 import { OwnerListingFormInput, OwnerMastersData, SelectOption } from "@/lib/adapters/types";
 import { RENTALS_MOCK_MODE } from "@/lib/rentals";
 
@@ -27,6 +30,16 @@ const EDIT_STEP_TITLES = [
 const sanitizeNumericInput = (value: string) => value.replace(/[^\d]/g, "");
 const sanitizeTextInput = (value: string) => value.replace(/\u0000/g, "");
 const PROPERTY_TITLE_MAX_LENGTH = 50;
+
+/** Document categories for the verification upload dropdown. */
+const DOCUMENT_TYPE_OPTIONS: { value: string; label: string }[] = [
+    { value: "electricity_bill", label: "Electricity bill" },
+    { value: "rent_agreement", label: "Rent / lease agreement" },
+    { value: "property_tax", label: "Property tax receipt" },
+    { value: "sale_deed", label: "Sale deed / title" },
+    { value: "id_proof", label: "Government ID proof" },
+    { value: "other", label: "Other" },
+];
 
 const emptyForm: OwnerListingFormInput = {
     propertyTitle: "",
@@ -326,7 +339,9 @@ export default function OwnerListingWizard({ mode = "create", propertyId, initia
     }, [form.cityId, masters.cities]);
 
     useEffect(() => {
-        if (isEditMode || prefillHydrated) return;
+        if (prefillHydrated) return;
+        if (isEditMode && loadingInitial) return;
+
         let mounted = true;
 
         const hydratePrefill = async () => {
@@ -336,7 +351,7 @@ export default function OwnerListingWizard({ mode = "create", propertyId, initia
 
                 setForm((prev) => {
                     const next = { ...prev };
-                    if (!prev.ownerName?.trim() && prefill.ownerName) {
+                    if (!isEditMode && !prev.ownerName?.trim() && prefill.ownerName) {
                         next.ownerName = prefill.ownerName;
                     }
                     if (!prev.contactPhone?.trim() && prefill.contactPhone) {
@@ -353,7 +368,7 @@ export default function OwnerListingWizard({ mode = "create", propertyId, initia
         return () => {
             mounted = false;
         };
-    }, [isEditMode, prefillHydrated]);
+    }, [isEditMode, prefillHydrated, loadingInitial]);
 
     const propertyTypeOptions = useMemo(
         () => (masters.propertyTypes.length > 0 ? masters.propertyTypes : RENTALS_MOCK_MODE ? fallbackPropertyTypes : []),
@@ -400,7 +415,8 @@ export default function OwnerListingWizard({ mode = "create", propertyId, initia
     );
 
     const mapQuery = [selectedLocalityName, selectedCityName].filter(Boolean).join(", ");
-    const mapHref = form.mapUrl?.trim() || (mapQuery ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapQuery)}` : "");
+
+    const hasGoogleMapsKey = Boolean((config.googleMapsApiKey || config.googlePlacesApiKey || "").trim());
 
     const imagePreviews = useMemo(
         () => form.imageFiles.map((file) => URL.createObjectURL(file)),
@@ -477,6 +493,17 @@ export default function OwnerListingWizard({ mode = "create", propertyId, initia
             });
             return changed ? next : prev;
         });
+    };
+
+    const handleMapUrlInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const next = sanitizeTextInput(event.target.value);
+        const extracted = extractLatLngFromGoogleMapsUrl(next);
+        setForm((prev) => ({
+            ...prev,
+            mapUrl: next,
+            ...(extracted ? { latitude: extracted.lat, longitude: extracted.lng } : {}),
+        }));
+        clearFieldError("mapUrl", "latitude", "longitude");
     };
 
     const renderFieldError = (...keys: OwnerFieldKey[]) => {
@@ -623,8 +650,8 @@ export default function OwnerListingWizard({ mode = "create", propertyId, initia
         "rounded-xl border border-white/20 px-3 py-2 text-sm text-white/85 transition hover:border-[#A67AEB] active:scale-[0.98]";
 
     return (
-        <main className="min-h-screen bg-[#050507] text-white">
-            <div className="mx-auto w-full max-w-[520px] px-4 pb-8 pt-4 sm:max-w-xl md:max-w-2xl lg:px-8">
+        <main className="min-h-[100dvh] min-h-screen bg-[#050507] text-white">
+            <div className="mx-auto w-full max-w-full px-4 pb-[max(2rem,calc(1.5rem+env(safe-area-inset-bottom,0px)))] pt-4 sm:px-6 sm:pb-8 sm:pt-5 md:max-w-2xl md:px-7 lg:max-w-3xl lg:px-8 xl:max-w-4xl 2xl:max-w-5xl">
                 {/* Step header */}
                 <div className="mb-5 flex items-center justify-between gap-3">
                     <button
@@ -658,7 +685,6 @@ export default function OwnerListingWizard({ mode = "create", propertyId, initia
                 </div>
 
                 <h1 className="text-2xl font-semibold leading-tight sm:text-3xl">{stepTitles[step - 1]}</h1>
-                <p className="mt-1 text-sm text-white/50">SPOTO · List Your Property</p>
 
                 {loadingInitial ? (
                     <div className="mt-5 rounded-xl border border-white/20 bg-[#0d0d14] px-3 py-3">
@@ -704,11 +730,6 @@ export default function OwnerListingWizard({ mode = "create", propertyId, initia
                                         </button>
                                     );
                                 })}
-                                {propertyTypeOptions.length === 1 && !RENTALS_MOCK_MODE ? (
-                                    <p className="rounded-xl border border-white/20 bg-[#0d0d14] px-3 py-2 text-xs text-white/70">
-                                        Only one property type is configured in backend masters right now.
-                                    </p>
-                                ) : null}
                                 {propertyTypeOptions.length === 0 ? (
                                     <p className="rounded-xl border border-white/20 bg-[#0d0d14] px-3 py-2 text-sm text-white/70">
                                         Property types are unavailable right now. Please retry.
@@ -763,9 +784,6 @@ export default function OwnerListingWizard({ mode = "create", propertyId, initia
                                         );
                                     })}
                                 </div>
-                                {bhkOptions.length === 1 && !RENTALS_MOCK_MODE ? (
-                                    <p className="mt-2 text-xs text-white/60">Only one BHK option is currently configured.</p>
-                                ) : null}
                                 {renderFieldError("bhkId")}
                             </section>
 
@@ -820,7 +838,6 @@ export default function OwnerListingWizard({ mode = "create", propertyId, initia
                                     </span>
                                     <div>
                                         <p className="text-sm font-semibold">Add Property Photos, videos...</p>
-                                        <p className="text-xs text-white/50">Best fit 1080 x 1350 (4:5) Portrait/vertical</p>
                                     </div>
                                     <input
                                         type="file"
@@ -1002,7 +1019,7 @@ export default function OwnerListingWizard({ mode = "create", propertyId, initia
                                     {(masters.availabilityTypes.length > 0
                                         ? masters.availabilityTypes
                                         : RENTALS_MOCK_MODE
-                                        ? [fallbackOption("Immediately", "immediate")]
+                                        ? [fallbackOption("Immediate", "immediate")]
                                         : []).map((option) => {
                                         const active = form.availabilityId === option.id;
                                         return (
@@ -1023,21 +1040,6 @@ export default function OwnerListingWizard({ mode = "create", propertyId, initia
                                             </button>
                                         );
                                     })}
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            updateField("availabilityMode", "immediate");
-                                            updateField("availableFromDate", "");
-                                            if (immediateAvailability) {
-                                                updateField("availabilityId", immediateAvailability.id);
-                                            }
-                                        }}
-                                        className={`${chipClass} ${
-                                            form.availabilityMode !== "date" ? "border-[#B7F041] bg-[#B7F041] text-[#111]" : ""
-                                        }`}
-                                    >
-                                        Immediately
-                                    </button>
                                 </div>
                                 {renderFieldError("availabilityId", "availableFromDate")}
                             </section>
@@ -1046,212 +1048,266 @@ export default function OwnerListingWizard({ mode = "create", propertyId, initia
 
                     {step === 5 && (
                         <>
-                            <section className={sectionCardClass}>
-                                <p className="mb-3 text-sm font-semibold">Confirm Map Location</p>
+                            <section className={`${sectionCardClass} space-y-3`}>
+                                <p className="text-sm font-semibold text-white/90">City &amp; locality</p>
                                 <input
                                     value={localitySearch}
                                     onChange={(event) => setLocalitySearch(sanitizeTextInput(event.target.value))}
-                                    placeholder="Search locality, street name..."
+                                    placeholder="Search locality…"
                                     className="h-11 w-full rounded-xl border border-white/20 bg-[#0d0d14] px-3 text-sm text-white/90 outline-none placeholder:text-white/35 focus:border-[#A67AEB]"
                                 />
 
-                                <p className="mt-3 text-xs text-white/55">Select city:</p>
-                                <div className="mt-2 flex flex-wrap gap-2">
-                                    {cityOptions.map((option) => {
-                                        const active = form.cityId === option.id;
-                                        return (
-                                            <button
-                                                key={option.id}
-                                                type="button"
-                                                onClick={() => {
-                                                    setLocalitySearch("");
-                                                    setForm((prev) => ({
-                                                        ...prev,
-                                                        cityId: option.id,
-                                                        localityId: prev.cityId === option.id ? prev.localityId : "",
-                                                    }));
-                                                }}
-                                                className={`${chipClass} ${active ? "border-[#B7F041] bg-[#B7F041] text-[#111]" : ""}`}
-                                            >
-                                                {option.name}
-                                            </button>
-                                        );
-                                    })}
+                                <div>
+                                    <p className="text-xs font-medium text-white/55">City</p>
+                                    <div className="mt-2 flex flex-wrap gap-2">
+                                        {cityOptions.map((option) => {
+                                            const active = form.cityId === option.id;
+                                            return (
+                                                <button
+                                                    key={option.id}
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setLocalitySearch("");
+                                                        setForm((prev) => ({
+                                                            ...prev,
+                                                            cityId: option.id,
+                                                            localityId: prev.cityId === option.id ? prev.localityId : "",
+                                                        }));
+                                                    }}
+                                                    className={`${chipClass} ${active ? "border-[#B7F041] bg-[#B7F041] text-[#111]" : ""}`}
+                                                >
+                                                    {option.name}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                    {renderFieldError("cityId")}
                                 </div>
-                                {renderFieldError("cityId")}
 
-                                <p className="mt-3 text-xs text-white/55">Currently Live in:</p>
-                                <div className="mt-2 flex max-h-36 flex-wrap gap-2 overflow-y-auto pr-1">
-                                    {filteredLocalities.map((option) => {
-                                        const active = form.localityId === option.id;
-                                        return (
-                                            <button
-                                                key={option.id}
-                                                type="button"
-                                                onClick={() => updateField("localityId", option.id)}
-                                                className={`${chipClass} ${active ? "border-[#B7F041] bg-[#B7F041] text-[#111]" : ""}`}
-                                            >
-                                                {option.name}
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-                                {renderFieldError("localityId")}
-                                {filteredLocalities.length === 0 ? (
-                                    <p className="mt-2 text-xs text-white/60">No localities match this search.</p>
-                                ) : null}
-
-                                <div className="mt-3 rounded-xl border border-white/15 bg-white/5 p-3 text-sm text-white/80">
-                                    <p className="font-semibold text-white/90">Map Preview</p>
-                                    <p className="mt-1 text-xs text-white/65">
-                                        {mapQuery || "Select city/locality to resolve the map location."}
-                                    </p>
-                                    {mapHref ? (
-                                        <a
-                                            href={mapHref}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="mt-2 inline-flex rounded-lg border border-[#A67AEB] px-3 py-1.5 text-xs font-semibold text-[#cfb7ff]"
-                                        >
-                                            Open Map
-                                        </a>
-                                    ) : (
-                                        <p className="mt-2 text-xs text-white/60">
-                                            Map services unavailable here. Continue using selected locality/city.
-                                        </p>
-                                    )}
+                                <div>
+                                    <p className="text-xs font-medium text-white/55">Locality</p>
+                                    <div className="mt-2 flex max-h-36 flex-wrap gap-2 overflow-y-auto pr-1">
+                                        {filteredLocalities.map((option) => {
+                                            const active = form.localityId === option.id;
+                                            return (
+                                                <button
+                                                    key={option.id}
+                                                    type="button"
+                                                    onClick={() => updateField("localityId", option.id)}
+                                                    className={`${chipClass} ${active ? "border-[#B7F041] bg-[#B7F041] text-[#111]" : ""}`}
+                                                >
+                                                    {option.name}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                    {renderFieldError("localityId")}
+                                    {filteredLocalities.length === 0 ? (
+                                        <p className="mt-2 text-xs text-white/60">No localities match this search.</p>
+                                    ) : null}
                                 </div>
                             </section>
 
-                            <input
-                                value={form.addressLine}
-                                onChange={(event) => updateField("addressLine", sanitizeTextInput(event.target.value))}
-                                placeholder="Flat, House No., Building, Apartment"
-                                className="h-12 w-full rounded-xl border border-white/20 bg-[#0d0d14] px-3 text-sm text-white/90 outline-none placeholder:text-white/35 focus:border-[#A67AEB]"
-                            />
-                            {renderFieldError("addressLine")}
-                            <input
-                                value={form.streetLocalityArea || ""}
-                                onChange={(event) => updateField("streetLocalityArea", sanitizeTextInput(event.target.value))}
-                                placeholder="Street, Locality, Area"
-                                className="h-12 w-full rounded-xl border border-white/20 bg-[#0d0d14] px-3 text-sm text-white/90 outline-none placeholder:text-white/35 focus:border-[#A67AEB]"
-                            />
-                            {renderFieldError("streetLocalityArea")}
-                            <input
-                                value={form.landmark || ""}
-                                onChange={(event) => updateField("landmark", sanitizeTextInput(event.target.value))}
-                                placeholder="Landmark"
-                                className="h-12 w-full rounded-xl border border-white/20 bg-[#0d0d14] px-3 text-sm text-white/90 outline-none placeholder:text-white/35 focus:border-[#A67AEB]"
-                            />
-                            {renderFieldError("landmark")}
-                            <input
-                                value={form.mapUrl || ""}
-                                onChange={(event) => updateField("mapUrl", sanitizeTextInput(event.target.value))}
-                                placeholder="Google Maps Location Link"
-                                className="h-12 w-full rounded-xl border border-white/20 bg-[#0d0d14] px-3 text-sm text-white/90 outline-none placeholder:text-white/35 focus:border-[#A67AEB]"
-                            />
-                            {renderFieldError("mapUrl")}
-                            <div className="grid grid-cols-2 gap-2">
+                            <section className={`${sectionCardClass} space-y-3`}>
+                                <p className="text-sm font-semibold text-white/90">Street address</p>
                                 <input
-                                    value={form.latitude || ""}
-                                    onChange={(event) => updateField("latitude", sanitizeTextInput(event.target.value))}
-                                    placeholder="Latitude (optional)"
+                                    value={form.addressLine}
+                                    onChange={(event) => updateField("addressLine", sanitizeTextInput(event.target.value))}
+                                    placeholder="Flat / house no., building, street"
                                     className="h-12 w-full rounded-xl border border-white/20 bg-[#0d0d14] px-3 text-sm text-white/90 outline-none placeholder:text-white/35 focus:border-[#A67AEB]"
                                 />
-                                <input
-                                    value={form.longitude || ""}
-                                    onChange={(event) => updateField("longitude", sanitizeTextInput(event.target.value))}
-                                    placeholder="Longitude (optional)"
-                                    className="h-12 w-full rounded-xl border border-white/20 bg-[#0d0d14] px-3 text-sm text-white/90 outline-none placeholder:text-white/35 focus:border-[#A67AEB]"
-                                />
-                            </div>
-                            {renderFieldError("latitude", "longitude")}
-                            <textarea
-                                rows={3}
-                                value={form.description}
-                                onChange={(event) => updateField("description", sanitizeTextInput(event.target.value))}
-                                placeholder="Describe your property"
-                                className="w-full rounded-xl border border-white/20 bg-[#0d0d14] px-3 py-3 text-sm text-white/90 outline-none placeholder:text-white/35 focus:border-[#A67AEB]"
-                            />
-                            {renderFieldError("description")}
-                            <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-white/20 bg-[#0d0d14] px-3 py-3 text-sm text-white/80">
-                                <Upload className="h-4 w-4" />
-                                {documentSelected ? "Replace Verification Document" : "Upload Verification Document"}
-                                <input
-                                    type="file"
-                                    accept=".pdf,.doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/jpeg,image/png,image/jpg"
-                                    onChange={(event) => {
-                                        const next = (event.target.files || [])[0] || null;
-                                        updateField("documentFile", next);
-                                        updateField("clearDocuments", false);
-                                        if (next && !form.documentType) {
-                                            updateField("documentType", "electricity_bill");
-                                        }
-                                        updateField("documentMeta", next
-                                            ? {
-                                                  selectedName: next.name,
-                                                  selectedSize: next.size,
-                                                  selectedType: next.type,
-                                                  uploadState: "selected",
-                                              }
-                                            : { uploadState: "idle" });
-                                    }}
-                                    className="hidden"
-                                />
-                            </label>
-                            {documentSelected ? (
-                                <div className="rounded-xl border border-white/20 bg-[#0d0d14] px-3 py-2 text-xs text-white/75">
-                                    <p className="font-semibold text-white/90">
-                                        {form.documentMeta?.selectedName ||
-                                            form.documentFile?.name ||
-                                            form.documentMeta?.existingDocumentUrl?.split("/").pop() ||
-                                            "Verification document selected"}
-                                    </p>
-                                    <p>
-                                        {(form.documentMeta?.selectedSize || form.documentFile?.size || 0) > 0
-                                            ? `${(((form.documentMeta?.selectedSize || form.documentFile?.size || 0) / 1024 / 1024).toFixed(2))} MB`
-                                            : form.documentMeta?.existingUploadedAt
-                                            ? `Uploaded on ${new Date(form.documentMeta.existingUploadedAt).toLocaleString("en-IN")}`
-                                            : "Existing document on file"}
-                                    </p>
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            updateField("documentFile", null);
-                                            updateField("clearDocuments", true);
-                                            updateField("documentMeta", { uploadState: "idle" });
+                                {renderFieldError("addressLine")}
+                            </section>
+
+                            <section className={`${sectionCardClass} space-y-3`}>
+                                <p className="text-sm font-semibold text-white/90">Map link &amp; coordinates</p>
+                                {hasGoogleMapsKey ? (
+                                    <OwnerMapPinPicker
+                                        mapQuery={mapQuery}
+                                        initialLat={form.latitude || ""}
+                                        initialLng={form.longitude || ""}
+                                        onPick={({ lat, lng, mapUrl }) => {
+                                            setForm((prev) => ({
+                                                ...prev,
+                                                latitude: lat,
+                                                longitude: lng,
+                                                mapUrl,
+                                            }));
+                                            clearFieldError("mapUrl", "latitude", "longitude");
                                         }}
-                                        className="mt-2 rounded-lg border border-red-400/40 px-2 py-1 text-red-200"
-                                    >
-                                        Remove document
-                                    </button>
-                                </div>
-                            ) : (
-                                <p className="text-xs text-white/60">
-                                    Upload status: not selected. Required document type and file must be submitted together.
-                                </p>
-                            )}
-                            {renderFieldError("documentType", "documentFile")}
-                            <p className="text-sm font-semibold text-white/80">Owner Name</p>
-                            <input
-                                value={form.ownerName || ""}
-                                onChange={(event) => updateField("ownerName", sanitizeTextInput(event.target.value))}
-                                placeholder="Enter full name"
-                                className="h-12 w-full rounded-xl border border-white/20 bg-[#0d0d14] px-3 text-sm text-white/90 outline-none placeholder:text-white/35 focus:border-[#A67AEB]"
-                            />
-                            {renderFieldError("ownerName")}
-                            <p className="text-sm font-semibold text-white/80">Phone Number</p>
-                            <div className="flex items-center rounded-xl border border-white/20 bg-[#0d0d14] px-3">
-                                <span className="mr-2 rounded-md bg-white/10 px-2 py-1 text-sm">🇮🇳 +91</span>
+                                    />
+                                ) : null}
                                 <input
-                                    value={form.contactPhone}
-                                    onChange={(event) => updateField("contactPhone", sanitizeNumericInput(event.target.value).slice(0, 10))}
-                                    placeholder="Enter mobile number"
-                                    inputMode="numeric"
-                                    className="h-12 w-full bg-transparent text-sm text-white/90 outline-none placeholder:text-white/35"
+                                    value={form.mapUrl || ""}
+                                    onChange={handleMapUrlInputChange}
+                                    placeholder="Google Maps share link"
+                                    className="h-12 w-full rounded-xl border border-white/20 bg-[#0d0d14] px-3 text-sm text-white/90 outline-none placeholder:text-white/35 focus:border-[#A67AEB]"
                                 />
-                            </div>
-                            {renderFieldError("contactPhone")}
+                                {renderFieldError("mapUrl")}
+                                <div className="grid grid-cols-2 gap-2">
+                                    <input
+                                        value={form.latitude || ""}
+                                        onChange={(event) => updateField("latitude", sanitizeTextInput(event.target.value))}
+                                        placeholder="Latitude"
+                                        className="h-12 w-full rounded-xl border border-white/20 bg-[#0d0d14] px-3 text-sm text-white/90 outline-none placeholder:text-white/35 focus:border-[#A67AEB]"
+                                    />
+                                    <input
+                                        value={form.longitude || ""}
+                                        onChange={(event) => updateField("longitude", sanitizeTextInput(event.target.value))}
+                                        placeholder="Longitude"
+                                        className="h-12 w-full rounded-xl border border-white/20 bg-[#0d0d14] px-3 text-sm text-white/90 outline-none placeholder:text-white/35 focus:border-[#A67AEB]"
+                                    />
+                                </div>
+                                {renderFieldError("latitude", "longitude")}
+                            </section>
+
+                            <section className={`${sectionCardClass} space-y-3`}>
+                                <p className="text-sm font-semibold text-white/90">Description</p>
+                                <textarea
+                                    rows={3}
+                                    value={form.description}
+                                    onChange={(event) => updateField("description", sanitizeTextInput(event.target.value))}
+                                    placeholder="Describe the property for tenants"
+                                    className="w-full rounded-xl border border-white/20 bg-[#0d0d14] px-3 py-3 text-sm text-white/90 outline-none placeholder:text-white/35 focus:border-[#A67AEB]"
+                                />
+                                {renderFieldError("description")}
+                                <input
+                                    value={form.streetLocalityArea || ""}
+                                    onChange={(event) => updateField("streetLocalityArea", sanitizeTextInput(event.target.value))}
+                                    placeholder="Street / area (optional)"
+                                    className="h-12 w-full rounded-xl border border-white/20 bg-[#0d0d14] px-3 text-sm text-white/90 outline-none placeholder:text-white/35 focus:border-[#A67AEB]"
+                                />
+                                {renderFieldError("streetLocalityArea")}
+                                <input
+                                    value={form.landmark || ""}
+                                    onChange={(event) => updateField("landmark", sanitizeTextInput(event.target.value))}
+                                    placeholder="Landmark (optional)"
+                                    className="h-12 w-full rounded-xl border border-white/20 bg-[#0d0d14] px-3 text-sm text-white/90 outline-none placeholder:text-white/35 focus:border-[#A67AEB]"
+                                />
+                                {renderFieldError("landmark")}
+                            </section>
+
+                            <section className={`${sectionCardClass} space-y-3`}>
+                                <p className="text-sm font-semibold text-white/90">Owner contact</p>
+                                <input
+                                    value={form.ownerName || ""}
+                                    onChange={(event) => updateField("ownerName", sanitizeTextInput(event.target.value))}
+                                    placeholder="Full name"
+                                    className="h-12 w-full rounded-xl border border-white/20 bg-[#0d0d14] px-3 text-sm text-white/90 outline-none placeholder:text-white/35 focus:border-[#A67AEB]"
+                                />
+                                {renderFieldError("ownerName")}
+                                <div className="flex h-12 items-stretch overflow-hidden rounded-xl border border-white/20 bg-[#0d0d14]">
+                                    <span className="flex shrink-0 items-center border-r border-white/10 bg-white/5 px-3 text-sm font-medium leading-none text-white/90 whitespace-nowrap">
+                                        🇮🇳 +91
+                                    </span>
+                                    <input
+                                        value={form.contactPhone}
+                                        onChange={(event) =>
+                                            updateField("contactPhone", sanitizeNumericInput(event.target.value).slice(0, 10))
+                                        }
+                                        placeholder="10-digit mobile number"
+                                        inputMode="numeric"
+                                        className="min-w-0 flex-1 bg-transparent px-3 text-sm text-white/90 outline-none placeholder:text-white/35 focus:ring-0"
+                                    />
+                                </div>
+                                {renderFieldError("contactPhone")}
+                            </section>
+
+                            <section className={`${sectionCardClass} space-y-3`}>
+                                <p className="text-sm font-semibold text-white/90">Verification document</p>
+                                <select
+                                    value={form.documentType || ""}
+                                    onChange={(event) => {
+                                        const v = event.target.value;
+                                        updateField("documentType", v);
+                                        clearFieldError("documentType", "documentFile");
+                                    }}
+                                    className="h-12 w-full cursor-pointer appearance-none rounded-xl border border-white/20 bg-[#0d0d14] py-0 pr-10 pl-3 text-sm text-white/90 outline-none focus:border-[#A67AEB] bg-[length:1.25rem] bg-[position:right_0.65rem_center] bg-no-repeat"
+                                    style={{
+                                        backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%23ffffffb3' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`,
+                                    }}
+                                >
+                                    <option value="">Select document type…</option>
+                                    {DOCUMENT_TYPE_OPTIONS.map((opt) => (
+                                        <option key={opt.value} value={opt.value}>
+                                            {opt.label}
+                                        </option>
+                                    ))}
+                                </select>
+                                <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-white/20 bg-[#0d0d14] px-3 py-3 text-sm text-white/80">
+                                    <Upload className="h-4 w-4" />
+                                    {documentSelected ? "Replace document file" : "Upload document file"}
+                                    <input
+                                        type="file"
+                                        accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
+                                        onChange={(event) => {
+                                            const next = (event.target.files || [])[0] || null;
+                                            updateField("documentFile", next);
+                                            updateField("clearDocuments", false);
+                                            if (next && !form.documentType) {
+                                                updateField("documentType", "electricity_bill");
+                                            }
+                                            updateField(
+                                                "documentMeta",
+                                                next
+                                                    ? {
+                                                          selectedName: next.name,
+                                                          selectedSize: next.size,
+                                                          selectedType: next.type,
+                                                          uploadState: "selected",
+                                                      }
+                                                    : { uploadState: "idle" }
+                                            );
+                                        }}
+                                        className="hidden"
+                                    />
+                                </label>
+                                {documentSelected ? (
+                                    <div className="rounded-xl border border-white/20 bg-[#0d0d14] px-3 py-2 text-xs text-white/75">
+                                        <p className="font-semibold text-white/90">
+                                            {form.documentMeta?.selectedName ||
+                                                form.documentFile?.name ||
+                                                form.documentMeta?.existingDocumentUrl?.split("/").pop() ||
+                                                "Document selected"}
+                                        </p>
+                                        <p>
+                                            {(form.documentMeta?.selectedSize || form.documentFile?.size || 0) > 0
+                                                ? `${(
+                                                      (form.documentMeta?.selectedSize || form.documentFile?.size || 0) /
+                                                      1024 /
+                                                      1024
+                                                  ).toFixed(2)} MB`
+                                                : form.documentMeta?.existingUploadedAt
+                                                  ? `Uploaded on ${new Date(form.documentMeta.existingUploadedAt).toLocaleString("en-IN")}`
+                                                  : "Existing document on file"}
+                                        </p>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                updateField("documentFile", null);
+                                                updateField("documentType", "");
+                                                updateField("clearDocuments", true);
+                                                updateField("documentMeta", { uploadState: "idle" });
+                                            }}
+                                            className="mt-2 rounded-lg border border-red-400/40 px-2 py-1 text-red-200"
+                                        >
+                                            Remove document
+                                        </button>
+                                    </div>
+                                ) : null}
+                                {renderFieldError("documentType", "documentFile")}
+                            </section>
+
+                            <section className={`${sectionCardClass} space-y-3`}>
+                                <p className="text-sm font-semibold text-white/90">SPOTO employee ID (optional)</p>
+                                <input
+                                    value={form.employeeId || ""}
+                                    onChange={(event) => updateField("employeeId", sanitizeTextInput(event.target.value))}
+                                    placeholder="Employee ID (optional)"
+                                    className="h-12 w-full rounded-xl border border-white/20 bg-[#0d0d14] px-3 text-sm text-white/90 outline-none placeholder:text-white/35 focus:border-[#A67AEB]"
+                                />
+                                {renderFieldError("employeeId")}
+                            </section>
                         </>
                     )}
                 </div>
@@ -1267,7 +1323,7 @@ export default function OwnerListingWizard({ mode = "create", propertyId, initia
                     </p>
                 ) : null}
                 {renderFieldError("submit")}
-                <div className="sticky bottom-0 mt-6 bg-[#050507] pb-4 pt-2">
+                <div className="sticky bottom-0 z-10 mt-6 border-t border-white/10 bg-[#050507]/90 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] backdrop-blur-md supports-[backdrop-filter]:bg-[#050507]/80">
                     <PrimaryButton
                         type="button"
                         className="h-12 w-full text-base"

@@ -7,16 +7,15 @@ import {
 } from "@/lib/adapters/types";
 
 const sharedOffer: UnlockOffer = {
-    weeklyPassPrice: 249,
     headline: "Get Direct Owner's Contacts",
-    subHeadline: "Unlock verified owner details with 7-Day Unlimited Access",
+    subHeadline: "Unlock verified owner details with Day Pass access",
     bullets: [
         "Direct Owner Contact",
         "Exact map location",
-        "Unlimited Contacts for 7 days",
+        "Unlimited Contacts for 24 hours",
         "No brokerage",
     ],
-    ctaLabel: "SPOTO Weekly Pass - ₹249*",
+    ctaLabel: "SPOTO Day Pass - ₹99*",
 };
 
 const detailSeed: PropertyDetail[] = [
@@ -36,7 +35,7 @@ const detailSeed: PropertyDetail[] = [
         features: ["Near Metro", "Commute Friendly"],
         description: "Located on a quiet suburban street with excellent access to tech parks, cafes, and daily essentials.",
         mapPreviewLabel: "Unlimited Owner Contacts",
-        mapPreviewSubLabel: "Unlock Exact Location - ₹249 Weekly Pass*",
+        mapPreviewSubLabel: "Unlock Exact Location - ₹99 Day Pass*",
         amenities: ["1 Bed", "Modular Kitchen", "Wifi", "Sofa", "AC", "Attached Washroom"],
         highlights: ["Near HSR Metro Station", "Commute Friendly Location", "Near Eco World Tech Parks"],
         owner: {
@@ -62,7 +61,7 @@ const detailSeed: PropertyDetail[] = [
         features: ["Near Madiwala", "Spacious Balcony"],
         description: "Spacious 2 bhk ideal for small families with modular kitchen and secure entry.",
         mapPreviewLabel: "Owner Contact Locked",
-        mapPreviewSubLabel: "Unlock map + direct call with Weekly Pass",
+        mapPreviewSubLabel: "Unlock map + direct call with Day Pass (₹99)",
         amenities: ["2 Beds", "Balcony", "Parking", "Wifi", "Geyser"],
         highlights: ["Near BTM Bus Stand", "Grocery within 200m", "Close to ORR"],
         owner: {
@@ -166,7 +165,7 @@ const detailSeed: PropertyDetail[] = [
         features: ["Community Events", "Work Pods"],
         description: "Modern co-living setup with social events and shared workspaces.",
         mapPreviewLabel: "Location Hidden",
-        mapPreviewSubLabel: "Unlock all owner details with weekly pass",
+        mapPreviewSubLabel: "Unlock all owner details with ₹99 day pass",
         amenities: ["Wifi", "AC", "Shared Kitchen", "Gym Access"],
         highlights: ["Near Forum Mall", "Walkable Cafes"],
         owner: {

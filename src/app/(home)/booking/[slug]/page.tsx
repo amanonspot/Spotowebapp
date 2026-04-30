@@ -9,9 +9,31 @@ import { CheckoutState, PropertyDetail, UnlockPaymentContext, UnlockPaymentFlowS
 import { requireAuthThenContinue } from "@/lib/auth/requireAuthAction";
 import { rentalsService } from "@/lib/rentals/service";
 import UnlockPaymentFlowOverlay from "@/app/(home)/booking/[slug]/_components/UnlockPaymentFlowOverlay";
+import { extractLatLngFromGoogleMapsUrl } from "@/lib/maps/parseGoogleMapsUrl";
 
 interface PageProps {
     params: Promise<{ slug: string }>;
+}
+
+function formatListingDate(iso?: string): string | null {
+    if (!iso?.trim()) return null;
+    const d = new Date(iso.trim());
+    if (Number.isNaN(d.getTime())) return iso.trim();
+    return d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+}
+
+function formatBhkFallback(bhk: string): string {
+    const t = bhk.trim();
+    if (!t) return "";
+    const asBhk = t.match(/^(\d+)_bhk$/i);
+    if (asBhk) return `${asBhk[1]} BHK`;
+    const asRk = t.match(/^(\d+)_rk$/i);
+    if (asRk) return `${asRk[1]} RK`;
+    return t
+        .replace(/_/g, " ")
+        .split(" ")
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+        .join(" ");
 }
 
 type PassStatusDto = {
@@ -38,20 +60,18 @@ export default function BookingDetailPage({ params }: PageProps) {
     const [paymentError, setPaymentError] = useState<string | null>(null);
     const [unlockBusy, setUnlockBusy] = useState(false);
     const [activePassInfo, setActivePassInfo] = useState<{
-        type: "one_day" | "weekly";
         expiresAt: string | null;
     } | null>(null);
     const [passStatusHydrated, setPassStatusHydrated] = useState(false);
     const resumeHandledRef = useRef(false);
     const resumeAction = searchParams.get("resume");
-    const resumePassType: "one_day" | "weekly" = searchParams.get("passType") === "one_day" ? "one_day" : "weekly";
     const paymentAmount = 99;
 
-    const openPaymentFlow = (passType: "one_day" | "weekly" = "one_day", amount = paymentAmount) => {
+    const openPaymentFlow = (amount = paymentAmount) => {
         const context: UnlockPaymentContext = {
             propertyId: property?.id || slug,
             returnPath: `/booking/${slug}`,
-            passType,
+            passType: "one_day",
             amount,
         };
         setPaymentContext(context);
@@ -61,17 +81,11 @@ export default function BookingDetailPage({ params }: PageProps) {
 
     const mapPassStatusToInfo = (data: PassStatusDto | undefined | null) => {
         if (!data) return null;
-        if (data.has_weekly_active) {
-            return {
-                type: "weekly" as const,
-                expiresAt: data.weekly_pass_expires_at || null,
-            };
-        }
         if (data.has_one_day_active) {
-            return {
-                type: "one_day" as const,
-                expiresAt: data.one_day_pass_expires_at || null,
-            };
+            return { expiresAt: data.one_day_pass_expires_at ?? null };
+        }
+        if (data.has_weekly_active) {
+            return { expiresAt: data.weekly_pass_expires_at ?? null };
         }
         return null;
     };
@@ -86,7 +100,10 @@ export default function BookingDetailPage({ params }: PageProps) {
 
         try {
             const response = await rentalsService.getMyPassStatus();
-            const data = (response as { data?: unknown }).data as PassStatusDto | undefined;
+            const raw = response as { data?: PassStatusDto } & PassStatusDto | undefined;
+            const data = (raw && typeof raw === "object" && "data" in raw && raw.data
+                ? raw.data
+                : raw) as PassStatusDto | undefined;
             const mapped = mapPassStatusToInfo(data);
             setActivePassInfo(mapped);
             setPassStatusHydrated(true);
@@ -140,12 +157,12 @@ export default function BookingDetailPage({ params }: PageProps) {
         resumeHandledRef.current = true;
 
         const runResumeAction = () => {
-            openPaymentFlow(resumeAction === "buy_pass" ? resumePassType : "one_day");
+            openPaymentFlow();
             router.replace(`/booking/${slug}`);
         };
 
         runResumeAction();
-    }, [property, resumeAction, resumePassType, router, slug]);
+    }, [property, resumeAction, router, slug]);
 
     const handlePayNow = async () => {
         if (property === null || paymentBusy || unlockBusy) return;
@@ -174,7 +191,7 @@ export default function BookingDetailPage({ params }: PageProps) {
 
                     if (result.status === "paywall") {
                         const oneDayPrice = result.paywall?.oneDay?.price || paymentAmount;
-                        openPaymentFlow("one_day", oneDayPrice);
+                        openPaymentFlow(oneDayPrice);
                         return;
                     }
 
@@ -189,14 +206,14 @@ export default function BookingDetailPage({ params }: PageProps) {
         });
     };
 
-    const handleActivatePass = async (passType: "one_day" | "weekly") => {
+    const handleActivatePass = async () => {
         if (property === null || paymentBusy || unlockBusy) return;
         await requireAuthThenContinue({
             router,
             intent: {
                 type: "buy_pass",
                 propertyId: property.id,
-                passType,
+                passType: "one_day",
             },
             onAuthenticated: async () => {
                 if (isUnlocked) return;
@@ -215,11 +232,7 @@ export default function BookingDetailPage({ params }: PageProps) {
                     setUnlockBusy(false);
                 }
 
-                // No active pass — open payment overlay
-                const price = passType === "weekly"
-                    ? (property.unlockOffer?.weeklyPassPrice || 249)
-                    : 99;
-                openPaymentFlow(passType, price);
+                openPaymentFlow(99);
             },
         });
     };
@@ -229,7 +242,6 @@ export default function BookingDetailPage({ params }: PageProps) {
         razorpayKeyId: string;
         amount: number;
         currency: string;
-        passType: "one_day" | "weekly";
     }): Promise<"success" | "failed"> => {
         return new Promise((resolve) => {
             // Load Razorpay script if not present
@@ -254,7 +266,7 @@ export default function BookingDetailPage({ params }: PageProps) {
                     currency: payment.currency,
                     order_id: payment.razorpayOrderId,
                     name: "SPOTO",
-                    description: payment.passType === "weekly" ? "7-Day Unlimited Pass – ₹249" : "1-Day Unlimited Pass – ₹99",
+                    description: "1-Day Unlimited Pass – ₹99",
                     theme: { color: "#A67AEB" },
                     handler: () => resolve("success"),
                     modal: { ondismiss: () => resolve("failed") },
@@ -286,7 +298,7 @@ export default function BookingDetailPage({ params }: PageProps) {
             }
 
             // Step 2: Call backend to create Razorpay order
-            const passState = await checkoutAdapter.activatePass(baseState.id, paymentContext.passType);
+            const passState = await checkoutAdapter.activatePass(baseState.id);
             setCheckoutState(passState);
 
             if (passState.status === "failed" || !passState.payment?.razorpayOrderId) {
@@ -420,6 +432,75 @@ export default function BookingDetailPage({ params }: PageProps) {
         property.galleryImages && property.galleryImages.length > 0 ? property.galleryImages : [property.image];
     const activeImage = galleryImages[Math.min(activeImageIndex, galleryImages.length - 1)] || property.image;
 
+    /** Map + directions: same gate as owner contact — listing unlocked or any active day/weekly pass */
+    const hasMapAccess = isUnlocked || Boolean(activePassInfo);
+
+    const mapEmbedSrc = (() => {
+        const latRaw = property.latitude?.trim();
+        const lngRaw = property.longitude?.trim();
+        if (latRaw && lngRaw) {
+            const la = parseFloat(latRaw);
+            const lo = parseFloat(lngRaw);
+            if (
+                Number.isFinite(la) &&
+                Number.isFinite(lo) &&
+                la >= -90 &&
+                la <= 90 &&
+                lo >= -180 &&
+                lo <= 180
+            ) {
+                return `https://maps.google.com/maps?q=${encodeURIComponent(latRaw)},${encodeURIComponent(lngRaw)}&z=16&output=embed`;
+            }
+        }
+        if (property.mapUrl) {
+            const extracted = extractLatLngFromGoogleMapsUrl(property.mapUrl);
+            if (extracted) {
+                return `https://maps.google.com/maps?q=${encodeURIComponent(extracted.lat)},${encodeURIComponent(extracted.lng)}&z=16&output=embed`;
+            }
+        }
+        return null;
+    })();
+
+    const propertyDetailRows: { label: string; value: string }[] = [];
+    const pushDetail = (label: string, value: string | undefined | null) => {
+        const v = typeof value === "string" ? value.trim() : "";
+        if (v) propertyDetailRows.push({ label, value: v });
+    };
+
+    const locationLine = [property.locality, property.city].filter(Boolean).join(", ");
+    pushDetail("Location", locationLine);
+
+    const addr = property.addressLine?.trim();
+    if (addr) {
+        pushDetail("Address", addr);
+    }
+
+    if (property.propertyTypeLabel) {
+        pushDetail("Property type", property.propertyTypeLabel);
+    }
+
+    const bhkDisplay = property.bhkLabel?.trim() || formatBhkFallback(property.bhk);
+    if (bhkDisplay) {
+        pushDetail("BHK", bhkDisplay);
+    }
+
+    if (property.builtUpAreaSqft != null && property.builtUpAreaSqft > 0) {
+        pushDetail("Built-up area", `${property.builtUpAreaSqft.toLocaleString("en-IN")} sq ft`);
+    }
+
+    if (property.furnishingLabel) {
+        pushDetail("Furnishing", property.furnishingLabel);
+    }
+
+    if (property.availabilityLabel) {
+        pushDetail("Availability", property.availabilityLabel);
+    }
+
+    const availableFromLabel = formatListingDate(property.availableFrom);
+    if (availableFromLabel) {
+        pushDetail("Available from", availableFromLabel);
+    }
+
     return (
         <main className="min-h-screen bg-[#040405] pb-28 text-white md:pb-10">
             {/* Hero image with gradient overlay */}
@@ -435,11 +516,17 @@ export default function BookingDetailPage({ params }: PageProps) {
                 </button>
                 {/* Property title overlay at bottom */}
                 <div className="absolute bottom-0 left-0 right-0 px-4 pb-4 sm:px-5 md:px-6">
-                    <h1 className="line-clamp-2 text-lg font-bold leading-tight text-white drop-shadow-lg sm:text-xl md:text-2xl lg:text-3xl">{property.title}</h1>
-                    <p className="mt-0.5 flex items-center gap-1 text-xs text-white/65 sm:text-sm">
-                        <span className="text-xs">📍</span>
-                        <span className="truncate">{property.locality}, {property.city}</span>
-                    </p>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
+                        <h1 className="line-clamp-2 flex-1 text-xl font-bold leading-snug text-white drop-shadow-lg sm:text-2xl md:text-3xl lg:text-[2rem]">
+                            {property.title}
+                        </h1>
+                        {property.isVerified === true ? (
+                            <span className="shrink-0 self-start rounded border border-[#B7F041]/35 bg-[#B7F041]/10 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-[#DFF8A2] sm:self-auto">
+                                Verified
+                            </span>
+                        ) : null}
+                    </div>
+                    <p className="mt-2 truncate text-sm text-white/65 md:text-base">{locationLine || property.city || property.locality}</p>
                 </div>
             </div>
 
@@ -466,62 +553,120 @@ export default function BookingDetailPage({ params }: PageProps) {
             {/* Main content grid */}
             <div className="mx-auto grid max-w-[1180px] grid-cols-1 gap-4 px-4 py-5 md:grid-cols-[1fr_360px] md:gap-6 md:px-6 md:py-6 lg:grid-cols-[1fr_380px] lg:px-8">
                 {/* Left — property details */}
-                <section className="animate-fade-up space-y-4 md:space-y-5">
-                    {/* Title & price */}
-                    <div>
-                        <p className="text-2xl font-bold text-[#B7F041]">
-                            ₹{property.pricePerMonth.toLocaleString("en-IN")} <span className="text-sm font-medium text-[#B7F041]/70">/ Month</span>
+                <section className="animate-fade-up space-y-3 md:space-y-4">
+                    <div className="rounded-xl border border-white/10 bg-[#101015] px-4 py-4 md:px-6 md:py-5">
+                        <p className="text-2xl font-semibold tabular-nums text-[#B7F041] md:text-3xl">
+                            ₹{property.pricePerMonth.toLocaleString("en-IN")}
+                            <span className="text-base font-medium text-[#B7F041]/65 md:text-lg"> / mo</span>
                         </p>
-                        <p className="mt-1 text-sm text-[#9A9A9A]">
-                            ₹{property.deposit.toLocaleString("en-IN")} Deposit
-                            <span className="mx-1.5 text-white/20">•</span>
+                        <p className="mt-2 text-sm text-white/55 md:text-base">
+                            Deposit ₹{property.deposit.toLocaleString("en-IN")}
+                            <span className="mx-2 text-white/20">|</span>
                             {property.furnished ? "Furnished" : "Unfurnished"}
                         </p>
                     </div>
 
-                    {/* Map preview */}
-                    <div className="overflow-hidden rounded-2xl border border-white/12 bg-[#111116] shadow-[0_4px_24px_rgba(0,0,0,0.4)]">
-                        <div className="px-4 pt-4">
-                            <h2 className="text-lg font-semibold">Map Preview</h2>
-                        </div>
-                        <div className="relative mx-4 mt-3 h-44 overflow-hidden rounded-xl border border-white/10 bg-[linear-gradient(120deg,#1d1d24,#101015)] md:h-52">
-                            <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(175,122,235,0.3),transparent_50%)]" />
-                            <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_80%,rgba(183,240,65,0.08),transparent_40%)]" />
-                            <div className="absolute bottom-3 left-3 right-3 rounded-xl bg-black/75 px-3 py-2.5 text-center backdrop-blur-sm">
-                                <p className="text-sm font-bold text-white">{property.mapPreviewLabel}</p>
-                                <p className="mt-0.5 text-xs text-[#B7F041] md:text-sm">{property.mapPreviewSubLabel}</p>
-                            </div>
-                        </div>
-                        <p className="px-4 py-4 text-base leading-relaxed text-white/65">{property.description}</p>
+                    <div className="rounded-xl border border-white/10 bg-[#111116] px-4 py-4 md:px-6 md:py-5">
+                        <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-white/50 md:text-sm">Particulars</h2>
+                        <dl className="mt-4 space-y-0">
+                            {propertyDetailRows.map((row, idx) => (
+                                <div
+                                    key={`${row.label}-${idx}`}
+                                    className="grid grid-cols-1 gap-1 border-t border-white/[0.06] py-3.5 first:border-t-0 first:pt-0 sm:grid-cols-[minmax(8.5rem,12rem)_minmax(0,1fr)] sm:items-start sm:gap-x-6 sm:py-3.5"
+                                >
+                                    <dt className="text-sm font-medium text-white/50 md:text-[15px] sm:pt-0.5">{row.label}</dt>
+                                    <dd className="text-base leading-relaxed text-white/[0.9] md:text-[17px]">{row.value}</dd>
+                                </div>
+                            ))}
+                        </dl>
                     </div>
 
-                    {/* Amenities */}
-                    {property.amenities.length > 0 && (
-                        <div className="rounded-2xl border border-white/12 bg-[#111116] p-4 shadow-[0_4px_24px_rgba(0,0,0,0.4)]">
-                            <h2 className="text-lg font-semibold">What this place offers</h2>
-                            <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2.5">
-                                {property.amenities.map((amenity) => (
-                                    <p key={amenity} className="flex items-center gap-2 text-sm text-white/75">
-                                        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#B7F041]/60" />
-                                        {amenity}
-                                    </p>
-                                ))}
+                    <div className="overflow-hidden rounded-xl border border-white/10 bg-[#111116] px-4 py-4 md:px-6 md:py-5">
+                        <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-white/50 md:text-sm">Map</h2>
+                        <div className="relative mt-3 h-40 w-full overflow-hidden rounded-lg border border-white/[0.06] bg-[linear-gradient(120deg,#1a1a22,#0f0f12)] md:h-44">
+                            {hasMapAccess && mapEmbedSrc ? (
+                                <iframe
+                                    title={`Map — ${property.title}`}
+                                    src={mapEmbedSrc}
+                                    className="absolute inset-0 h-full w-full border-0"
+                                    loading="lazy"
+                                    referrerPolicy="no-referrer-when-downgrade"
+                                    allowFullScreen
+                                />
+                            ) : hasMapAccess ? (
+                                <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-4 text-center">
+                                    <p className="text-sm text-white/65 md:text-base">No map coordinates on file.</p>
+                                    {property.mapUrl ? (
+                                        <a
+                                            href={property.mapUrl}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-sm font-semibold text-[#B7F041] underline-offset-2 hover:underline md:text-base"
+                                        >
+                                            Open in Google Maps ↗
+                                        </a>
+                                    ) : null}
+                                </div>
+                            ) : (
+                                <>
+                                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(175,122,235,0.28),transparent_50%)]" />
+                                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_80%,rgba(183,240,65,0.06),transparent_40%)]" />
+                                    <div className="absolute bottom-3 left-3 right-3 rounded-lg bg-black/80 px-3 py-2.5 text-center backdrop-blur-sm">
+                                        <p className="text-sm font-medium text-white md:text-base">{property.mapPreviewLabel}</p>
+                                        <p className="mt-1.5 text-xs leading-snug text-[#B7F041]/90 md:text-sm">{property.mapPreviewSubLabel}</p>
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                        {property.mapUrl && hasMapAccess ? (
+                            <div className="mt-3 border-t border-white/[0.06] pt-3">
+                                <a
+                                    href={property.mapUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-sm font-semibold text-[#B7F041] underline-offset-2 hover:underline md:text-base"
+                                >
+                                    Google Maps ↗
+                                </a>
                             </div>
+                        ) : null}
+                    </div>
+
+                    {property.description?.trim() ? (
+                        <div className="rounded-xl border border-white/10 bg-[#111116] px-4 py-4 md:px-6 md:py-5">
+                            <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-white/50 md:text-sm">Description</h2>
+                            <p className="mt-3 whitespace-pre-wrap break-words text-base leading-[1.7] text-white/70 md:mt-4 md:text-lg">
+                                {property.description}
+                            </p>
+                        </div>
+                    ) : null}
+
+                    {property.amenities.length > 0 && (
+                        <div className="rounded-xl border border-white/10 bg-[#111116] px-4 py-4 md:px-6 md:py-5">
+                            <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-white/50 md:text-sm">Amenities</h2>
+                            <ul className="mt-3 columns-1 gap-x-8 sm:columns-2 md:mt-4">
+                                {property.amenities.map((amenity) => (
+                                    <li
+                                        key={amenity}
+                                        className="break-inside-avoid py-1.5 text-base text-white/75 md:text-[17px] [content-visibility:auto]"
+                                    >
+                                        {amenity}
+                                    </li>
+                                ))}
+                            </ul>
                         </div>
                     )}
 
-                    {/* Highlights */}
                     {property.highlights.length > 0 && (
-                        <div className="rounded-2xl border border-white/12 bg-[#111116] p-4 shadow-[0_4px_24px_rgba(0,0,0,0.4)]">
-                            <h2 className="text-lg font-semibold">Highlights</h2>
-                            <div className="mt-3 space-y-2.5">
+                        <div className="rounded-xl border border-white/10 bg-[#111116] px-4 py-4 md:px-6 md:py-5">
+                            <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-white/50 md:text-sm">Highlights</h2>
+                            <ul className="mt-3 space-y-2 md:mt-4">
                                 {property.highlights.map((highlight) => (
-                                    <p key={highlight} className="flex items-center gap-2 text-sm text-white/75">
-                                        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#A67AEB]/60" />
+                                    <li key={highlight} className="text-base text-white/75 md:text-[17px]">
                                         {highlight}
-                                    </p>
+                                    </li>
                                 ))}
-                            </div>
+                            </ul>
                         </div>
                     )}
                 </section>
@@ -533,8 +678,7 @@ export default function BookingDetailPage({ params }: PageProps) {
                     <UnlockCard
                         offer={property.unlockOffer}
                         checkoutState={checkoutState}
-                        onPayNow={() => openPaymentFlow("one_day")}
-                        onActivatePass={handleActivatePass}
+                        onActivatePass={() => void handleActivatePass()}
                         activePassInfo={activePassInfo}
                     />
                 </aside>
@@ -544,11 +688,9 @@ export default function BookingDetailPage({ params }: PageProps) {
             <div className="fixed bottom-0 left-0 right-0 border-t border-white/10 bg-[#0c0c12]/90 p-4 backdrop-blur-md md:hidden">
                 {isUnlocked ? null : activePassInfo ? (
                     <div className="flex items-center gap-3 rounded-2xl border border-[#B7F041]/25 bg-[#111116] px-4 py-3">
-                        <span className="text-xl">{activePassInfo.type === "weekly" ? "⭐" : "✅"}</span>
-                        <div className="flex-1 min-w-0">
-                            <p className="text-sm font-bold text-[#B7F041] truncate">
-                                {activePassInfo.type === "weekly" ? "7-Day Pass" : "1-Day Pass"} Active
-                            </p>
+                        <span className="text-xl">✅</span>
+                        <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-bold text-[#B7F041]">Pass active</p>
                             <p className="text-xs text-white/45">Swipe card above to unlock contact</p>
                         </div>
                         <button
@@ -560,27 +702,20 @@ export default function BookingDetailPage({ params }: PageProps) {
                         </button>
                     </div>
                 ) : showMobilePayButtons ? (
-                    <div className="grid grid-cols-2 gap-2.5">
-                        <button
-                            onClick={() => handleActivatePass("one_day")}
-                            disabled={paymentBusy || unlockBusy}
-                            className="btn-shimmer rounded-xl border border-[#B7F041]/35 bg-[#0d0d14] px-3 py-3 text-sm font-bold text-[#DFF8A2] disabled:opacity-50"
-                        >
-                            {paymentBusy ? (
-                                <span className="flex items-center justify-center gap-1.5">
-                                    <span className="h-3 w-3 animate-spin rounded-full border-2 border-[#DFF8A2] border-t-transparent" />
-                                    ...
-                                </span>
-                            ) : "⚡ ₹99 Day Pass"}
-                        </button>
-                        <button
-                            onClick={() => handleActivatePass("weekly")}
-                            disabled={paymentBusy || unlockBusy}
-                            className="btn-shimmer rounded-xl border border-[#A67AEB]/35 bg-[#0d0d14] px-3 py-3 text-sm font-bold text-[#E9DCFF] disabled:opacity-50"
-                        >
-                            {paymentBusy ? "..." : "🌟 ₹249 Weekly"}
-                        </button>
-                    </div>
+                    <button
+                        onClick={() => void handleActivatePass()}
+                        disabled={paymentBusy || unlockBusy}
+                        className="btn-shimmer w-full rounded-xl border border-[#B7F041]/35 bg-[#0d0d14] px-4 py-3 text-sm font-bold text-[#DFF8A2] disabled:opacity-50"
+                    >
+                        {paymentBusy ? (
+                            <span className="flex items-center justify-center gap-1.5">
+                                <span className="h-3 w-3 animate-spin rounded-full border-2 border-[#DFF8A2] border-t-transparent" />
+                                ...
+                            </span>
+                        ) : (
+                            "⚡ ₹99 Day Pass"
+                        )}
+                    </button>
                 ) : null}
             </div>
 

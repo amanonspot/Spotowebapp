@@ -24,6 +24,7 @@ interface DesktopOTPViewProps {
     onLogin: () => void;
     onResend: () => void;
     loading?: boolean;
+    resendLoading?: boolean;
     error?: string;
 }
 
@@ -38,6 +39,7 @@ export default function DesktopOTPView({
     onLogin,
     onResend,
     loading = false,
+    resendLoading = false,
     error,
 }: DesktopOTPViewProps) {
     const router = useRouter();
@@ -110,8 +112,7 @@ export default function DesktopOTPView({
                     loading={loading}
                 />
 
-                {/* Resend Link */}
-                <ResendButton onClick={onResend} disabled={timer > 0} />
+                <ResendButton onClick={onResend} disabled={timer > 0} loading={resendLoading} />
 
                 {/* Timer Text */}
                 <OTPTimer timer={timer} />

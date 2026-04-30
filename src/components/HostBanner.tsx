@@ -19,7 +19,7 @@ export default function HostBanner({
                 <div className="relative z-10 flex items-center justify-between">
                     <h3 className="text-[#5A4A6A] text-xl md:text-3xl lg:text-4xl font-semibold font-opensans">
                         Host your Property on{" "}
-                        <span className="font-black text-[#2D2438]">SPOTO</span>{" "}
+                        <span className="spoto-wordmark-on-light font-black">SPOTO</span>{" "}
                         ✨
                     </h3>
                     <div className="group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform duration-300 flex-shrink-0 ml-4">

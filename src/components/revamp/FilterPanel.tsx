@@ -91,7 +91,7 @@ export default function FilterPanel({
                 <div className="flex-1 space-y-5 overflow-y-auto px-4 py-5 sm:space-y-7 sm:px-6 sm:py-6">
                     <section className="rounded-2xl border border-[#B7F041] bg-[#121217] p-4 sm:rounded-3xl sm:p-5">
                         <h3 className="text-2xl font-light leading-tight text-white/90 sm:text-3xl">
-                            Let&apos;s find your new <span className="font-bold">House</span>
+                            Let&apos;s find your new house
                         </h3>
                         <div className="mt-4 rounded-xl bg-[#E7E7E7] px-4 py-2.5 text-black sm:rounded-2xl sm:py-3">
                             <input

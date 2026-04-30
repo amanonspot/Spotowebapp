@@ -1,8 +1,6 @@
 "use client";
 
-import Image from "next/image";
 import React, { useState, useEffect, useRef } from "react";
-import logo from "../../../../../../public/assets/images/logo.svg";
 import Logo from "@/components/Logo";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";

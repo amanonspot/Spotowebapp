@@ -24,8 +24,8 @@ export default function Chip({ label, selected = false, onClick, className = "",
         <button
             type="button"
             onClick={onClick}
-            className={`relative shrink-0 overflow-hidden border px-4 py-2.5 text-sm font-semibold transition-all duration-200 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#AF7AEB] focus-visible:ring-offset-2 focus-visible:ring-offset-[#09090f] ${
-                tone === "hero" ? heroClasses : defaultClasses
+            className={`relative shrink-0 overflow-hidden border font-semibold transition-all duration-200 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#AF7AEB] focus-visible:ring-offset-2 focus-visible:ring-offset-[#09090f] ${
+                tone === "hero" ? `px-4 py-2.5 text-sm sm:px-5 sm:py-3 sm:text-base ${heroClasses}` : `px-4 py-2.5 text-sm ${defaultClasses}`
             } ${className}`}
         >
             {label}

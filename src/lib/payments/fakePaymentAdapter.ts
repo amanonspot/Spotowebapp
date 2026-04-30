@@ -5,7 +5,7 @@ export type FakePaymentOutcome = "success" | "failed";
 export interface UnlockPaymentContext {
     propertyId: string;
     returnPath: string;
-    passType: "one_day" | "weekly";
+    passType: "one_day";
     amount: number;
 }
 

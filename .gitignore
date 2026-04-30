@@ -37,6 +37,7 @@ public/assets/images/Spoto - APIs.postman_collection (1).json
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
 
 # vercel
 .vercel

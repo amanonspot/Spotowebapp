@@ -272,8 +272,8 @@ export default function OwnerDashboardPage() {
     const leadActionLabel = (locked: boolean) => (locked ? (dashboard.creditsLeft > 0 ? "Swipe To Unlock" : "No free credits left") : "");
 
     return (
-        <main className="min-h-screen bg-[#050507] pb-28 text-white">
-            <div className="mx-auto w-full max-w-[520px] px-4 py-4 sm:max-w-2xl lg:max-w-5xl lg:px-8">
+        <main className="min-h-[100dvh] min-h-screen bg-[#050507] pb-[max(6.5rem,calc(5.5rem+env(safe-area-inset-bottom,0px)))] text-white md:pb-8 lg:pb-10">
+            <div className="mx-auto w-full max-w-full px-4 py-4 sm:px-6 md:max-w-2xl md:px-7 lg:max-w-5xl lg:px-8 xl:max-w-6xl 2xl:max-w-7xl">
 
                 {/* Header */}
                 <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { BadgeCheck, UserCircle, X, Zap } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import BottomNavigation from "@/components/BottomNavigation";
 import Chip from "@/components/revamp/Chip";
@@ -11,7 +12,7 @@ import { propertyAdapter } from "@/lib/adapters";
 import { HomeFeed, PropertyListItem, UnlockPaymentContext, UnlockPaymentFlowState } from "@/lib/adapters/types";
 import { requireAuthThenContinue } from "@/lib/auth/requireAuthAction";
 import { useAuth } from "@/lib/hooks/useAuth";
-import { rentalsService } from "@/lib/rentals/service";
+import { getUnlockedTenantContacts, rentalsService, type UnlockedContactRecord } from "@/lib/rentals";
 import UnlockPaymentFlowOverlay from "@/app/(home)/booking/[slug]/_components/UnlockPaymentFlowOverlay";
 import { fakePaymentAdapter } from "@/lib/payments/fakePaymentAdapter";
 
@@ -24,12 +25,39 @@ const initialFeed: HomeFeed = {
     promoBannerText: "",
 };
 
+const listingTextBlob = (item: PropertyListItem): string =>
+    [item.title, item.propertyTitle, ...item.badges, ...item.features].filter(Boolean).join(" ").toLowerCase();
+
+/** Pill filters: prefer normalized propertyTypes, then fall back to title/badges/deposit so live API rows still match. */
 const matchesCategory = (item: PropertyListItem, category: string) => {
-    if (category.includes("Rent House")) return item.propertyTypes.includes("rent_house");
-    if (category.includes("Zero Deposit")) return item.propertyTypes.includes("zero_deposit");
-    if (category.includes("Co-Living")) return item.propertyTypes.includes("co_living");
-    if (category.includes("PG")) return item.propertyTypes.includes("pg");
-    if (category.includes("Pet Friendly")) return item.badges.some((badge) => badge.toLowerCase().includes("pet"));
+    const blob = listingTextBlob(item);
+    const types = item.propertyTypes;
+
+    if (category.includes("Rent House")) {
+        if (/\b(pg|paying\s+guest|co[\s-]?living|coliving)\b/.test(blob) || /\bco living\b/.test(blob)) {
+            return false;
+        }
+        if (types.includes("rent_house")) return true;
+        return /\b(bhk|flat|apartment|independent|villa|studio|house|rent)\b/i.test(blob);
+    }
+    if (category.includes("Zero Deposit")) {
+        if (types.includes("zero_deposit")) return true;
+        if (item.deposit === 0) return true;
+        return /no deposit|zero deposit|nil deposit|deposit[:\s]*0\b|0\s*deposit/.test(blob);
+    }
+    if (category.includes("Co-Living")) {
+        if (types.includes("co_living")) return true;
+        return /co[\s-]?living|coliving|\bco living\b|shared (flat|room|accommodation)/.test(blob);
+    }
+    if (category.includes("PG")) {
+        if (types.includes("pg")) return true;
+        return /\bpg\b|paying\s+guest|pg[\s-]?accommodation|boys?[\s-]?pg|girls?[\s-]?pg/.test(blob);
+    }
+    if (category.includes("Pet Friendly")) {
+        if (item.badges.some((b) => b.toLowerCase().includes("pet"))) return true;
+        if (item.features.some((f) => f.toLowerCase().includes("pet"))) return true;
+        return /pet[\s-]?friend|pets?\s+(allowed|welcome|ok)|\b(dogs?|cats?)\b.*(allowed|welcome|ok)/.test(blob);
+    }
     return true;
 };
 
@@ -48,6 +76,13 @@ function formatExpiry(iso: string | null): string {
     return d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
+function contactsUnlockedSummary(pass: PassStatus): string {
+    if (pass.has_one_day_active) return "Day pass active — unlimited contacts";
+    if (pass.has_weekly_active) return "Access pass active — unlimited contacts";
+    if (pass.free_contacts_remaining > 0) return `${pass.free_contacts_remaining} free contact${pass.free_contacts_remaining === 1 ? "" : "s"} left`;
+    return "Unlock owner numbers & WhatsApp";
+}
+
 export default function HomePage() {
     const router = useRouter();
     const searchParams = useSearchParams();
@@ -57,6 +92,8 @@ export default function HomePage() {
     const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [showProfileMenu, setShowProfileMenu] = useState(false);
+    const [showUnlockedContactsPanel, setShowUnlockedContactsPanel] = useState(false);
+    const [savedUnlockedContacts, setSavedUnlockedContacts] = useState<UnlockedContactRecord[]>([]);
     const [passStatus, setPassStatus] = useState<PassStatus | null>(null);
     const [passLoading, setPassLoading] = useState(false);
     const [homePaymentFlowState, setHomePaymentFlowState] = useState<UnlockPaymentFlowState>("idle");
@@ -67,15 +104,14 @@ export default function HomePage() {
     const profileMenuRef = useRef<HTMLDivElement>(null);
     const bannerResumeHandledRef = useRef(false);
     const resumeAction = searchParams.get("resume");
-    const resumePassType: "one_day" | "weekly" = searchParams.get("passType") === "weekly" ? "weekly" : "one_day";
     const globalPassOneDayAmount = 99;
-    const globalPassWeeklyAmount = 249;
 
     const handleProfileClick = async () => {
         if (!isAuthenticated) {
             router.push("/auth/login");
             return;
         }
+        setShowUnlockedContactsPanel(false);
         const next = !showProfileMenu;
         setShowProfileMenu(next);
         if (next && !passStatus) {
@@ -93,16 +129,86 @@ export default function HomePage() {
     };
 
     useEffect(() => {
+        if (!isAuthenticated) {
+            setPassStatus(null);
+            return;
+        }
+        let cancelled = false;
+        setPassLoading(true);
+        void (async () => {
+            try {
+                const res = await rentalsService.getMyPassStatus();
+                const data = (res as any)?.data ?? (res as any);
+                if (!cancelled) setPassStatus(data);
+            } catch {
+                if (!cancelled) setPassStatus(null);
+            } finally {
+                if (!cancelled) setPassLoading(false);
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [isAuthenticated]);
+
+    const passUnlocked = Boolean(
+        passStatus &&
+            (passStatus.has_one_day_active ||
+                passStatus.has_weekly_active ||
+                passStatus.free_contacts_remaining > 0)
+    );
+
+    const listingTitleById = useMemo(() => {
+        const m = new Map<string, string>();
+        for (const item of feed.listings) {
+            m.set(item.id, item.title || item.propertyTitle || item.id);
+        }
+        return m;
+    }, [feed.listings]);
+
+    const savedContactCount = savedUnlockedContacts.length;
+
+    useEffect(() => {
+        if (!isAuthenticated) {
+            setSavedUnlockedContacts([]);
+            return;
+        }
+        const sync = () => setSavedUnlockedContacts(getUnlockedTenantContacts());
+        sync();
+        const onVis = () => {
+            if (document.visibilityState === "visible") sync();
+        };
+        window.addEventListener("focus", sync);
+        document.addEventListener("visibilitychange", onVis);
+        return () => {
+            window.removeEventListener("focus", sync);
+            document.removeEventListener("visibilitychange", onVis);
+        };
+    }, [isAuthenticated]);
+
+    useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
             if (profileMenuRef.current && !profileMenuRef.current.contains(event.target as Node)) {
                 setShowProfileMenu(false);
+                setShowUnlockedContactsPanel(false);
             }
         };
-        if (showProfileMenu) {
+        if (showProfileMenu || showUnlockedContactsPanel) {
             document.addEventListener("mousedown", handleClickOutside);
         }
         return () => document.removeEventListener("mousedown", handleClickOutside);
-    }, [showProfileMenu]);
+    }, [showProfileMenu, showUnlockedContactsPanel]);
+
+    useEffect(() => {
+        if (typeof window === "undefined" || !window.matchMedia) return;
+        const mq = window.matchMedia("(max-width: 767px)");
+        const clearPanel = () => {
+            if (mq.matches) setShowUnlockedContactsPanel(false);
+        };
+        clearPanel();
+        mq.addEventListener("change", clearPanel);
+        return () => mq.removeEventListener("change", clearPanel);
+    }, []);
 
     const handleListProperty = () => {
         void requireAuthThenContinue({
@@ -117,27 +223,50 @@ export default function HomePage() {
         });
     };
 
-    const openHomePassFlow = (passType: "one_day" | "weekly" = "one_day") => {
-        const amount = passType === "weekly" ? globalPassWeeklyAmount : globalPassOneDayAmount;
+    const openHomePassFlow = () => {
         setHomePaymentContext({
             propertyId: "global_pass",
             returnPath: "/",
-            passType,
-            amount,
+            passType: "one_day",
+            amount: globalPassOneDayAmount,
         });
         setHomePaymentError(null);
         setHomePaymentFlowState("paywall");
     };
 
-    const handleBannerClick = (passType: "one_day" | "weekly") => {
+    const handleContactsUnlockClick = () => {
+        if (!isAuthenticated) {
+            router.push("/auth/login");
+            return;
+        }
+        setShowProfileMenu(false);
+        setShowUnlockedContactsPanel((prev) => {
+            if (prev) return false;
+            setSavedUnlockedContacts(getUnlockedTenantContacts());
+            return true;
+        });
+    };
+
+    const handleGetPassFromContactsPanel = () => {
+        setShowUnlockedContactsPanel(false);
+        void requireAuthThenContinue({
+            router,
+            intent: { type: "buy_pass_global", passType: "one_day" },
+            onAuthenticated: () => {
+                openHomePassFlow();
+            },
+        });
+    };
+
+    const handleBannerClick = () => {
         void requireAuthThenContinue({
             router,
             intent: {
                 type: "buy_pass_global",
-                passType,
+                passType: "one_day",
             },
             onAuthenticated: () => {
-                openHomePassFlow(passType);
+                openHomePassFlow();
             },
         });
     };
@@ -176,9 +305,9 @@ export default function HomePage() {
         if (!isAuthenticated || !resumeAction || bannerResumeHandledRef.current) return;
         if (resumeAction !== "buy_pass_global") return;
         bannerResumeHandledRef.current = true;
-        openHomePassFlow(resumePassType);
+        openHomePassFlow();
         router.replace("/");
-    }, [isAuthenticated, resumeAction, resumePassType, router]);
+    }, [isAuthenticated, resumeAction, router]);
 
     const visibleListings = useMemo(() => {
         if (!selectedCategory) return feed.listings;
@@ -205,12 +334,10 @@ export default function HomePage() {
                     setPassStatus((prev) => ({
                         free_contacts_used: prev?.free_contacts_used ?? 0,
                         free_contacts_remaining: prev?.free_contacts_remaining ?? 0,
-                        has_one_day_active: homePaymentContext.passType === "one_day" || Boolean(prev?.has_one_day_active),
-                        has_weekly_active: homePaymentContext.passType === "weekly" || Boolean(prev?.has_weekly_active),
-                        one_day_pass_expires_at:
-                            homePaymentContext.passType === "one_day" ? expiresAt : prev?.one_day_pass_expires_at ?? null,
-                        weekly_pass_expires_at:
-                            homePaymentContext.passType === "weekly" ? expiresAt : prev?.weekly_pass_expires_at ?? null,
+                        has_one_day_active: true,
+                        has_weekly_active: Boolean(prev?.has_weekly_active),
+                        one_day_pass_expires_at: expiresAt,
+                        weekly_pass_expires_at: prev?.weekly_pass_expires_at ?? null,
                     }));
                 }
                 return;
@@ -275,13 +402,186 @@ export default function HomePage() {
                             >
                                 List Your Property
                             </button>
-                            <div className="relative" ref={profileMenuRef}>
+                            <div className="relative flex shrink-0 items-center gap-2 sm:gap-2.5" ref={profileMenuRef}>
+                                <button
+                                    type="button"
+                                    onClick={handleContactsUnlockClick}
+                                    aria-label="View owner contacts you have unlocked"
+                                    title={
+                                        isAuthenticated && passStatus
+                                            ? `${contactsUnlockedSummary(passStatus)}${savedContactCount > 0 ? ` · ${savedContactCount} saved owner contact${savedContactCount === 1 ? "" : "s"}` : ""}`
+                                            : isAuthenticated
+                                              ? "Owners you unlocked appear here — get a pass for more"
+                                              : "Sign in to unlock owner contacts"
+                                    }
+                                    className={`btn-shimmer hidden max-w-[148px] items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-left transition active:scale-[0.98] min-[400px]:max-w-none sm:gap-2 sm:px-3.5 sm:py-2 md:flex ${
+                                        passUnlocked
+                                            ? "border-[#B7F041]/45 bg-[linear-gradient(135deg,rgba(183,240,65,0.14)_0%,rgba(15,17,14,0.92)_55%)] text-[#E8FBC4] shadow-[0_0_20px_rgba(183,240,65,0.12)] hover:border-[#B7F041]/65 hover:shadow-[0_0_28px_rgba(183,240,65,0.2)]"
+                                            : "border-[#A67AEB]/40 bg-[#0c0a12] text-white/95 shadow-[0_0_18px_rgba(166,122,235,0.08)] hover:border-[#A67AEB]/55 hover:shadow-[0_0_24px_rgba(166,122,235,0.18)]"
+                                    } ${passLoading && isAuthenticated ? "opacity-90" : ""}`}
+                                >
+                                    {passUnlocked ? (
+                                        <BadgeCheck
+                                            className="h-4 w-4 shrink-0 text-[#B7F041] sm:h-[18px] sm:w-[18px]"
+                                            strokeWidth={2.25}
+                                            aria-hidden
+                                        />
+                                    ) : (
+                                        <Zap
+                                            className="h-4 w-4 shrink-0 text-[#D4B0FF] sm:h-[18px] sm:w-[18px]"
+                                            strokeWidth={2.1}
+                                            aria-hidden
+                                        />
+                                    )}
+                                    <span className="min-w-0 flex flex-col leading-tight">
+                                        <span className="text-[10px] font-bold uppercase tracking-wide text-white/50 sm:text-[11px]">
+                                            {passLoading && isAuthenticated
+                                                ? "Checking…"
+                                                : passUnlocked
+                                                  ? "Unlocked"
+                                                  : "My unlocks"}
+                                        </span>
+                                        <span className="truncate text-[11px] font-semibold sm:text-xs">
+                                            {passLoading && isAuthenticated
+                                                ? "Status"
+                                                : savedContactCount > 0
+                                                  ? `${savedContactCount} owner${savedContactCount === 1 ? "" : "s"}`
+                                                  : passUnlocked
+                                                    ? "Pass active"
+                                                    : "See saved"}
+                                        </span>
+                                    </span>
+                                </button>
+
+                            {showUnlockedContactsPanel && isAuthenticated && (
+                                <div
+                                    className={`animate-scale-in absolute right-0 top-full z-[100] mt-2 flex w-[min(380px,calc(100vw-1.5rem))] max-h-[min(480px,75vh)] flex-col overflow-hidden rounded-2xl border border-[#A67AEB]/35 bg-[#0c0c10] shadow-[0_24px_64px_rgba(0,0,0,0.75)] max-md:hidden`}
+                                >
+                                    <div className="flex shrink-0 items-start justify-between gap-2 border-b border-white/10 bg-[#12121a] px-4 py-3">
+                                        <div className="min-w-0">
+                                            <p className="text-sm font-bold text-white">Unlocked owner contacts</p>
+                                            <p className="mt-0.5 text-xs text-white/55">
+                                                Numbers &amp; WhatsApp you revealed on listings stay here on this device.
+                                            </p>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            aria-label="Close"
+                                            className="rounded-lg p-1 text-white/45 transition hover:bg-white/10 hover:text-white"
+                                            onClick={() => setShowUnlockedContactsPanel(false)}
+                                        >
+                                            <X className="h-5 w-5" strokeWidth={2} />
+                                        </button>
+                                    </div>
+                                    <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
+                                        {savedUnlockedContacts.length === 0 ? (
+                                            <div className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-4 text-center">
+                                                <p className="text-sm text-white/75">No saved unlocks yet.</p>
+                                                <p className="mt-1 text-xs text-white/45">
+                                                    Open a listing and unlock owner contact — it will show up here.
+                                                </p>
+                                                <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-center">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setShowUnlockedContactsPanel(false);
+                                                            router.push("/search");
+                                                        }}
+                                                        className="rounded-full border border-white/20 bg-white/5 px-4 py-2 text-sm font-semibold text-white hover:bg-white/10"
+                                                    >
+                                                        Browse listings
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={handleGetPassFromContactsPanel}
+                                                        className="rounded-full border border-[#A67AEB]/50 bg-[#A67AEB]/15 px-4 py-2 text-sm font-semibold text-[#E8DBFF] hover:bg-[#A67AEB]/25"
+                                                    >
+                                                        Day pass ₹99
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <ul className="space-y-2.5">
+                                                {savedUnlockedContacts.map((contact) => {
+                                                    const listingTitle =
+                                                        listingTitleById.get(contact.propertyId) || `Listing ${contact.propertyId.slice(0, 8)}…`;
+                                                    const wa = contact.phone.replace(/\D/g, "");
+                                                    return (
+                                                        <li
+                                                            key={contact.id}
+                                                            className="rounded-xl border border-white/10 bg-[#101018] p-3.5"
+                                                        >
+                                                            <p className="font-semibold text-white">{contact.name}</p>
+                                                            <p className="mt-0.5 line-clamp-2 text-xs text-white/50">{listingTitle}</p>
+                                                            <p className="mt-2 font-mono text-sm text-[#c5acff]">{contact.phone}</p>
+                                                            <p className="mt-1 text-[10px] uppercase tracking-wide text-white/35">
+                                                                Unlocked{" "}
+                                                                {new Date(contact.unlockedAt).toLocaleString("en-IN", {
+                                                                    day: "numeric",
+                                                                    month: "short",
+                                                                    hour: "2-digit",
+                                                                    minute: "2-digit",
+                                                                })}
+                                                            </p>
+                                                            <div className="mt-3 flex flex-wrap gap-2">
+                                                                <a
+                                                                    href={`https://wa.me/${wa}`}
+                                                                    target="_blank"
+                                                                    rel="noopener noreferrer"
+                                                                    className="inline-flex items-center justify-center rounded-full bg-[#A67AEB] px-3 py-1.5 text-xs font-bold text-[#14141a]"
+                                                                >
+                                                                    WhatsApp
+                                                                </a>
+                                                                <a
+                                                                    href={`tel:${contact.phone}`}
+                                                                    className="inline-flex items-center justify-center rounded-full border border-[#A67AEB]/55 px-3 py-1.5 text-xs font-bold text-[#E8DBFF]"
+                                                                >
+                                                                    Call
+                                                                </a>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        setShowUnlockedContactsPanel(false);
+                                                                        router.push(`/booking/${contact.propertyId}`);
+                                                                    }}
+                                                                    className="inline-flex items-center justify-center rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white/80 hover:bg-white/10"
+                                                                >
+                                                                    View listing
+                                                                </button>
+                                                            </div>
+                                                        </li>
+                                                    );
+                                                })}
+                                            </ul>
+                                        )}
+                                    </div>
+                                    <div className="shrink-0 border-t border-white/10 bg-[#0e0e12] px-3 py-2.5">
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setShowUnlockedContactsPanel(false);
+                                                router.push("/contacts");
+                                            }}
+                                            className="w-full text-center text-xs font-semibold text-[#c5acff] hover:text-white"
+                                        >
+                                            Open full contacts page →
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
                                 <button
                                     onClick={handleProfileClick}
+                                    type="button"
                                     title={isAuthenticated ? "My Profile" : "Sign In"}
-                                    className="h-10 w-10 rounded-full border border-white/30 text-lg transition hover:border-[#A67AEB] active:scale-[0.98]"
+                                    aria-label={isAuthenticated ? "My Profile" : "Sign In"}
+                                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/35 bg-[#0c0a12] transition hover:border-[#A67AEB] active:scale-[0.98]"
                                 >
-                                    ⌾
+                                    <UserCircle
+                                        className="h-[22px] w-[22px] text-white/95"
+                                        strokeWidth={1.65}
+                                        aria-hidden
+                                    />
                                 </button>
 
                             {showProfileMenu && isAuthenticated && (
@@ -348,24 +648,18 @@ export default function HomePage() {
                                                     </div>
                                                 )}
 
-                                                {/* Weekly Pass */}
                                                 {passStatus.has_weekly_active ? (
                                                     <div className="rounded-xl bg-gradient-to-r from-[#B7F041]/20 to-[#9be030]/10 border border-[#B7F041]/30 px-3 py-2.5">
                                                         <div className="flex items-center gap-2 mb-1">
                                                             <span className="text-base">⭐</span>
-                                                            <p className="text-sm font-semibold text-[#D8F88A]">7-Day Unlimited Pass</p>
+                                                            <p className="text-sm font-semibold text-[#D8F88A]">Legacy access pass</p>
                                                             <span className="ml-auto text-xs bg-[#B7F041]/30 text-[#D8F88A] rounded-full px-2 py-0.5 font-medium">Active</span>
                                                         </div>
                                                         {passStatus.weekly_pass_expires_at && (
                                                             <p className="text-xs text-white/50 pl-6">Expires: {formatExpiry(passStatus.weekly_pass_expires_at)}</p>
                                                         )}
                                                     </div>
-                                                ) : (
-                                                    <div className="rounded-xl bg-white/5 border border-white/10 px-3 py-2.5 flex items-center gap-2">
-                                                        <span className="text-base">⭕</span>
-                                                        <p className="text-sm text-white/40">7-Day Pass — Inactive</p>
-                                                    </div>
-                                                )}
+                                                ) : null}
                                             </>
                                         ) : (
                                             <p className="text-xs text-white/40 text-center py-2">Could not load pass info</p>
@@ -422,14 +716,14 @@ export default function HomePage() {
                             <svg className="h-4 w-4 shrink-0 text-white/40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                             </svg>
-                            Let&apos;s find your new <b className="ml-1 text-white/90">House</b>
+                            Let&apos;s find your new house
                         </span>
                         <span className="btn-shimmer shrink-0 rounded-full bg-[#A67AEB] px-3 py-1.5 text-xs font-bold sm:py-2 sm:text-sm">Search</span>
                     </button>
 
                     <div className="flex justify-center py-7 sm:py-10">
                         <h1
-                            className="text-4xl font-black tracking-tight text-[#FAFAF9] sm:text-5xl md:text-6xl"
+                            className="spoto-wordmark text-4xl font-black tracking-tight sm:text-5xl md:text-6xl"
                             style={{ animation: "spoto-text-glow 3s ease-in-out infinite" }}
                         >
                             SPOTO
@@ -490,7 +784,7 @@ export default function HomePage() {
                         </div>
                     )}
                     {loading ? (
-                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 xl:grid-cols-3">
+                        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 sm:gap-6 xl:grid-cols-3">
                             {Array.from({ length: 6 }).map((_, i) => (
                                 <div key={i} className="overflow-hidden rounded-2xl border border-white/10 bg-[#0E0E10]">
                                     <div className="spoto-shimmer h-48 w-full sm:h-56" />
@@ -505,10 +799,18 @@ export default function HomePage() {
                         </div>
                     ) : visibleListings.length === 0 ? (
                         <div className="rounded-2xl border border-white/10 bg-[#0f0f13] p-6 text-center text-sm text-white/70">
-                            No properties available right now.
+                            {selectedCategory && feed.listings.length > 0 ? (
+                                <>
+                                    No listings match{" "}
+                                    <span className="font-semibold text-white/90">{selectedCategory}</span>. Try another
+                                    category or use Search.
+                                </>
+                            ) : (
+                                "No properties available right now."
+                            )}
                         </div>
                     ) : (
-                        <div className="grid grid-cols-1 items-stretch gap-4 sm:grid-cols-2 sm:gap-5 xl:grid-cols-3">
+                        <div className="grid grid-cols-1 items-stretch gap-5 sm:grid-cols-2 sm:gap-6 xl:grid-cols-3">
                             {visibleListings.map((property, idx) => (
                                 <div
                                     key={property.id}

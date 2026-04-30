@@ -15,8 +15,8 @@ export default function OwnerContactsPage() {
     }, []);
 
     return (
-        <main className="min-h-screen bg-[#050507] pb-24 text-white">
-            <div className="mx-auto max-w-4xl px-4 py-4 md:px-6">
+        <main className="min-h-[100dvh] min-h-screen bg-[#050507] pb-[max(6.5rem,calc(5.5rem+env(safe-area-inset-bottom,0px)))] text-white md:pb-8">
+            <div className="mx-auto w-full max-w-full px-4 py-4 sm:px-6 md:max-w-2xl md:px-7 lg:max-w-4xl xl:max-w-5xl">
                 <header className="mb-4 rounded-2xl border border-white/15 bg-[#101018] p-4">
                     <div className="flex items-center justify-between gap-3">
                         <h1 className="text-2xl font-semibold">Unlocked Tenant Contacts</h1>

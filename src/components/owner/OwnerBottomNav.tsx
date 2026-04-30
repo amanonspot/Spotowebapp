@@ -4,6 +4,7 @@ import React from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Home, Search, Ticket } from "lucide-react";
 
+/** Bottom tab bar — mobile / small screens only (`md` and up hidden). */
 export default function OwnerBottomNav() {
     const router = useRouter();
     const pathname = usePathname();
@@ -15,8 +16,11 @@ export default function OwnerBottomNav() {
     ];
 
     return (
-        <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-white/10 bg-[#101018]/95 px-4 py-3 backdrop-blur-md md:static md:mx-auto md:mt-6 md:max-w-[420px] md:rounded-2xl md:border">
-            <div className="mx-auto grid max-w-[420px] grid-cols-3 rounded-2xl border border-white/10 bg-[linear-gradient(120deg,rgba(255,255,255,0.06),rgba(255,255,255,0.02))] p-1">
+        <nav
+            className="fixed bottom-0 left-0 right-0 z-40 border-t border-white/10 bg-[#101018]/95 px-4 pt-3 backdrop-blur-md pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] md:hidden"
+            aria-label="Owner navigation"
+        >
+            <div className="mx-auto grid w-full max-w-md grid-cols-3 rounded-2xl border border-white/10 bg-[linear-gradient(120deg,rgba(255,255,255,0.06),rgba(255,255,255,0.02))] p-1">
                 {navItems.map((item) => {
                     const Icon = item.icon;
                     const active = pathname === item.path || pathname.startsWith(`${item.path}/`);

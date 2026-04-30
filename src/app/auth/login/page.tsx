@@ -6,6 +6,7 @@ import DesktopLoginView from "./_components/DesktopLoginView";
 import MobileLoginView from "./_components/MobileLoginView";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { clearAuthIntent, consumeAuthIntentDestination } from "@/lib/auth/authIntent";
+import toast from "react-hot-toast";
 
 const resolvePostLoginDestination = () => consumeAuthIntentDestination() || "/";
 
@@ -19,6 +20,7 @@ export default function LoginPage() {
     const [showOtpSentMessage, setShowOtpSentMessage] = useState(false);
     const [isSendingOtp, setIsSendingOtp] = useState(false);
     const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
+    const [isResendingOtp, setIsResendingOtp] = useState(false);
     const [localError, setLocalError] = useState<string | undefined>(undefined);
 
     useEffect(() => {
@@ -60,11 +62,19 @@ export default function LoginPage() {
     };
 
     const handleResendOTP = async () => {
+        if (phoneNumber.length !== 10) {
+            setLocalError("Please enter a valid 10-digit mobile number.");
+            return;
+        }
         setLocalError(undefined);
+        setIsResendingOtp(true);
         try {
             await requestOtp(phoneNumber);
+            toast.success("OTP sent again. Check your phone.");
         } catch (err) {
             setLocalError(err instanceof Error ? err.message : "Failed to resend OTP");
+        } finally {
+            setIsResendingOtp(false);
         }
     };
 
@@ -102,6 +112,7 @@ export default function LoginPage() {
                     onResendOTP={handleResendOTP}
                     onChangeNumber={handleChangeNumber}
                     showOtpSentMessage={showOtpSentMessage}
+                    resendLoading={isResendingOtp}
                 />
             </div>
 
@@ -119,6 +130,7 @@ export default function LoginPage() {
                     onResendOTP={handleResendOTP}
                     onChangeNumber={handleChangeNumber}
                     showOtpSentMessage={showOtpSentMessage}
+                    resendLoading={isResendingOtp}
                 />
             </div>
         </>

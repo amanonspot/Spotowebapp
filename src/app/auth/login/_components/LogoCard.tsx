@@ -1,5 +1,5 @@
 import React from "react";
-import Image from "next/image";
+import Logo from "@/components/Logo";
 
 export default function LogoCard() {
     return (
@@ -12,17 +12,10 @@ export default function LogoCard() {
                 paddingTop: "5rem",
                 paddingBottom: "1.5rem",
                 marginTop: "0",
-                marginBottom: "0"
+                marginBottom: "0",
             }}
         >
-            <Image
-                src="/logos/light.png"
-                alt="Logo"
-                width={240}
-                height={80}
-                className="h-auto"
-                priority
-            />
+            <Logo className="!w-[240px]" />
         </div>
     );
 }

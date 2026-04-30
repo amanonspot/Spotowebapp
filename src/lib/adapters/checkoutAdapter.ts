@@ -69,20 +69,13 @@ const toPaywallFromPayload = (payload: unknown): CheckoutState["paywall"] | unde
     const paywall = asRecord(record.data);
     if (!paywall) return undefined;
     const oneDay = asRecord(paywall.one_day);
-    const weekly = asRecord(paywall.weekly);
-    if (!oneDay || !weekly) return undefined;
+    if (!oneDay) return undefined;
     return {
         oneDay: {
             passType: "one_day",
             price: Number(oneDay.price || 99),
             currency: firstString(oneDay.currency, "INR"),
             durationDays: Number(oneDay.duration_days || 1),
-        },
-        weekly: {
-            passType: "weekly",
-            price: Number(weekly.price || 249),
-            currency: firstString(weekly.currency, "INR"),
-            durationDays: Number(weekly.duration_days || 7),
         },
     };
 };
@@ -228,7 +221,6 @@ class HybridCheckoutAdapter implements CheckoutAdapter {
                     message: "No free credits left. Choose a pass.",
                     paywall: {
                         oneDay: { passType: "one_day", price: 99, currency: "INR", durationDays: 1 },
-                        weekly: { passType: "weekly", price: 249, currency: "INR", durationDays: 7 },
                     },
                     creditsRemaining: 0,
                     updatedAt: new Date().toISOString(),
@@ -261,14 +253,14 @@ class HybridCheckoutAdapter implements CheckoutAdapter {
         }
     }
 
-    async activatePass(id: string, passType: "one_day" | "weekly"): Promise<CheckoutState> {
+    async activatePass(id: string): Promise<CheckoutState> {
         const store = readStore();
         const current = store[id];
         if (!current) throw new Error("Checkout session not found");
 
         try {
             const response = (await rentalsService.activatePass({
-                pass_type: passType,
+                pass_type: "one_day",
                 property_id: current.propertyId,
             })) as RentalPassActivateResponseDto;
 
@@ -281,7 +273,7 @@ class HybridCheckoutAdapter implements CheckoutAdapter {
                 // Backend returns amount in rupees; Razorpay checkout expects paise
                 amount: Number(data?.amount || 0) * 100,
                 currency: firstString(data?.currency, "INR"),
-                passType,
+                passType: "one_day" as const,
             };
 
             if (!payment.razorpayOrderId || !payment.razorpayKeyId) {

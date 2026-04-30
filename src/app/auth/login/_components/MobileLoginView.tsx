@@ -19,6 +19,7 @@ interface MobileLoginViewProps {
     onResendOTP?: () => void;
     onChangeNumber?: () => void;
     showOtpSentMessage?: boolean;
+    resendLoading?: boolean;
 }
 
 export default function MobileLoginView({
@@ -34,6 +35,7 @@ export default function MobileLoginView({
     onResendOTP,
     onChangeNumber,
     showOtpSentMessage = false,
+    resendLoading = false,
 }: MobileLoginViewProps) {
     const [otpDigits, setOtpDigits] = React.useState(['', '', '', '']);
     const inputRefs = [
@@ -182,13 +184,14 @@ export default function MobileLoginView({
                             )}
                         </button>
 
-                        {/* Resend Link Button */}
+                        {/* Resend OTP */}
                         <button
-                            onClick={onResendOTP}
-                            disabled={loading}
+                            type="button"
+                            onClick={() => onResendOTP?.()}
+                            disabled={loading || resendLoading || !onResendOTP}
                             className="w-full bg-transparent border border-white/20 text-white font-semibold py-3.5 rounded-xl hover:bg-white/5 hover:border-white/35 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 mb-6"
                         >
-                            Resend link
+                            {resendLoading ? "Sending OTP…" : "Resend OTP"}
                         </button>
 
                         {/* OTP Validity Note */}

@@ -3,6 +3,7 @@ import { authService } from "@/lib/api";
 
 const SESSION_KEY = "spoto_session_v1";
 const PENDING_OTP_KEY = "spoto_pending_otp_v1";
+const PHONE_CACHE_KEY = "spoto_login_phone_v1";
 const DEFAULT_MOCK_OTP = process.env.NEXT_PUBLIC_OWNER_MOCK_OTP || "0000";
 const DEFAULT_MOCK_MODE =
     process.env.NEXT_PUBLIC_OWNER_MOCK_MODE === "true" ||
@@ -39,6 +40,23 @@ const writeJson = (key: string, value: unknown) => {
 const clearKey = (key: string) => {
     if (!isBrowser()) return;
     window.localStorage.removeItem(key);
+};
+
+const normalizePhone10 = (raw: string) =>
+    String(raw || "")
+        .replace(/\D/g, "")
+        .slice(-10);
+
+const readCachedLoginPhone = (): string => {
+    if (!isBrowser()) return "";
+    const v = window.localStorage.getItem(PHONE_CACHE_KEY);
+    return v && /^\d{10}$/.test(v) ? v : "";
+};
+
+const writeCachedLoginPhone = (phone: string) => {
+    const d = normalizePhone10(phone);
+    if (!isBrowser() || d.length !== 10) return;
+    window.localStorage.setItem(PHONE_CACHE_KEY, d);
 };
 
 const toAuthAdapterError = (error: unknown, fallback: string): AuthAdapterError => {
@@ -115,6 +133,7 @@ class HybridAuthAdapter implements AuthAdapter {
         try {
             const payload = await authService.verifyOTP(code, pending.phone);
             const session = toSession(pending.phone, payload);
+            writeCachedLoginPhone(pending.phone);
             writeJson(SESSION_KEY, session);
 
             if (session.accessToken && isBrowser()) {
@@ -132,6 +151,7 @@ class HybridAuthAdapter implements AuthAdapter {
             }
 
             const session = toSession(pending.phone);
+            writeCachedLoginPhone(pending.phone);
             writeJson(SESSION_KEY, session);
             clearKey(PENDING_OTP_KEY);
             return session;
@@ -159,6 +179,7 @@ class HybridAuthAdapter implements AuthAdapter {
                     isGuest: false,
                     accessToken,
                     refreshToken,
+                    phone: readCachedLoginPhone() || undefined,
                 };
             }
             return {
@@ -168,13 +189,23 @@ class HybridAuthAdapter implements AuthAdapter {
         }
 
         if (accessToken && !persisted.accessToken) {
+            const p = normalizePhone10(persisted.phone || "");
+            if (p.length === 10) writeCachedLoginPhone(persisted.phone || "");
             return {
                 ...persisted,
                 isAuthenticated: true,
                 isGuest: false,
                 accessToken,
                 refreshToken: persisted.refreshToken || refreshToken,
+                phone: (p.length === 10 ? p : readCachedLoginPhone()) || undefined,
             };
+        }
+
+        const digits = normalizePhone10(persisted.phone || "");
+        if (digits.length === 10) writeCachedLoginPhone(persisted.phone || "");
+        const mergedPhone = digits.length === 10 ? digits : readCachedLoginPhone() || persisted.phone;
+        if (mergedPhone && mergedPhone !== persisted.phone) {
+            return { ...persisted, phone: mergedPhone };
         }
 
         return persisted;
@@ -200,5 +231,6 @@ export const clearMockSession = () => {
         localStorage.removeItem("access_token");
         localStorage.removeItem("refresh_token");
         localStorage.removeItem("isAuthenticated");
+        localStorage.removeItem(PHONE_CACHE_KEY);
     }
 };

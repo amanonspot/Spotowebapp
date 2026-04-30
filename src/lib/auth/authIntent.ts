@@ -6,7 +6,7 @@ export interface AuthIntentPayload {
     type: AuthIntentType;
     createdAt: number;
     propertyId?: string;
-    passType?: "one_day" | "weekly";
+    passType?: "one_day";
     nextPath?: string;
 }
 
@@ -36,8 +36,8 @@ const sanitizeIntent = (value: unknown): AuthIntentPayload | null => {
     if (typeof record.propertyId === "string" && record.propertyId.trim()) {
         intent.propertyId = record.propertyId.trim();
     }
-    if (record.passType === "one_day" || record.passType === "weekly") {
-        intent.passType = record.passType;
+    if (record.passType === "one_day") {
+        intent.passType = "one_day";
     }
     if (typeof record.nextPath === "string" && record.nextPath.trim()) {
         intent.nextPath = record.nextPath.trim();
@@ -100,13 +100,11 @@ export const toIntentDestination = (intent: AuthIntentPayload | null): string | 
     }
 
     if (intent.type === "buy_pass" && intent.propertyId) {
-        const passType = intent.passType === "one_day" || intent.passType === "weekly" ? intent.passType : "weekly";
-        return `/booking/${intent.propertyId}?resume=buy_pass&passType=${passType}`;
+        return `/booking/${intent.propertyId}?resume=buy_pass&passType=one_day`;
     }
 
     if (intent.type === "buy_pass_global") {
-        const passType = intent.passType === "weekly" ? "weekly" : "one_day";
-        return `/?resume=buy_pass_global&passType=${passType}`;
+        return `/?resume=buy_pass_global&passType=one_day`;
     }
 
     if (intent.type === "search") return "/search";

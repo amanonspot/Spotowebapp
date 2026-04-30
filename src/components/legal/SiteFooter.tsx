@@ -36,7 +36,7 @@ export default function SiteFooter() {
                 <div className="grid gap-11 md:grid-cols-2 lg:grid-cols-12 lg:gap-10">
                     <div className="lg:col-span-4">
                         <Link href="/" className="group inline-flex items-baseline gap-2">
-                            <span className="text-2xl font-black tracking-tight text-white transition group-hover:text-[#E8DBFF]">
+                            <span className="spoto-wordmark text-2xl font-black tracking-tight transition group-hover:opacity-95">
                                 SPOTO
                             </span>
                             <span className="rounded-full border border-[#A67AEB]/35 bg-[#A67AEB]/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[#D4B0FF]">

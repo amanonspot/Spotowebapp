@@ -15,6 +15,7 @@ import {
     UnknownRecord,
     WireApiEnvelope,
 } from "@/lib/rentals/wireTypes";
+import { stripMapLinksFromDescription } from "@/lib/rentals/stripMapLinksFromDescription";
 
 type NormalizerContext = {
     cityNameById?: Record<string, string>;
@@ -31,11 +32,10 @@ type NormalizerOptions = NormalizerContext & {
 };
 
 const DEFAULT_UNLOCK_OFFER: PropertyDetail["unlockOffer"] = {
-    weeklyPassPrice: 249,
     headline: "Get Direct Owner's Contacts",
     subHeadline: "Unlock verified owner details",
-    bullets: ["Direct Owner Contact", "Exact map location", "Unlimited contacts for 7 days", "No brokerage"],
-    ctaLabel: "SPOTO Weekly Pass - ₹249*",
+    bullets: ["Direct Owner Contact", "Exact map location", "Unlimited contacts for 24 hours", "No brokerage"],
+    ctaLabel: "SPOTO Day Pass - ₹99*",
 };
 
 const asRecord = (value: unknown): UnknownRecord | null =>
@@ -132,6 +132,13 @@ const numberOrFallback = (value: unknown, fallback = 0): number => {
     return fallback;
 };
 
+const readNullablePositiveInt = (value: unknown): number | null => {
+    if (value == null || value === "") return null;
+    const n = typeof value === "number" ? value : Number(value);
+    if (!Number.isFinite(n) || n <= 0) return null;
+    return Math.round(n);
+};
+
 const API_ORIGIN = (() => {
     const rawBase = process.env.NEXT_PUBLIC_API_BASE_URL?.trim();
     if (!rawBase) return "";
@@ -193,12 +200,36 @@ const resolvePropertyTypeCode = (wire: RentalPropertyDto): string =>
 
 const toPropertyTypes = (wire: RentalPropertyDto): PropertyType[] => {
     const raw = resolvePropertyTypeCode(wire);
+    const title = firstString(wire.property_title).toLowerCase();
+    const desc = firstString(wire.description).toLowerCase();
+    const haystack = `${raw} ${title} ${desc}`;
+
     const types = new Set<PropertyType>();
-    if (raw.includes("pg")) types.add("pg");
-    if (raw.includes("co") && raw.includes("liv")) types.add("co_living");
-    if (raw.includes("zero")) types.add("zero_deposit");
-    if (raw.includes("apartment") || raw.includes("house") || raw.includes("rent") || types.size === 0) {
-        types.add("rent_house");
+    if (raw.includes("pg") || /\bpg\b/.test(haystack) || haystack.includes("paying guest")) types.add("pg");
+    if ((raw.includes("co") && raw.includes("liv")) || /co[\s-]?living|coliving|\bco living\b/.test(haystack)) {
+        types.add("co_living");
+    }
+    if (raw.includes("zero") || /zero deposit|no deposit|nil deposit/.test(haystack)) types.add("zero_deposit");
+
+    const dep = wire.deposit;
+    const depNum = typeof dep === "number" ? dep : Number(String(dep).replace(/,/g, ""));
+    if (dep !== undefined && dep !== null && String(dep).trim() !== "" && !Number.isNaN(depNum) && depNum === 0) {
+        types.add("zero_deposit");
+    }
+
+    const isPg = types.has("pg");
+    const isCoLiving = types.has("co_living");
+    if (
+        !isPg &&
+        !isCoLiving &&
+        (raw.includes("apartment") ||
+            raw.includes("house") ||
+            raw.includes("rent") ||
+            raw.includes("flat") ||
+            types.size === 0 ||
+            /\b(bhk|flat|apartment|studio|villa|independent)\b/.test(haystack))
+    ) {
+      types.add("rent_house");
     }
     return Array.from(types);
 };
@@ -609,7 +640,7 @@ export const normalizePropertyDetail = (
     return {
         ...detailBase,
         ...listBase,
-        description: firstString(wire.description, detailBase.description, ""),
+        description: stripMapLinksFromDescription(firstString(wire.description, detailBase.description, "")),
         mapPreviewLabel: firstString(
             (wire as UnknownRecord).map_preview_label,
             `${listBase.locality}, ${listBase.city}`,
@@ -617,7 +648,7 @@ export const normalizePropertyDetail = (
         ),
         mapPreviewSubLabel: firstString(
             (wire as UnknownRecord).map_preview_sub_label,
-            "Unlock map + direct call with Weekly Pass",
+            "Unlock map + direct call with Day Pass (₹99)",
             detailBase.mapPreviewSubLabel
         ),
         amenities: amenities.length > 0 ? amenities : detailBase.amenities,
@@ -628,6 +659,13 @@ export const normalizePropertyDetail = (
         latitude: firstString((wire as UnknownRecord).latitude),
         longitude: firstString((wire as UnknownRecord).longitude),
         availableFrom: firstString((wire as UnknownRecord).available_from),
+        addressLine: firstString(wire.address_line),
+        builtUpAreaSqft: readNullablePositiveInt(wire.built_up_area_sqft),
+        propertyTypeLabel: firstString(wire.property_type_name),
+        bhkLabel: firstString(wire.bhk_name),
+        furnishingLabel: firstString(wire.furnishing_name),
+        availabilityLabel: firstString(wire.availability_name),
+        listedByEmployeeName: firstString(wire.listed_by_employee_name),
     };
 };
 

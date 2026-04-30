@@ -54,6 +54,40 @@
     --sidebar-ring: oklch(0.708 0 0);
 }
 
+/* SPOTO wordmark — white type + lime edge glow (brand reference) */
+.spoto-wordmark {
+    color: #fafaf9;
+    text-shadow:
+        0 0 1px rgba(183, 240, 65, 0.95),
+        0 0 10px rgba(183, 240, 65, 0.55),
+        0 0 22px rgba(183, 240, 65, 0.28),
+        0 0 36px rgba(183, 240, 65, 0.12);
+}
+
+/* Dark type on light / tinted surfaces — same lime accent */
+.spoto-wordmark-on-light {
+    color: #2d2438;
+    text-shadow:
+        0 0 1px rgba(183, 240, 65, 0.75),
+        0 0 8px rgba(183, 240, 65, 0.38),
+        0 0 18px rgba(183, 240, 65, 0.14);
+}
+
+/* Raster / PNG logo on dark UI */
+.spoto-logo-glow {
+    filter:
+        drop-shadow(0 0 1px rgba(183, 240, 65, 0.9))
+        drop-shadow(0 0 5px rgba(183, 240, 65, 0.48))
+        drop-shadow(0 0 14px rgba(183, 240, 65, 0.22));
+}
+
+/* Dark logo on light header (booking, etc.) */
+.spoto-logo-glow-dark {
+    filter:
+        drop-shadow(0 0 0.5px rgba(183, 240, 65, 0.45))
+        drop-shadow(0 0 5px rgba(183, 240, 65, 0.18));
+}
+
 @theme inline {
     --color-background: var(--background);
     --color-foreground: var(--foreground);
@@ -945,15 +979,17 @@ html {
 @keyframes spoto-text-glow {
     0%, 100% {
         text-shadow:
-            0 0 18px rgba(255, 255, 255, 0.45),
-            0 0 42px rgba(255, 255, 255, 0.2),
-            0 0 72px rgba(230, 230, 255, 0.08);
+            0 0 1px rgba(183, 240, 65, 0.95),
+            0 0 12px rgba(183, 240, 65, 0.5),
+            0 0 26px rgba(183, 240, 65, 0.26),
+            0 0 44px rgba(183, 240, 65, 0.1);
     }
     50% {
         text-shadow:
-            0 0 28px rgba(255, 255, 255, 0.65),
-            0 0 56px rgba(255, 255, 255, 0.3),
-            0 0 88px rgba(245, 245, 255, 0.12);
+            0 0 2px rgba(183, 240, 65, 1),
+            0 0 18px rgba(183, 240, 65, 0.65),
+            0 0 34px rgba(183, 240, 65, 0.36),
+            0 0 52px rgba(183, 240, 65, 0.16);
     }
 }
 @keyframes spoto-unlock-reveal {
@@ -966,6 +1002,74 @@ html {
     100% { background-position: 0% 50%; }
 }
 
+/* Active pass card — same breathing glow; lime vs violet is color-only (.animate-pass-glow-*) */
+@keyframes spoto-pass-glow-lime {
+    0%, 100% {
+        box-shadow:
+            0 0 0 1px rgba(183, 240, 65, 0.22),
+            0 4px 28px -8px rgba(183, 240, 65, 0.35),
+            0 0 48px -16px rgba(183, 240, 65, 0.12),
+            inset 0 1px 0 rgba(183, 240, 65, 0.08);
+    }
+    50% {
+        box-shadow:
+            0 0 0 1px rgba(183, 240, 65, 0.5),
+            0 8px 36px -6px rgba(183, 240, 65, 0.55),
+            0 0 56px -12px rgba(183, 240, 65, 0.22),
+            inset 0 1px 0 rgba(183, 240, 65, 0.14);
+    }
+}
+@keyframes spoto-pass-glow-violet {
+    0%, 100% {
+        box-shadow:
+            0 0 0 1px rgba(166, 122, 235, 0.32),
+            0 4px 36px -6px rgba(166, 122, 235, 0.42),
+            0 0 56px -10px rgba(166, 122, 235, 0.2),
+            0 0 88px -18px rgba(166, 122, 235, 0.1),
+            inset 0 1px 0 rgba(166, 122, 235, 0.12);
+    }
+    50% {
+        box-shadow:
+            0 0 0 1px rgba(166, 122, 235, 0.58),
+            0 12px 48px -4px rgba(166, 122, 235, 0.58),
+            0 0 76px -8px rgba(166, 122, 235, 0.36),
+            0 0 104px -14px rgba(166, 122, 235, 0.16),
+            inset 0 1px 0 rgba(166, 122, 235, 0.18);
+    }
+}
+
+/* Active pass — cyan/teal glow (distinct from lime CTA & purple brand accents) */
+@keyframes spoto-pass-glow-cyan {
+    0%, 100% {
+        box-shadow:
+            0 0 0 1px rgba(34, 211, 238, 0.38),
+            0 4px 36px -6px rgba(34, 211, 238, 0.45),
+            0 0 56px -10px rgba(20, 184, 166, 0.22),
+            0 0 88px -18px rgba(34, 211, 238, 0.12),
+            inset 0 1px 0 rgba(165, 243, 252, 0.14);
+    }
+    50% {
+        box-shadow:
+            0 0 0 1px rgba(34, 211, 238, 0.65),
+            0 12px 48px -4px rgba(34, 211, 238, 0.62),
+            0 0 76px -8px rgba(20, 184, 166, 0.38),
+            0 0 104px -14px rgba(34, 211, 238, 0.2),
+            inset 0 1px 0 rgba(207, 250, 254, 0.2);
+    }
+}
+@keyframes spoto-pass-pin-float {
+    0%, 100% { transform: translateY(0) scale(1); opacity: 1; filter: drop-shadow(0 0 6px rgba(183, 240, 65, 0.35)); }
+    50%      { transform: translateY(-2px) scale(1.06); opacity: 0.95; filter: drop-shadow(0 0 12px rgba(183, 240, 65, 0.55)); }
+}
+@keyframes spoto-pass-pin-float-violet {
+    0%, 100% { transform: translateY(0) scale(1); filter: drop-shadow(0 0 8px rgba(166, 122, 235, 0.5)) drop-shadow(0 0 20px rgba(166, 122, 235, 0.28)); }
+    50%      { transform: translateY(-2px) scale(1.06); filter: drop-shadow(0 0 14px rgba(166, 122, 235, 0.72)) drop-shadow(0 0 32px rgba(166, 122, 235, 0.42)); }
+}
+@keyframes spoto-pass-pin-float-cyan {
+    0%, 100% { transform: translateY(0) scale(1); filter: drop-shadow(0 0 8px rgba(34, 211, 238, 0.55)) drop-shadow(0 0 22px rgba(20, 184, 166, 0.35)); }
+    50%      { transform: translateY(-2px) scale(1.06); filter: drop-shadow(0 0 14px rgba(34, 211, 238, 0.85)) drop-shadow(0 0 34px rgba(20, 184, 166, 0.48)); }
+}
+
 /* ── Animation utility classes ──────────────────────────────────── */
 .animate-fade-up   { animation: spoto-fade-up   0.42s cubic-bezier(0.22,1,0.36,1) both; }
 .animate-fade-in   { animation: spoto-fade-in   0.3s ease both; }
@@ -974,6 +1078,24 @@ html {
 .animate-slide-r   { animation: spoto-slide-right 0.35s cubic-bezier(0.22,1,0.36,1) both; }
 .animate-unlock    { animation: spoto-unlock-reveal 0.55s cubic-bezier(0.22,1,0.36,1) both; }
 .animate-pulse-glow { animation: spoto-pulse-glow 2.4s ease-in-out infinite; }
+.animate-pass-glow-lime {
+    animation: spoto-pass-glow-lime 2.85s ease-in-out infinite;
+}
+.animate-pass-glow-violet {
+    animation: spoto-pass-glow-violet 2.85s ease-in-out infinite;
+}
+.animate-pass-glow-cyan {
+    animation: spoto-pass-glow-cyan 2.85s ease-in-out infinite;
+}
+.animate-pass-pin {
+    animation: spoto-pass-pin-float 2.2s ease-in-out infinite;
+}
+.animate-pass-pin-violet {
+    animation: spoto-pass-pin-float-violet 2.2s ease-in-out infinite;
+}
+.animate-pass-pin-cyan {
+    animation: spoto-pass-pin-float-cyan 2.2s ease-in-out infinite;
+}
 
 /* Staggered card delays */
 .delay-1  { animation-delay: 0.05s; }

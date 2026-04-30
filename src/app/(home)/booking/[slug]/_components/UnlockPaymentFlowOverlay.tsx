@@ -17,20 +17,13 @@ interface UnlockPaymentFlowOverlayProps {
     onContinueFromSuccess: () => void;
 }
 
-const isWeekly = (context: UnlockPaymentContext | null) =>
-    context?.passType === "weekly";
+const getPassLabel = () => "1-Day Unlimited Pass";
 
-const getPassLabel = (context: UnlockPaymentContext | null) =>
-    isWeekly(context) ? "7-Day Unlimited Pass" : "1-Day Unlimited Pass";
+const getDurationLabel = () => "24-Hrs";
 
-const getDurationLabel = (context: UnlockPaymentContext | null) =>
-    isWeekly(context) ? "7-Day" : "24-Hrs";
+const getContactLimit = () => "Unlimited Contacts for 24 Hrs*";
 
-const getContactLimit = (context: UnlockPaymentContext | null) =>
-    isWeekly(context) ? "Unlimited Contacts for 7 Days*" : "Unlimited Contacts for 24 Hrs*";
-
-const getPrice = (context: UnlockPaymentContext | null) =>
-    context?.amount || (isWeekly(context) ? 249 : 99);
+const getPrice = (context: UnlockPaymentContext | null) => context?.amount || 99;
 
 const Shell = ({ children, onClose }: { children: React.ReactNode; onClose: () => void }) => (
     <div
@@ -163,7 +156,7 @@ export default function UnlockPaymentFlowOverlay({
 
                     <div className="mx-auto mt-6 max-w-[420px] rounded-2xl border border-[#B7F041]/25 bg-[#B7F041]/5 px-5 py-4 text-left">
                         <p className="text-sm font-semibold uppercase tracking-wider text-[#B7F041]/70">Your Pass</p>
-                        <p className="mt-1 text-xl font-bold text-white">{getPassLabel(context)}</p>
+                        <p className="mt-1 text-xl font-bold text-white">{getPassLabel()}</p>
                         <p className="mt-0.5 text-sm text-white/55">Unlimited owner contacts • No brokerage</p>
                     </div>
                 </div>
@@ -217,10 +210,8 @@ export default function UnlockPaymentFlowOverlay({
 
     /* ── Main paywall ───────────────────────────────────────────────── */
     const price = getPrice(context);
-    const durationLabel = getDurationLabel(context);
-    const passLabel = getPassLabel(context);
-    const contactLimit = getContactLimit(context);
-    const weekly = isWeekly(context);
+    const durationLabel = getDurationLabel();
+    const contactLimit = getContactLimit();
 
     return (
         <Shell onClose={onClosePaywall}>
@@ -293,7 +284,7 @@ export default function UnlockPaymentFlowOverlay({
                     {/* CTA strip */}
                     <div className="cta-bar bg-[#B7F041] px-5 py-3 text-center">
                         <p className="text-base font-extrabold text-[#111]">
-                            SPOTO {weekly ? "Weekly" : "Day"} Pass – ₹{price}*
+                            SPOTO Day Pass – ₹{price}*
                         </p>
                     </div>
                 </section>

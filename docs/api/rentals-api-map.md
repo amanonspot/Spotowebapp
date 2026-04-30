@@ -12,7 +12,7 @@
 3. Canonical detail endpoint: `GET /api/rental/properties/?property_id=<uuid>`
 4. Availability supports both: `availability_id` and `available_from`
 5. Error envelope supports: `success:false`, `error`, optional `field_errors`
-6. Unlock paywall shape uses `error` + `data.one_day|weekly`
+6. Unlock paywall shape uses `error` + `data.one_day` (₹99 day pass only)
 7. Localities API must receive `city_id`
 8. Owner update endpoint: `PATCH /api/rental/my/properties/update/?property_id=<uuid>` multipart
 
@@ -54,7 +54,7 @@
 - Auth: yes
 - Body: optional `{ name, phone, message }`
 - Success reads: `data.owner`, `data.lead`, `data.documents`
-- Paywall reads: `error` + `data.one_day`, `data.weekly`
+- Paywall reads: `error` + `data.one_day` (weekly pass is no longer offered)
 
 ### Pass Activate
 - Endpoint: `POST /api/rental/passes/activate/`

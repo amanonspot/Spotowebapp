@@ -463,6 +463,7 @@ const toFormFromWire = (wire: RentalPropertyDto): OwnerListingFormInput => ({
         return parseStringArray(wire.amenity_ids).filter(Boolean);
     })(),
     keywords: parseStringArray(wire.keywords),
+    documentType: firstString(asArray<UnknownRecord>((wire as UnknownRecord).documents)[0]?.document_type),
     documentMeta: (() => {
         const documents = asArray<UnknownRecord>((wire as UnknownRecord).documents);
         const latest = documents[0];

@@ -6,6 +6,7 @@ import DesktopOTPView from "./_components/DesktopOTPView";
 import MobileOTPView from "./_components/MobileOTPView";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { clearAuthIntent, consumeAuthIntentDestination } from "@/lib/auth/authIntent";
+import toast from "react-hot-toast";
 
 const resolvePostLoginDestination = () => consumeAuthIntentDestination() || "/";
 
@@ -19,6 +20,7 @@ export default function OTPPage() {
     const [otp, setOtp] = useState(["", "", "", ""]);
     const [timer, setTimer] = useState(600);
     const [loading, setLoading] = useState(false);
+    const [resendLoading, setResendLoading] = useState(false);
     const [localError, setLocalError] = useState<string | undefined>(undefined);
 
     const inputRefs = useMemo(
@@ -97,13 +99,21 @@ export default function OTPPage() {
     };
 
     const handleResend = async () => {
+        if (!phoneNumber || phoneNumber.length !== 10) {
+            setLocalError("Invalid phone number. Go back and try again.");
+            return;
+        }
         setLocalError(undefined);
+        setResendLoading(true);
         try {
             await requestOtp(phoneNumber);
             setOtp(["", "", "", ""]);
             setTimer(600);
+            toast.success("OTP sent again. Check your phone.");
         } catch (err) {
             setLocalError(err instanceof Error ? err.message : "Failed to resend OTP");
+        } finally {
+            setResendLoading(false);
         }
     };
 
@@ -129,6 +139,7 @@ export default function OTPPage() {
                     onLogin={handleLogin}
                     onResend={handleResend}
                     loading={loading}
+                    resendLoading={resendLoading}
                     error={localError || error || undefined}
                 />
             </div>
@@ -145,6 +156,7 @@ export default function OTPPage() {
                     onLogin={handleLogin}
                     onResend={handleResend}
                     loading={loading}
+                    resendLoading={resendLoading}
                     error={localError || error || undefined}
                 />
             </div>

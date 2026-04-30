@@ -337,7 +337,7 @@ export default function MobileHomeView({
                         <div className="text-white/80 text-sm mb-1">
                             Host your Property on
                         </div>
-                        <div className="text-black text-xl font-bold">
+                        <div className="spoto-wordmark text-xl font-bold">
                             SPOTO ✨
                         </div>
                     </div>

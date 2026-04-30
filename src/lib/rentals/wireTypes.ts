@@ -159,7 +159,6 @@ export interface RentalPassOptionDto {
 
 export interface RentalPaywallDto {
     one_day: RentalPassOptionDto;
-    weekly: RentalPassOptionDto;
 }
 
 export interface RentalContactUnlockSuccessDto {
@@ -177,7 +176,7 @@ export interface RentalContactUnlockPaywallDto {
 export type RentalContactUnlockResponseDto = RentalContactUnlockSuccessDto | RentalContactUnlockPaywallDto | ApiErrorShape;
 
 export interface RentalPassActivatePayloadDto {
-    pass_type: "one_day" | "weekly";
+    pass_type: "one_day";
     property_id?: string;
 }
 
