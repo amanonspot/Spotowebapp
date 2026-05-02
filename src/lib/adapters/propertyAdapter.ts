@@ -234,6 +234,7 @@ const applyClientFilters = (items: PropertyListItem[], filters: FilterState): Pr
         const queryMatch =
             !nextFilters.query ||
             includesIgnoreCase(item.title, nextFilters.query) ||
+            (item.propertyTitle ? includesIgnoreCase(item.propertyTitle, nextFilters.query) : false) ||
             includesIgnoreCase(item.locality, nextFilters.query) ||
             includesIgnoreCase(item.city, nextFilters.query);
 
@@ -242,20 +243,29 @@ const applyClientFilters = (items: PropertyListItem[], filters: FilterState): Pr
             selectedLocalityIds.includes(item.localityId || "") ||
             selectedLocalityIds.includes(item.locality);
 
-        const bhkMatch =
-            (nextFilters.selectedBhkIds || []).length > 0
-                ? (nextFilters.selectedBhkIds || []).includes(item.bhkId || "")
-                : nextFilters.bhk.length === 0 || nextFilters.bhk.includes(item.bhk);
+        const bhkMatch = (() => {
+            const ids = nextFilters.selectedBhkIds || [];
+            const legacy = nextFilters.bhk || [];
+            if (ids.length === 0 && legacy.length === 0) return true;
+            if (ids.some((id) => isUuidLike(id))) {
+                return ids.includes(item.bhkId || "");
+            }
+            return legacy.length === 0 || legacy.some((token) => toToken(token) === toToken(item.bhk));
+        })();
+
+        const typeMatch = (() => {
+            const ids = nextFilters.selectedPropertyTypeIds || [];
+            const names = nextFilters.propertyTypes || [];
+            if (ids.length === 0 && names.length === 0) return true;
+            if (ids.some((id) => isUuidLike(id))) {
+                return ids.includes(item.propertyTypeId || "");
+            }
+            return names.some((type) =>
+                item.propertyTypes.some((itemType) => toToken(itemType) === toToken(type))
+            );
+        })();
 
         const budgetMatch = item.pricePerMonth >= nextFilters.budgetMin && item.pricePerMonth <= nextFilters.budgetMax;
-
-        const typeMatch =
-            (nextFilters.selectedPropertyTypeIds || []).length > 0
-                ? (nextFilters.selectedPropertyTypeIds || []).includes(item.propertyTypeId || "")
-                : nextFilters.propertyTypes.length === 0 ||
-                  nextFilters.propertyTypes.some((type) =>
-                      item.propertyTypes.some((itemType) => toToken(itemType) === toToken(type))
-                  );
 
         const moveInMatch =
             nextFilters.moveInBy.length === 0 ||
