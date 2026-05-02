@@ -1,10 +1,8 @@
 import type { NextConfig } from "next";
+import { getApiBaseUrl } from "./src/lib/runtime/publicEnv";
 
 const isProduction = process.env.NODE_ENV === "production";
-const apiBaseUrl =
-    process.env.NEXT_PUBLIC_API_BASE_URL ||
-    process.env.NEXT_PUBLIC_API_URL ||
-    "https://production.api.spoto.in";
+const apiBaseUrl = getApiBaseUrl();
 
 const connectSrcHosts = [
     "'self'",

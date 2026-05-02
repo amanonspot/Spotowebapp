@@ -11,7 +11,7 @@ Scope: tenant + owner frontend hardening before production push
    - `public/assets/images/Spoto - APIs.postman_collection (1).json`
 
 2. Removed hardcoded Google API key fallback values from client config:
-   - `src/config/config.js`
+   - `src/config/config.ts`
 
 3. Added production security headers and tightened runtime config:
    - CSP

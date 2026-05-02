@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Toaster } from "react-hot-toast";
+import { getPublicSiteUrl } from "@/lib/runtime/publicEnv";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -15,25 +16,26 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-    title: "Spoto: Book Full Homes at Budget Hotel Prices",
-    description: "Book Full Homes at Budget Hotel Prices",
-    keywords: ["budget hotels", "full homes", "affordable stays", "home stays", "villas", "budget accommodation"],
+    metadataBase: new URL(getPublicSiteUrl()),
+    title: "Spoto: Let's find a new House",
+    description: "Spoto: Let's find a new House",
+    keywords: ["rentals", "homes", "apartments", "Spoto", "house hunting", "listings"],
     icons: {
         icon: '/logos/icon.png',
         shortcut: '/logos/icon.png',
         apple: '/logos/icon.png',
     },
     openGraph: {
-        title: "Spoto: Book Full Homes at Budget Hotel Prices",
-        description: "Book Full Homes at Budget Hotel Prices",
-        url: "https://spoto.in",
+        title: "Spoto: Let's find a new House",
+        description: "Spoto: Let's find a new House",
+        url: getPublicSiteUrl(),
         siteName: "Spoto",
         type: "website",
     },
     twitter: {
         card: "summary_large_image",
-        title: "Spoto: Book Full Homes at Budget Hotel Prices",
-        description: "Book Full Homes at Budget Hotel Prices",
+        title: "Spoto: Let's find a new House",
+        description: "Spoto: Let's find a new House",
     },
     other: {
         'google': 'notranslate',

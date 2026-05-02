@@ -40,7 +40,7 @@
    • STATUS.md
 
 ✅ Configuration:             ALL updated
-   • src/config/config.js (backend URL configured)
+   • src/config/config.ts (backend URL configured)
    • package.json (axios installed)
    • .env.local (ready to use)
 

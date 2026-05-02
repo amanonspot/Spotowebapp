@@ -16,6 +16,7 @@ import {
     WireApiEnvelope,
 } from "@/lib/rentals/wireTypes";
 import { stripMapLinksFromDescription } from "@/lib/rentals/stripMapLinksFromDescription";
+import { getApiBaseUrl } from "@/lib/runtime/publicEnv";
 
 type NormalizerContext = {
     cityNameById?: Record<string, string>;
@@ -140,7 +141,7 @@ const readNullablePositiveInt = (value: unknown): number | null => {
 };
 
 const API_ORIGIN = (() => {
-    const rawBase = process.env.NEXT_PUBLIC_API_BASE_URL?.trim();
+    const rawBase = getApiBaseUrl();
     if (!rawBase) return "";
     try {
         return new URL(rawBase).origin;

@@ -1,9 +1,7 @@
 import axios, { AxiosError, AxiosInstance, AxiosRequestConfig } from "axios";
+import { getApiBaseUrl } from "@/lib/runtime/publicEnv";
 
-const API_BASE_URL =
-    process.env.NEXT_PUBLIC_API_BASE_URL ||
-    process.env.NEXT_PUBLIC_API_URL ||
-    "https://production.api.spoto.in";
+const API_BASE_URL = getApiBaseUrl();
 
 const CACHE_DURATION_MS = 30_000;
 const requestCache = new Map<string, { data: unknown; timestamp: number }>();

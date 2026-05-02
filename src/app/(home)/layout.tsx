@@ -1,21 +1,22 @@
-import { Metadata } from "next";
+import type { Metadata } from "next";
 import { Suspense } from "react";
 import AuthLayoutWrapper from "@/components/AuthLayoutWrapper";
 import SiteFooter from "@/components/legal/SiteFooter";
+import { getPublicSiteUrl } from "@/lib/runtime/publicEnv";
 export const metadata: Metadata = {
-    title: "Spoto: Book Full Homes at Budget Hotel Prices",
-    description: "Book Full Homes at Budget Hotel Prices",
+    title: "Spoto: Let's find a new House",
+    description: "Spoto: Let's find a new House",
     openGraph: {
-        title: "Spoto: Book Full Homes at Budget Hotel Prices",
-        description: "Book Full Homes at Budget Hotel Prices",
-        url: "https://spoto.in",
+        title: "Spoto: Let's find a new House",
+        description: "Spoto: Let's find a new House",
+        url: getPublicSiteUrl(),
         siteName: "Spoto",
         type: "website",
     },
     twitter: {
         card: "summary_large_image",
-        title: "Spoto: Book Full Homes at Budget Hotel Prices",
-        description: "Book Full Homes at Budget Hotel Prices",
+        title: "Spoto: Let's find a new House",
+        description: "Spoto: Let's find a new House",
     },
 };
 
