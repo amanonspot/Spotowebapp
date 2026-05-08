@@ -271,30 +271,6 @@ export default function FilterPanel({
                         ) : null}
                     </section>
 
-                    <section className="rounded-2xl border border-white/30 bg-[#121217] p-4 sm:rounded-3xl sm:p-5">
-                        <h3 className="text-xl font-semibold sm:text-2xl">Proximity Search (Optional)</h3>
-                        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
-                            <input
-                                value={filters.proximityLat || ""}
-                                onChange={(event) => onChange({ ...filters, proximityLat: event.target.value })}
-                                placeholder="Latitude"
-                                className="h-11 rounded-xl border border-white/20 bg-[#0d0d14] px-3 text-sm text-white/90 outline-none placeholder:text-white/35 focus:border-[#A67AEB]"
-                            />
-                            <input
-                                value={filters.proximityLng || ""}
-                                onChange={(event) => onChange({ ...filters, proximityLng: event.target.value })}
-                                placeholder="Longitude"
-                                className="h-11 rounded-xl border border-white/20 bg-[#0d0d14] px-3 text-sm text-white/90 outline-none placeholder:text-white/35 focus:border-[#A67AEB]"
-                            />
-                            <input
-                                value={filters.proximityRadiusKm || ""}
-                                onChange={(event) => onChange({ ...filters, proximityRadiusKm: event.target.value })}
-                                placeholder="Radius (km)"
-                                className="h-11 rounded-xl border border-white/20 bg-[#0d0d14] px-3 text-sm text-white/90 outline-none placeholder:text-white/35 focus:border-[#A67AEB]"
-                            />
-                        </div>
-                    </section>
-
                     <section>
                         <h3 className="text-xl font-semibold sm:text-2xl">Move In by</h3>
                         <div className="mt-4 flex flex-wrap gap-3">

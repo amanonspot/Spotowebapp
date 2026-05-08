@@ -723,8 +723,8 @@ export default function HomePage() {
 
                     <div className="flex justify-center py-7 sm:py-10">
                         <h1
-                            className="spoto-wordmark text-4xl font-black tracking-tight sm:text-5xl md:text-6xl"
-                            style={{ animation: "spoto-text-glow 3s ease-in-out infinite" }}
+                            className="spoto-wordmark text-4xl font-black tracking-tighter sm:text-5xl md:text-6xl"
+                            style={{ color: "var(--tw-color-neutral-50, #fafafa)", WebkitTextStroke: "3px currentColor" }}
                         >
                             SPOTO
                         </h1>

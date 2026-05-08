@@ -140,9 +140,6 @@ const mapFiltersToApiParams = (filters: FilterState) => {
         rent_max?: number;
         amenity_ids?: string[];
         keywords?: string[];
-        lat?: number;
-        lng?: number;
-        radius_km?: number;
     } = {};
     if (filters.budgetMin > 0) params.rent_min = filters.budgetMin;
     if (filters.budgetMax > 0) params.rent_max = filters.budgetMax;
@@ -161,15 +158,6 @@ const mapFiltersToApiParams = (filters: FilterState) => {
 
     const keywords = (filters.keywords || []).map((item) => item.trim()).filter(Boolean);
     if (keywords.length > 0) params.keywords = keywords;
-
-    const lat = Number(filters.proximityLat || "");
-    const lng = Number(filters.proximityLng || "");
-    const radius = Number(filters.proximityRadiusKm || "");
-    if (Number.isFinite(lat) && Number.isFinite(lng) && Number.isFinite(radius) && radius > 0) {
-        params.lat = lat;
-        params.lng = lng;
-        params.radius_km = radius;
-    }
 
     return params;
 };

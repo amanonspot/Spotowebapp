@@ -125,30 +125,34 @@ export default function OwnerMapPinPicker({ mapQuery, initialLat, initialLng, on
                 onPickRef.current({ lat: latS, lng: lngS, mapUrl });
             };
 
+            // Always place a draggable pin at the center (geocoded or existing coords)
+            const marker = new google.maps.Marker({
+                position: center,
+                map,
+                draggable: true,
+                title: "Move pin to your exact location",
+            });
+            markerRef.current = marker;
+            publish(center.lat, center.lng);
+
+            marker.addListener("dragend", () => {
+                const pos = marker.getPosition();
+                if (!pos) return;
+                const lat = pos.lat();
+                const lng = pos.lng();
+                if (!isValidCoord(lat, lng)) return;
+                publish(lat, lng);
+            });
+
             map.addListener("click", (e: google.maps.MapMouseEvent) => {
                 const ll = e.latLng;
                 if (!ll) return;
                 const lat = ll.lat();
                 const lng = ll.lng();
                 if (!isValidCoord(lat, lng)) return;
-
-                if (markerRef.current) {
-                    markerRef.current.setPosition({ lat, lng });
-                } else {
-                    markerRef.current = new google.maps.Marker({
-                        position: { lat, lng },
-                        map,
-                    });
-                }
+                marker.setPosition({ lat, lng });
                 publish(lat, lng);
             });
-
-            if (isValidCoord(lat0, lng0)) {
-                markerRef.current = new google.maps.Marker({
-                    position: { lat: lat0, lng: lng0 },
-                    map,
-                });
-            }
         };
 
         init();
@@ -170,8 +174,42 @@ export default function OwnerMapPinPicker({ mapQuery, initialLat, initialLng, on
         geocoder.geocode({ address: mapQuery }, (results, status) => {
             if (status !== "OK" || !results?.[0]?.geometry?.location) return;
             const loc = results[0].geometry.location;
-            map.panTo({ lat: loc.lat(), lng: loc.lng() });
-            map.setZoom(14);
+            const lat = loc.lat();
+            const lng = loc.lng();
+            map.panTo({ lat, lng });
+            map.setZoom(15);
+
+            // Move existing marker OR create one if not yet placed
+            if (markerRef.current) {
+                markerRef.current.setPosition({ lat, lng });
+            } else {
+                const publish = (la: number, ln: number) => {
+                    const mapUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${la},${ln}`)}`;
+                    onPickRef.current({ lat: String(la), lng: String(ln), mapUrl });
+                };
+
+                const marker = new google.maps.Marker({
+                    position: { lat, lng },
+                    map,
+                    draggable: true,
+                    title: "Move pin to your exact location",
+                });
+                markerRef.current = marker;
+
+                marker.addListener("dragend", () => {
+                    const pos = marker.getPosition();
+                    if (!pos) return;
+                    publish(pos.lat(), pos.lng());
+                });
+
+                map.addListener("click", (e: google.maps.MapMouseEvent) => {
+                    if (!e.latLng) return;
+                    marker.setPosition(e.latLng);
+                    publish(e.latLng.lat(), e.latLng.lng());
+                });
+
+                publish(lat, lng);
+            }
         });
     }, [mapQuery]);
 

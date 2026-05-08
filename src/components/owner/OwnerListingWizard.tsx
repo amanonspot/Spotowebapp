@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Bell, Building2, ChevronLeft, House, Plus, Upload, X } from "lucide-react";
 import OwnerMapPinPicker from "@/components/owner/OwnerMapPinPicker";
+import OwnerLeafletPinPicker from "@/components/owner/OwnerLeafletPinPicker";
 import PrimaryButton from "@/components/revamp/PrimaryButton";
 import ShimmerBlock from "@/components/revamp/ShimmerBlock";
 import config from "@/config/config";
@@ -414,7 +415,16 @@ export default function OwnerListingWizard({ mode = "create", propertyId, initia
         [localityOptions, form.localityId]
     );
 
-    const mapQuery = [selectedLocalityName, selectedCityName].filter(Boolean).join(", ");
+    const mapQuery = useMemo(() => {
+        const parts = [
+            (form.addressLine || "").trim(),
+            (form.streetLocalityArea || "").trim(),
+            (form.landmark || "").trim(),
+            (selectedLocalityName || "").trim(),
+            (selectedCityName || "").trim(),
+        ].filter(Boolean);
+        return parts.join(", ");
+    }, [form.addressLine, form.landmark, form.streetLocalityArea, selectedCityName, selectedLocalityName]);
 
     const hasGoogleMapsKey = Boolean((config.googleMapsApiKey || config.googlePlacesApiKey || "").trim());
 
@@ -1001,20 +1011,47 @@ export default function OwnerListingWizard({ mode = "create", propertyId, initia
 
                             <section className={sectionCardClass}>
                                 <p className="mb-3 text-sm font-semibold text-white/75">Available to Move In</p>
-                                <input
-                                    type="date"
-                                    value={form.availableFromDate || ""}
-                                    onChange={(event) => {
-                                        const nextDate = event.target.value;
-                                        updateField("availableFromDate", nextDate);
-                                        if (nextDate) {
-                                            updateField("availabilityMode", "date");
-                                        } else if (form.availabilityMode === "date") {
-                                            updateField("availabilityMode", "immediate");
-                                        }
-                                    }}
-                                    className="mb-3 h-12 w-full rounded-xl border border-white/20 bg-[#0d0d14] px-3 text-sm text-white/90 outline-none focus:border-[#A67AEB]"
-                                />
+                                <div className="mb-3">
+                                    <div className="flex items-center justify-between gap-2">
+                                        <p className="text-xs font-medium text-white/55">Exact date (optional)</p>
+                                        {(form.availableFromDate || "").trim() ? (
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    updateField("availableFromDate", "");
+                                                    if (form.availabilityMode === "date") {
+                                                        updateField("availabilityMode", "immediate");
+                                                    }
+                                                }}
+                                                className="inline-flex items-center gap-1 rounded-full border border-white/15 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-white/75 hover:bg-white/10"
+                                            >
+                                                <X className="h-3.5 w-3.5" aria-hidden />
+                                                Clear
+                                            </button>
+                                        ) : null}
+                                    </div>
+                                    <input
+                                        type="date"
+                                        value={form.availableFromDate || ""}
+                                        disabled={Boolean(form.availabilityId)}
+                                        onChange={(event) => {
+                                            const nextDate = event.target.value;
+                                            updateField("availableFromDate", nextDate);
+                                            if (nextDate) {
+                                                updateField("availabilityMode", "date");
+                                                updateField("availabilityId", "");
+                                            } else if (form.availabilityMode === "date") {
+                                                updateField("availabilityMode", "immediate");
+                                            }
+                                        }}
+                                        className={`mt-2 h-12 w-full rounded-xl border border-white/20 bg-[#0d0d14] px-3 text-sm text-white/90 outline-none focus:border-[#A67AEB] ${
+                                            form.availabilityId ? "cursor-not-allowed opacity-45" : ""
+                                        }`}
+                                    />
+                                    <p className="mt-2 text-xs text-white/45">
+                                        Choose <span className="text-white/70">either</span> a date <span className="text-white/70">or</span> an availability option below.
+                                    </p>
+                                </div>
                                 <div className="flex flex-wrap gap-2">
                                     {(masters.availabilityTypes.length > 0
                                         ? masters.availabilityTypes
@@ -1027,14 +1064,22 @@ export default function OwnerListingWizard({ mode = "create", propertyId, initia
                                                 key={option.id}
                                                 type="button"
                                                 onClick={() => {
+                                                    if (active) {
+                                                        updateField("availabilityId", "");
+                                                        return;
+                                                    }
                                                     updateField("availabilityId", option.id);
                                                     const isImmediate = option.name.toLowerCase().includes("immediate");
+                                                    // Selecting any option disables the exact date input.
+                                                    updateField("availabilityMode", "immediate");
+                                                    updateField("availableFromDate", "");
                                                     if (isImmediate) {
                                                         updateField("availabilityMode", "immediate");
-                                                        updateField("availableFromDate", "");
                                                     }
                                                 }}
-                                                className={`${chipClass} ${active ? "border-[#B7F041] bg-[#B7F041] text-[#111]" : ""}`}
+                                                className={`${chipClass} ${active ? "border-[#B7F041] bg-[#B7F041] text-[#111]" : ""} ${
+                                                    form.availableFromDate ? "opacity-45" : ""
+                                                }`}
                                             >
                                                 {option.name}
                                             </button>
@@ -1085,7 +1130,7 @@ export default function OwnerListingWizard({ mode = "create", propertyId, initia
                                 </div>
 
                                 <div>
-                                    <p className="text-xs font-medium text-white/55">Locality</p>
+                                    <p className="text-xs font-medium text-white/55">Currently Live in:</p>
                                     <div className="mt-2 flex max-h-36 flex-wrap gap-2 overflow-y-auto pr-1">
                                         {filteredLocalities.map((option) => {
                                             const active = form.localityId === option.id;
@@ -1123,6 +1168,21 @@ export default function OwnerListingWizard({ mode = "create", propertyId, initia
                                 <p className="text-sm font-semibold text-white/90">Map link &amp; coordinates</p>
                                 {hasGoogleMapsKey ? (
                                     <OwnerMapPinPicker
+                                        mapQuery={mapQuery}
+                                        initialLat={form.latitude || ""}
+                                        initialLng={form.longitude || ""}
+                                        onPick={({ lat, lng, mapUrl }) => {
+                                            setForm((prev) => ({
+                                                ...prev,
+                                                latitude: lat,
+                                                longitude: lng,
+                                                mapUrl,
+                                            }));
+                                            clearFieldError("mapUrl", "latitude", "longitude");
+                                        }}
+                                    />
+                                ) : form.addressLine.trim() ? (
+                                    <OwnerLeafletPinPicker
                                         mapQuery={mapQuery}
                                         initialLat={form.latitude || ""}
                                         initialLng={form.longitude || ""}
