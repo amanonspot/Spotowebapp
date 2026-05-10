@@ -849,16 +849,33 @@ export default function OwnerListingWizard({ mode = "create", propertyId, initia
                                         <Plus className="h-4 w-4" />
                                     </span>
                                     <div>
-                                        <p className="text-sm font-semibold">Add Property Photos, videos...</p>
+                                        <p className="text-sm font-semibold">Add Property Photos</p>
+                                        <p className="text-xs text-white/45">Max 10 photos · less than 5 MB each</p>
                                     </div>
                                     <input
                                         type="file"
                                         accept="image/jpeg,image/png,image/webp,image/jpg"
                                         multiple
                                         onChange={(event) => {
-                                            const files = Array.from(event.target.files || []);
-                                            if (files.length === 0) return;
-                                            updateField("imageFiles", [...form.imageFiles, ...files]);
+                                            const MAX_PHOTOS = 10;
+                                            const MAX_SIZE_MB = 5;
+                                            const incoming = Array.from(event.target.files || []);
+                                            if (incoming.length === 0) return;
+
+                                            const oversized = incoming.filter(f => f.size > MAX_SIZE_MB * 1024 * 1024);
+                                            if (oversized.length > 0) {
+                                                alert(`${oversized.map(f => f.name).join(", ")} — max size is ${MAX_SIZE_MB}MB per photo.`);
+                                                return;
+                                            }
+
+                                            const combined = [...form.imageFiles, ...incoming];
+                                            if (combined.length > MAX_PHOTOS) {
+                                                alert(`You can upload max ${MAX_PHOTOS} photos. Currently have ${form.imageFiles.length}, tried to add ${incoming.length}.`);
+                                                return;
+                                            }
+
+                                            event.target.value = "";
+                                            updateField("imageFiles", combined);
                                         }}
                                         className="hidden"
                                     />
