@@ -54,6 +54,13 @@
     --sidebar-ring: oklch(0.708 0 0);
 }
 
+/* Prevent iOS/Android auto-zoom on input focus (font-size must be >= 16px) */
+@media screen and (max-width: 768px) {
+    input, textarea, select {
+        font-size: 16px !important;
+    }
+}
+
 /* SPOTO wordmark — white type + lime edge glow (brand reference) */
 .spoto-wordmark {
     color: #fafaf9;

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import config from "@/config/config";
 
 export type MapPinPick = {
@@ -213,15 +213,39 @@ export default function OwnerMapPinPicker({ mapQuery, initialLat, initialLng, on
         });
     }, [mapQuery]);
 
+    const [expanded, setExpanded] = useState(false);
+
     if (!getMapsApiKey()) {
         return null;
     }
 
     return (
-        <div
-            ref={mapElRef}
-            className="h-56 w-full overflow-hidden rounded-xl border border-white/20 bg-[#0d0d14]"
-            role="presentation"
-        />
+        <div className="relative">
+            <div
+                ref={mapElRef}
+                className={`w-full overflow-hidden rounded-xl border border-white/20 bg-[#0d0d14] transition-all duration-300 ${expanded ? "h-[70vh]" : "h-56"}`}
+                role="presentation"
+            />
+            <button
+                type="button"
+                onClick={() => {
+                    setExpanded((prev) => !prev);
+                    setTimeout(() => mapRef.current?.setCenter(mapRef.current.getCenter()!), 310);
+                }}
+                className="absolute bottom-2 right-2 flex items-center gap-1 rounded-lg bg-white/90 px-2 py-1.5 text-[11px] font-semibold text-black shadow"
+            >
+                {expanded ? (
+                    <>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 1-2-2V3"/><path d="M3 16h3a2 2 0 0 1 2 2v3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/></svg>
+                        Collapse
+                    </>
+                ) : (
+                    <>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
+                        Expand
+                    </>
+                )}
+            </button>
+        </div>
     );
 }

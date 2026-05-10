@@ -6,6 +6,7 @@ import { Bell, Building2, ChevronLeft, House, Plus, Upload, X } from "lucide-rea
 import OwnerMapPinPicker from "@/components/owner/OwnerMapPinPicker";
 import OwnerLeafletPinPicker from "@/components/owner/OwnerLeafletPinPicker";
 import LocalityAutocomplete from "@/components/owner/LocalityAutocomplete";
+import AddressAutocomplete from "@/components/owner/AddressAutocomplete";
 import PrimaryButton from "@/components/revamp/PrimaryButton";
 import ShimmerBlock from "@/components/revamp/ShimmerBlock";
 import config from "@/config/config";
@@ -779,6 +780,15 @@ export default function OwnerListingWizard({ mode = "create", propertyId, initia
                             ) : null}
                             {renderFieldError("propertyTitle")}
 
+                            <textarea
+                                rows={3}
+                                value={form.description}
+                                onChange={(event) => updateField("description", sanitizeTextInput(event.target.value))}
+                                placeholder="Describe the property for tenants"
+                                className="w-full rounded-xl border border-white/20 bg-[#0d0d14] px-3 py-3 text-sm text-white/90 outline-none placeholder:text-white/35 focus:border-[#A67AEB]"
+                            />
+                            {renderFieldError("description")}
+
                             <section className={sectionCardClass}>
                                 <p className="mb-3 text-sm font-semibold text-white/75">BHK type</p>
                                 <div className="flex flex-wrap gap-2">
@@ -1112,11 +1122,10 @@ export default function OwnerListingWizard({ mode = "create", propertyId, initia
 
                     {step === 5 && (
                         <>
+                            {/* City & locality */}
                             <section className={`${sectionCardClass} space-y-3`}>
-                                <p className="text-sm font-semibold text-white/90">City &amp; locality</p>
-
                                 <div>
-                                    <p className="text-xs font-medium text-white/55">City</p>
+                                    <p className="text-xs font-medium text-white/55">City :</p>
                                     <div className="mt-2 flex flex-wrap gap-2">
                                         {cityOptions.map((option) => {
                                             const active = form.cityId === option.id;
@@ -1143,7 +1152,7 @@ export default function OwnerListingWizard({ mode = "create", propertyId, initia
                                 </div>
 
                                 <div>
-                                    <p className="text-xs font-medium text-white/55 mb-2">Currently Live in:</p>
+                                    <p className="text-xs font-medium text-white/55 mb-2">Add Locality</p>
                                     <LocalityAutocomplete
                                         cityName={selectedCityName}
                                         value={form.localityName || ""}
@@ -1151,33 +1160,73 @@ export default function OwnerListingWizard({ mode = "create", propertyId, initia
                                     />
                                     {renderFieldError("localityId")}
                                 </div>
+
+                                {(form.localityName?.trim() || selectedLocalityName) ? (
+                                    <div>
+                                        <p className="text-xs font-medium text-white/55 mb-2">Selected Localities</p>
+                                        <div className="flex flex-wrap gap-2">
+                                            <span className="flex items-center gap-1.5 rounded-full border border-[#B7F041] bg-[#B7F041] px-3 py-1 text-xs font-semibold text-[#111]">
+                                                {form.localityName?.trim() || selectedLocalityName}
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setForm((prev) => ({ ...prev, localityName: "", localityId: "" }))}
+                                                    className="ml-0.5 leading-none"
+                                                >
+                                                    ×
+                                                </button>
+                                            </span>
+                                        </div>
+                                    </div>
+                                ) : null}
                             </section>
 
+                            {/* Address fields */}
                             <section className={`${sectionCardClass} space-y-3`}>
-                                <p className="text-sm font-semibold text-white/90">Street address</p>
-                                <input
+                                <AddressAutocomplete
                                     value={form.addressLine}
-                                    onChange={(event) => updateField("addressLine", sanitizeTextInput(event.target.value))}
-                                    placeholder="Flat / house no., building, street"
+                                    onChange={(val) => updateField("addressLine", sanitizeTextInput(val))}
+                                    onPick={(pick) => {
+                                        setForm((prev) => ({
+                                            ...prev,
+                                            addressLine: sanitizeTextInput(pick.addressLine) || prev.addressLine,
+                                            streetLocalityArea: pick.streetLocalityArea ? sanitizeTextInput(pick.streetLocalityArea) : prev.streetLocalityArea,
+                                            localityName: pick.localityName || prev.localityName,
+                                            localityId: "",
+                                            latitude: pick.lat,
+                                            longitude: pick.lng,
+                                            mapUrl: pick.mapUrl,
+                                        }));
+                                        clearFieldError("addressLine", "mapUrl", "latitude", "longitude");
+                                    }}
+                                    placeholder="Flat, House No., Building, Apartment"
                                     className="h-12 w-full rounded-xl border border-white/20 bg-[#0d0d14] px-3 text-sm text-white/90 outline-none placeholder:text-white/35 focus:border-[#A67AEB]"
                                 />
                                 {renderFieldError("addressLine")}
+                                <input
+                                    value={form.streetLocalityArea || ""}
+                                    onChange={(event) => updateField("streetLocalityArea", sanitizeTextInput(event.target.value))}
+                                    placeholder="Street, Locality, Area"
+                                    className="h-12 w-full rounded-xl border border-white/20 bg-[#0d0d14] px-3 text-sm text-white/90 outline-none placeholder:text-white/35 focus:border-[#A67AEB]"
+                                />
+                                {renderFieldError("streetLocalityArea")}
+                                <input
+                                    value={form.landmark || ""}
+                                    onChange={(event) => updateField("landmark", sanitizeTextInput(event.target.value))}
+                                    placeholder="Landmark"
+                                    className="h-12 w-full rounded-xl border border-white/20 bg-[#0d0d14] px-3 text-sm text-white/90 outline-none placeholder:text-white/35 focus:border-[#A67AEB]"
+                                />
+                                {renderFieldError("landmark")}
                             </section>
 
+                            {/* Map + link */}
                             <section className={`${sectionCardClass} space-y-3`}>
-                                <p className="text-sm font-semibold text-white/90">Map link &amp; coordinates</p>
                                 {hasGoogleMapsKey ? (
                                     <OwnerMapPinPicker
                                         mapQuery={mapQuery}
                                         initialLat={form.latitude || ""}
                                         initialLng={form.longitude || ""}
                                         onPick={({ lat, lng, mapUrl }) => {
-                                            setForm((prev) => ({
-                                                ...prev,
-                                                latitude: lat,
-                                                longitude: lng,
-                                                mapUrl,
-                                            }));
+                                            setForm((prev) => ({ ...prev, latitude: lat, longitude: lng, mapUrl }));
                                             clearFieldError("mapUrl", "latitude", "longitude");
                                         }}
                                     />
@@ -1187,12 +1236,7 @@ export default function OwnerListingWizard({ mode = "create", propertyId, initia
                                         initialLat={form.latitude || ""}
                                         initialLng={form.longitude || ""}
                                         onPick={({ lat, lng, mapUrl }) => {
-                                            setForm((prev) => ({
-                                                ...prev,
-                                                latitude: lat,
-                                                longitude: lng,
-                                                mapUrl,
-                                            }));
+                                            setForm((prev) => ({ ...prev, latitude: lat, longitude: lng, mapUrl }));
                                             clearFieldError("mapUrl", "latitude", "longitude");
                                         }}
                                     />
@@ -1200,51 +1244,10 @@ export default function OwnerListingWizard({ mode = "create", propertyId, initia
                                 <input
                                     value={form.mapUrl || ""}
                                     onChange={handleMapUrlInputChange}
-                                    placeholder="Google Maps share link"
+                                    placeholder="Google Maps Location Link"
                                     className="h-12 w-full rounded-xl border border-white/20 bg-[#0d0d14] px-3 text-sm text-white/90 outline-none placeholder:text-white/35 focus:border-[#A67AEB]"
                                 />
                                 {renderFieldError("mapUrl")}
-                                <div className="grid grid-cols-2 gap-2">
-                                    <input
-                                        value={form.latitude || ""}
-                                        onChange={(event) => updateField("latitude", sanitizeTextInput(event.target.value))}
-                                        placeholder="Latitude"
-                                        className="h-12 w-full rounded-xl border border-white/20 bg-[#0d0d14] px-3 text-sm text-white/90 outline-none placeholder:text-white/35 focus:border-[#A67AEB]"
-                                    />
-                                    <input
-                                        value={form.longitude || ""}
-                                        onChange={(event) => updateField("longitude", sanitizeTextInput(event.target.value))}
-                                        placeholder="Longitude"
-                                        className="h-12 w-full rounded-xl border border-white/20 bg-[#0d0d14] px-3 text-sm text-white/90 outline-none placeholder:text-white/35 focus:border-[#A67AEB]"
-                                    />
-                                </div>
-                                {renderFieldError("latitude", "longitude")}
-                            </section>
-
-                            <section className={`${sectionCardClass} space-y-3`}>
-                                <p className="text-sm font-semibold text-white/90">Description</p>
-                                <textarea
-                                    rows={3}
-                                    value={form.description}
-                                    onChange={(event) => updateField("description", sanitizeTextInput(event.target.value))}
-                                    placeholder="Describe the property for tenants"
-                                    className="w-full rounded-xl border border-white/20 bg-[#0d0d14] px-3 py-3 text-sm text-white/90 outline-none placeholder:text-white/35 focus:border-[#A67AEB]"
-                                />
-                                {renderFieldError("description")}
-                                <input
-                                    value={form.streetLocalityArea || ""}
-                                    onChange={(event) => updateField("streetLocalityArea", sanitizeTextInput(event.target.value))}
-                                    placeholder="Street / area (optional)"
-                                    className="h-12 w-full rounded-xl border border-white/20 bg-[#0d0d14] px-3 text-sm text-white/90 outline-none placeholder:text-white/35 focus:border-[#A67AEB]"
-                                />
-                                {renderFieldError("streetLocalityArea")}
-                                <input
-                                    value={form.landmark || ""}
-                                    onChange={(event) => updateField("landmark", sanitizeTextInput(event.target.value))}
-                                    placeholder="Landmark (optional)"
-                                    className="h-12 w-full rounded-xl border border-white/20 bg-[#0d0d14] px-3 text-sm text-white/90 outline-none placeholder:text-white/35 focus:border-[#A67AEB]"
-                                />
-                                {renderFieldError("landmark")}
                             </section>
 
                             <section className={`${sectionCardClass} space-y-3`}>

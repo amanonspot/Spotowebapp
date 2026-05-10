@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import type { MapPinPick } from "./OwnerMapPinPicker";
 
 type Props = {
@@ -26,6 +26,38 @@ async function geocodeNominatim(query: string): Promise<{ lat: number; lng: numb
         // silently fail
     }
     return null;
+}
+
+function LeafletExpandWrapper({ containerRef, mapRef }: { containerRef: React.RefObject<HTMLDivElement | null>; mapRef: React.RefObject<import("leaflet").Map | null> }) {
+    const [expanded, setExpanded] = useState(false);
+    return (
+        <div className="relative">
+            <div
+                ref={containerRef}
+                className={`w-full overflow-hidden rounded-xl border border-white/20 transition-all duration-300 ${expanded ? "h-[70vh]" : "h-56"}`}
+            />
+            <button
+                type="button"
+                onClick={() => {
+                    setExpanded((prev) => !prev);
+                    setTimeout(() => mapRef.current?.invalidateSize(), 310);
+                }}
+                className="absolute bottom-2 right-2 z-[1000] flex items-center gap-1 rounded-lg bg-white/90 px-2 py-1.5 text-[11px] font-semibold text-black shadow"
+            >
+                {expanded ? (
+                    <>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 1-2-2V3"/><path d="M3 16h3a2 2 0 0 1 2 2v3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/></svg>
+                        Collapse
+                    </>
+                ) : (
+                    <>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
+                        Expand
+                    </>
+                )}
+            </button>
+        </div>
+    );
 }
 
 export default function OwnerLeafletPinPicker({ mapQuery, initialLat, initialLng, onPick }: Props) {
@@ -166,10 +198,7 @@ export default function OwnerLeafletPinPicker({ mapQuery, initialLat, initialLng
                     border-top-color: white !important;
                 }
             `}</style>
-            <div
-                ref={containerRef}
-                className="h-56 w-full overflow-hidden rounded-xl border border-white/20"
-            />
+            <LeafletExpandWrapper containerRef={containerRef} mapRef={mapRef} />
         </>
     );
 }
