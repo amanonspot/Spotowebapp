@@ -1073,6 +1073,7 @@ export default function OwnerListingWizard({ mode = "create", propertyId, initia
                                                 updateField("availabilityMode", "immediate");
                                             }
                                         }}
+                                        style={{ colorScheme: "dark" }}
                                         className={`mt-2 h-12 w-full rounded-xl border border-white/20 bg-[#0d0d14] px-3 text-sm text-white/90 outline-none focus:border-[#A67AEB] ${
                                             form.availabilityId ? "cursor-not-allowed opacity-45" : ""
                                         }`}
