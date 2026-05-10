@@ -358,6 +358,7 @@ const toUpsertPayload = (input: OwnerListingFormInput): OwnerPropertyUpsertPaylo
     propertyTypeId: input.propertyTypeId,
     cityId: input.cityId,
     localityId: input.localityId,
+    localityName: input.localityName,
     bhkId: input.bhkId,
     furnishingId: input.furnishingId,
     availabilityId: input.availabilityId,

@@ -230,6 +230,7 @@ export interface OwnerListingFormInput {
     propertyTypeId: string;
     cityId: string;
     localityId: string;
+    localityName?: string;
     bhkId: string;
     furnishingId: string;
     availabilityId: string;

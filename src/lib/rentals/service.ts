@@ -103,7 +103,11 @@ const buildOwnerFormData = (
         appendText(formData, "deposit", payload.deposit);
     }
     if (shouldInclude(mode, changedKeys, "localityId")) {
-        appendText(formData, "locality_id", payload.localityId, { allowEmpty: mode === "update" });
+        if (payload.localityId) {
+            appendText(formData, "locality_id", payload.localityId, { allowEmpty: mode === "update" });
+        } else if (payload.localityName) {
+            appendText(formData, "locality_name", payload.localityName);
+        }
     }
     if (shouldInclude(mode, changedKeys, "addressLine")) {
         appendText(formData, "address_line", payload.addressLine);

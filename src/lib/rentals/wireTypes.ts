@@ -197,6 +197,7 @@ export interface OwnerPropertyUpsertPayload {
     propertyTypeId: string;
     cityId: string;
     localityId: string;
+    localityName?: string;
     rent: number;
     deposit: number;
     addressLine: string;

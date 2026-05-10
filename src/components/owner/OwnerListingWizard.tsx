@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Bell, Building2, ChevronLeft, House, Plus, Upload, X } from "lucide-react";
 import OwnerMapPinPicker from "@/components/owner/OwnerMapPinPicker";
 import OwnerLeafletPinPicker from "@/components/owner/OwnerLeafletPinPicker";
+import LocalityAutocomplete from "@/components/owner/LocalityAutocomplete";
 import PrimaryButton from "@/components/revamp/PrimaryButton";
 import ShimmerBlock from "@/components/revamp/ShimmerBlock";
 import config from "@/config/config";
@@ -49,6 +50,7 @@ const emptyForm: OwnerListingFormInput = {
     propertyTypeId: "",
     cityId: "",
     localityId: "",
+    localityName: "",
     bhkId: "",
     furnishingId: "",
     availabilityId: "",
@@ -411,8 +413,8 @@ export default function OwnerListingWizard({ mode = "create", propertyId, initia
         [cityOptions, form.cityId]
     );
     const selectedLocalityName = useMemo(
-        () => localityOptions.find((option) => option.id === form.localityId)?.name || "",
-        [localityOptions, form.localityId]
+        () => localityOptions.find((option) => option.id === form.localityId)?.name || form.localityName || "",
+        [localityOptions, form.localityId, form.localityName]
     );
 
     const mapQuery = useMemo(() => {
@@ -576,7 +578,7 @@ export default function OwnerListingWizard({ mode = "create", propertyId, initia
         if (step === 5)
             return Boolean(
                 form.cityId &&
-                    form.localityId &&
+                    (form.localityId || form.localityName?.trim()) &&
                     form.addressLine.trim() &&
                     form.ownerName?.trim() &&
                     form.contactPhone.length === 10 &&
@@ -1095,12 +1097,6 @@ export default function OwnerListingWizard({ mode = "create", propertyId, initia
                         <>
                             <section className={`${sectionCardClass} space-y-3`}>
                                 <p className="text-sm font-semibold text-white/90">City &amp; locality</p>
-                                <input
-                                    value={localitySearch}
-                                    onChange={(event) => setLocalitySearch(sanitizeTextInput(event.target.value))}
-                                    placeholder="Search locality…"
-                                    className="h-11 w-full rounded-xl border border-white/20 bg-[#0d0d14] px-3 text-sm text-white/90 outline-none placeholder:text-white/35 focus:border-[#A67AEB]"
-                                />
 
                                 <div>
                                     <p className="text-xs font-medium text-white/55">City</p>
@@ -1112,11 +1108,11 @@ export default function OwnerListingWizard({ mode = "create", propertyId, initia
                                                     key={option.id}
                                                     type="button"
                                                     onClick={() => {
-                                                        setLocalitySearch("");
                                                         setForm((prev) => ({
                                                             ...prev,
                                                             cityId: option.id,
-                                                            localityId: prev.cityId === option.id ? prev.localityId : "",
+                                                            localityId: "",
+                                                            localityName: prev.cityId === option.id ? prev.localityName : "",
                                                         }));
                                                     }}
                                                     className={`${chipClass} ${active ? "border-[#B7F041] bg-[#B7F041] text-[#111]" : ""}`}
@@ -1130,26 +1126,13 @@ export default function OwnerListingWizard({ mode = "create", propertyId, initia
                                 </div>
 
                                 <div>
-                                    <p className="text-xs font-medium text-white/55">Currently Live in:</p>
-                                    <div className="mt-2 flex max-h-36 flex-wrap gap-2 overflow-y-auto pr-1">
-                                        {filteredLocalities.map((option) => {
-                                            const active = form.localityId === option.id;
-                                            return (
-                                                <button
-                                                    key={option.id}
-                                                    type="button"
-                                                    onClick={() => updateField("localityId", option.id)}
-                                                    className={`${chipClass} ${active ? "border-[#B7F041] bg-[#B7F041] text-[#111]" : ""}`}
-                                                >
-                                                    {option.name}
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
+                                    <p className="text-xs font-medium text-white/55 mb-2">Currently Live in:</p>
+                                    <LocalityAutocomplete
+                                        cityName={selectedCityName}
+                                        value={form.localityName || ""}
+                                        onChange={(name) => setForm((prev) => ({ ...prev, localityName: name, localityId: "" }))}
+                                    />
                                     {renderFieldError("localityId")}
-                                    {filteredLocalities.length === 0 ? (
-                                        <p className="mt-2 text-xs text-white/60">No localities match this search.</p>
-                                    ) : null}
                                 </div>
                             </section>
 
