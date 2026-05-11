@@ -1059,25 +1059,32 @@ export default function OwnerListingWizard({ mode = "create", propertyId, initia
                                             </button>
                                         ) : null}
                                     </div>
-                                    <input
-                                        type="date"
-                                        value={form.availableFromDate || ""}
-                                        disabled={Boolean(form.availabilityId)}
-                                        onChange={(event) => {
-                                            const nextDate = event.target.value;
-                                            updateField("availableFromDate", nextDate);
-                                            if (nextDate) {
-                                                updateField("availabilityMode", "date");
-                                                updateField("availabilityId", "");
-                                            } else if (form.availabilityMode === "date") {
-                                                updateField("availabilityMode", "immediate");
+                                    <div className={`relative mt-2 ${form.availabilityId ? "opacity-45 pointer-events-none" : ""}`}>
+                                        {/* Styled display layer */}
+                                        <div className="flex h-12 w-full items-center rounded-xl border border-white/20 bg-[#0d0d14] px-3 text-sm text-white/90">
+                                            {form.availableFromDate
+                                                ? new Date(form.availableFromDate + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
+                                                : <span className="text-white/35">Select date</span>
                                             }
-                                        }}
-                                        style={{ colorScheme: "dark", backgroundColor: "#0d0d14", color: "#e5e5e5" }}
-                                        className={`mt-2 h-12 w-full rounded-xl border border-white/20 bg-[#0d0d14] pl-3 pr-10 text-sm text-white/90 outline-none focus:border-[#A67AEB] ${
-                                            form.availabilityId ? "cursor-not-allowed opacity-45" : ""
-                                        }`}
-                                    />
+                                        </div>
+                                        {/* Native date input — invisible, covers full area for tap */}
+                                        <input
+                                            type="date"
+                                            value={form.availableFromDate || ""}
+                                            disabled={Boolean(form.availabilityId)}
+                                            onChange={(event) => {
+                                                const nextDate = event.target.value;
+                                                updateField("availableFromDate", nextDate);
+                                                if (nextDate) {
+                                                    updateField("availabilityMode", "date");
+                                                    updateField("availabilityId", "");
+                                                } else if (form.availabilityMode === "date") {
+                                                    updateField("availabilityMode", "immediate");
+                                                }
+                                            }}
+                                            className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                                        />
+                                    </div>
                                     <p className="mt-2 text-xs text-white/45">
                                         Choose <span className="text-white/70">either</span> a date <span className="text-white/70">or</span> an availability option below.
                                     </p>
