@@ -658,7 +658,7 @@ export default function OwnerListingWizard({ mode = "create", propertyId, initia
                 : "Submit"
             : "Next";
 
-    const sectionCardClass = "rounded-2xl border border-white/20 bg-[#12121A] p-4 overflow-hidden";
+    const sectionCardClass = "rounded-2xl border border-white/20 bg-[#12121A] p-4";
     const chipClass =
         "rounded-xl border border-white/20 px-3 py-2 text-sm text-white/85 transition hover:border-[#A67AEB] active:scale-[0.98]";
 
@@ -1074,7 +1074,7 @@ export default function OwnerListingWizard({ mode = "create", propertyId, initia
                                             }
                                         }}
                                         style={{ colorScheme: "dark", backgroundColor: "#0d0d14", color: "#e5e5e5" }}
-                                        className={`mt-2 h-12 w-full rounded-xl border border-white/20 bg-[#0d0d14] px-3 text-sm text-white/90 outline-none focus:border-[#A67AEB] ${
+                                        className={`mt-2 h-12 w-full rounded-xl border border-white/20 bg-[#0d0d14] pl-3 pr-10 text-sm text-white/90 outline-none focus:border-[#A67AEB] ${
                                             form.availabilityId ? "cursor-not-allowed opacity-45" : ""
                                         }`}
                                     />
