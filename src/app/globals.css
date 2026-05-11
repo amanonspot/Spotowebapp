@@ -59,6 +59,14 @@
     input, textarea, select {
         font-size: 16px !important;
     }
+
+    /* Force dark background on native date input — iOS overrides color otherwise */
+    input[type="date"] {
+        background-color: #12121a !important;
+        color: #e5e5e5 !important;
+        -webkit-text-fill-color: #e5e5e5 !important;
+        color-scheme: dark;
+    }
 }
 
 /* SPOTO wordmark — white type + lime edge glow (brand reference) */
