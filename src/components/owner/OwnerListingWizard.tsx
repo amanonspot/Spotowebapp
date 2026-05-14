@@ -1166,6 +1166,25 @@ export default function OwnerListingWizard({ mode = "create", propertyId, initia
                                         onChange={(name) => setForm((prev) => ({ ...prev, localityName: name, localityId: "" }))}
                                     />
                                     {renderFieldError("localityId")}
+
+                                    {/* Popular localities — show only if nothing selected yet */}
+                                    {!(form.localityName?.trim() || form.localityId) && (
+                                        <div className="mt-3">
+                                            <p className="text-xs font-medium text-white/40 mb-2">Popular localities</p>
+                                            <div className="flex flex-wrap gap-2">
+                                                {["HSR Layout","Bellandur","Whitefield","Marathahalli","Koramangala","Indiranagar","BTM Layout"].map((loc) => (
+                                                    <button
+                                                        key={loc}
+                                                        type="button"
+                                                        onClick={() => setForm((prev) => ({ ...prev, localityName: loc, localityId: "" }))}
+                                                        className={chipClass}
+                                                    >
+                                                        {loc}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
 
                                 {(form.localityName?.trim() || selectedLocalityName) ? (
