@@ -579,7 +579,7 @@ export default function OwnerListingWizard({ mode = "create", propertyId, initia
         if (step === 5)
             return Boolean(
                 form.cityId &&
-                    (form.localityId || form.localityName?.trim()) &&
+                    form.localityId &&
                     form.addressLine.trim() &&
                     form.ownerName?.trim() &&
                     form.contactPhone.length === 10 &&
@@ -1158,14 +1158,12 @@ export default function OwnerListingWizard({ mode = "create", propertyId, initia
                                     {renderFieldError("cityId")}
                                 </div>
 
-                                <div>
-                                    <input
-                                        value={localitySearch}
-                                        onChange={(event) => setLocalitySearch(sanitizeTextInput(event.target.value))}
-                                        placeholder="Search locality…"
-                                        className="h-11 w-full rounded-xl border border-white/20 bg-[#0d0d14] px-3 text-sm text-white/90 outline-none placeholder:text-white/35 focus:border-[#A67AEB]"
-                                    />
-                                </div>
+                                <input
+                                    value={localitySearch}
+                                    onChange={(event) => setLocalitySearch(sanitizeTextInput(event.target.value))}
+                                    placeholder="Search locality…"
+                                    className="h-11 w-full rounded-xl border border-white/20 bg-[#0d0d14] px-3 text-sm text-white/90 outline-none placeholder:text-white/35 focus:border-[#A67AEB]"
+                                />
 
                                 <div>
                                     <p className="text-xs font-medium text-white/55">Currently Live in:</p>
@@ -1176,11 +1174,7 @@ export default function OwnerListingWizard({ mode = "create", propertyId, initia
                                                 <button
                                                     key={option.id}
                                                     type="button"
-                                                    onClick={() => {
-                                                        setLocalitySearch("");
-                                                        updateField("localityId", option.id);
-                                                        setForm((prev) => ({ ...prev, localityName: "" }));
-                                                    }}
+                                                    onClick={() => updateField("localityId", option.id)}
                                                     className={`${chipClass} ${active ? "border-[#B7F041] bg-[#B7F041] text-[#111]" : ""}`}
                                                 >
                                                     {option.name}
@@ -1189,33 +1183,10 @@ export default function OwnerListingWizard({ mode = "create", propertyId, initia
                                         })}
                                     </div>
                                     {renderFieldError("localityId")}
-                                    {filteredLocalities.length === 0 && (
+                                    {filteredLocalities.length === 0 ? (
                                         <p className="mt-2 text-xs text-white/60">No localities match this search.</p>
-                                    )}
+                                    ) : null}
                                 </div>
-
-                                {/* Popular localities — quick pick when nothing searched/selected */}
-                                {!localitySearch.trim() && !form.localityId && (
-                                    <div>
-                                        <p className="text-xs font-medium text-white/40 mb-2">Popular</p>
-                                        <div className="flex flex-wrap gap-2">
-                                            {["HSR Layout","Bellandur","Whitefield","Marathahalli","Koramangala","Indiranagar","BTM Layout"].map((loc) => {
-                                                const match = localityOptions.find(o => o.name.toLowerCase() === loc.toLowerCase());
-                                                if (match) return null; // already shown in chips above
-                                                return (
-                                                    <button
-                                                        key={loc}
-                                                        type="button"
-                                                        onClick={() => setForm((prev) => ({ ...prev, localityName: loc, localityId: "" }))}
-                                                        className={`${chipClass} ${form.localityName === loc ? "border-[#B7F041] bg-[#B7F041] text-[#111]" : ""}`}
-                                                    >
-                                                        {loc}
-                                                    </button>
-                                                );
-                                            })}
-                                        </div>
-                                    </div>
-                                )}
                             </section>
 
                             {/* Address fields */}
