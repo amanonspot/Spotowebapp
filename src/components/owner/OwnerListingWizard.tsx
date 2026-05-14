@@ -1159,51 +1159,63 @@ export default function OwnerListingWizard({ mode = "create", propertyId, initia
                                 </div>
 
                                 <div>
-                                    <p className="text-xs font-medium text-white/55 mb-2">Add Locality</p>
-                                    <LocalityAutocomplete
-                                        cityName={selectedCityName}
-                                        value={form.localityName || ""}
-                                        onChange={(name) => setForm((prev) => ({ ...prev, localityName: name, localityId: "" }))}
+                                    <input
+                                        value={localitySearch}
+                                        onChange={(event) => setLocalitySearch(sanitizeTextInput(event.target.value))}
+                                        placeholder="Search locality…"
+                                        className="h-11 w-full rounded-xl border border-white/20 bg-[#0d0d14] px-3 text-sm text-white/90 outline-none placeholder:text-white/35 focus:border-[#A67AEB]"
                                     />
-                                    {renderFieldError("localityId")}
+                                </div>
 
-                                    {/* Popular localities — show only if nothing selected yet */}
-                                    {!(form.localityName?.trim() || form.localityId) && (
-                                        <div className="mt-3">
-                                            <p className="text-xs font-medium text-white/40 mb-2">Popular localities</p>
-                                            <div className="flex flex-wrap gap-2">
-                                                {["HSR Layout","Bellandur","Whitefield","Marathahalli","Koramangala","Indiranagar","BTM Layout"].map((loc) => (
+                                <div>
+                                    <p className="text-xs font-medium text-white/55">Currently Live in:</p>
+                                    <div className="mt-2 flex max-h-36 flex-wrap gap-2 overflow-y-auto pr-1">
+                                        {filteredLocalities.map((option) => {
+                                            const active = form.localityId === option.id;
+                                            return (
+                                                <button
+                                                    key={option.id}
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setLocalitySearch("");
+                                                        updateField("localityId", option.id);
+                                                        setForm((prev) => ({ ...prev, localityName: "" }));
+                                                    }}
+                                                    className={`${chipClass} ${active ? "border-[#B7F041] bg-[#B7F041] text-[#111]" : ""}`}
+                                                >
+                                                    {option.name}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                    {renderFieldError("localityId")}
+                                    {filteredLocalities.length === 0 && (
+                                        <p className="mt-2 text-xs text-white/60">No localities match this search.</p>
+                                    )}
+                                </div>
+
+                                {/* Popular localities — quick pick when nothing searched/selected */}
+                                {!localitySearch.trim() && !form.localityId && (
+                                    <div>
+                                        <p className="text-xs font-medium text-white/40 mb-2">Popular</p>
+                                        <div className="flex flex-wrap gap-2">
+                                            {["HSR Layout","Bellandur","Whitefield","Marathahalli","Koramangala","Indiranagar","BTM Layout"].map((loc) => {
+                                                const match = localityOptions.find(o => o.name.toLowerCase() === loc.toLowerCase());
+                                                if (match) return null; // already shown in chips above
+                                                return (
                                                     <button
                                                         key={loc}
                                                         type="button"
                                                         onClick={() => setForm((prev) => ({ ...prev, localityName: loc, localityId: "" }))}
-                                                        className={chipClass}
+                                                        className={`${chipClass} ${form.localityName === loc ? "border-[#B7F041] bg-[#B7F041] text-[#111]" : ""}`}
                                                     >
                                                         {loc}
                                                     </button>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-
-                                {(form.localityName?.trim() || selectedLocalityName) ? (
-                                    <div>
-                                        <p className="text-xs font-medium text-white/55 mb-2">Selected Localities</p>
-                                        <div className="flex flex-wrap gap-2">
-                                            <span className="flex items-center gap-1.5 rounded-full border border-[#B7F041] bg-[#B7F041] px-3 py-1 text-xs font-semibold text-[#111]">
-                                                {form.localityName?.trim() || selectedLocalityName}
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setForm((prev) => ({ ...prev, localityName: "", localityId: "" }))}
-                                                    className="ml-0.5 leading-none"
-                                                >
-                                                    ×
-                                                </button>
-                                            </span>
+                                                );
+                                            })}
                                         </div>
                                     </div>
-                                ) : null}
+                                )}
                             </section>
 
                             {/* Address fields */}
