@@ -579,7 +579,7 @@ export default function OwnerListingWizard({ mode = "create", propertyId, initia
         if (step === 5)
             return Boolean(
                 form.cityId &&
-                    form.localityId &&
+                    (form.localityId || form.localityName?.trim()) &&
                     form.addressLine.trim() &&
                     form.ownerName?.trim() &&
                     form.contactPhone.length === 10 &&
@@ -1158,35 +1158,60 @@ export default function OwnerListingWizard({ mode = "create", propertyId, initia
                                     {renderFieldError("cityId")}
                                 </div>
 
-                                <input
-                                    value={localitySearch}
-                                    onChange={(event) => setLocalitySearch(sanitizeTextInput(event.target.value))}
-                                    placeholder="Search locality…"
-                                    className="h-11 w-full rounded-xl border border-white/20 bg-[#0d0d14] px-3 text-sm text-white/90 outline-none placeholder:text-white/35 focus:border-[#A67AEB]"
-                                />
-
-                                <div>
-                                    <p className="text-xs font-medium text-white/55">Currently Live in:</p>
-                                    <div className="mt-2 flex max-h-36 flex-wrap gap-2 overflow-y-auto pr-1">
-                                        {filteredLocalities.map((option) => {
-                                            const active = form.localityId === option.id;
-                                            return (
-                                                <button
-                                                    key={option.id}
-                                                    type="button"
-                                                    onClick={() => updateField("localityId", option.id)}
-                                                    className={`${chipClass} ${active ? "border-[#B7F041] bg-[#B7F041] text-[#111]" : ""}`}
-                                                >
-                                                    {option.name}
-                                                </button>
-                                            );
-                                        })}
+                                {/* Selected locality chip */}
+                                {(form.localityId || form.localityName?.trim()) ? (
+                                    <div className="flex flex-wrap gap-2">
+                                        <span className="flex items-center gap-1.5 rounded-full border border-[#B7F041] bg-[#B7F041] px-3 py-1 text-xs font-semibold text-[#111]">
+                                            {selectedLocalityName || form.localityName}
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setForm((prev) => ({ ...prev, localityId: "", localityName: "" }));
+                                                    setLocalitySearch("");
+                                                }}
+                                                className="ml-0.5 leading-none text-sm"
+                                            >×</button>
+                                        </span>
                                     </div>
-                                    {renderFieldError("localityId")}
-                                    {filteredLocalities.length === 0 ? (
-                                        <p className="mt-2 text-xs text-white/60">No localities match this search.</p>
-                                    ) : null}
-                                </div>
+                                ) : (
+                                    <>
+                                        {/* Search input with Places suggestions */}
+                                        <LocalityAutocomplete
+                                            cityName={selectedCityName}
+                                            value={localitySearch}
+                                            onChange={(val) => {
+                                                setLocalitySearch(val);
+                                                setForm((prev) => ({ ...prev, localityName: val, localityId: "" }));
+                                            }}
+                                        />
+                                        {renderFieldError("localityId")}
+
+                                        {/* Popular localities */}
+                                        <div>
+                                            <p className="text-xs font-medium text-white/40 mb-2">Popular localities</p>
+                                            <div className="flex flex-wrap gap-2">
+                                                {["HSR Layout","Bellandur","Whitefield","Marathahalli","Koramangala","Indiranagar","BTM Layout"].map((loc) => (
+                                                    <button
+                                                        key={loc}
+                                                        type="button"
+                                                        onClick={() => {
+                                                            const match = localityOptions.find(o => o.name.toLowerCase() === loc.toLowerCase());
+                                                            if (match) {
+                                                                setForm((prev) => ({ ...prev, localityId: match.id, localityName: "" }));
+                                                            } else {
+                                                                setForm((prev) => ({ ...prev, localityName: loc, localityId: "" }));
+                                                            }
+                                                            setLocalitySearch("");
+                                                        }}
+                                                        className={chipClass}
+                                                    >
+                                                        {loc}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </>
+                                )}
                             </section>
 
                             {/* Address fields */}
