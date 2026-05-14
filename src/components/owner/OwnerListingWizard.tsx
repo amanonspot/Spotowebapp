@@ -1158,60 +1158,67 @@ export default function OwnerListingWizard({ mode = "create", propertyId, initia
                                     {renderFieldError("cityId")}
                                 </div>
 
-                                {/* Selected locality chip */}
-                                {(form.localityId || form.localityName?.trim()) ? (
-                                    <div className="flex flex-wrap gap-2">
-                                        <span className="flex items-center gap-1.5 rounded-full border border-[#B7F041] bg-[#B7F041] px-3 py-1 text-xs font-semibold text-[#111]">
-                                            {selectedLocalityName || form.localityName}
-                                            <button
-                                                type="button"
-                                                onClick={() => {
-                                                    setForm((prev) => ({ ...prev, localityId: "", localityName: "" }));
-                                                    setLocalitySearch("");
-                                                }}
-                                                className="ml-0.5 leading-none text-sm"
-                                            >×</button>
-                                        </span>
-                                    </div>
-                                ) : (
-                                    <>
-                                        {/* Search input with Places suggestions */}
-                                        <LocalityAutocomplete
-                                            cityName={selectedCityName}
-                                            value={localitySearch}
-                                            onChange={(val) => {
-                                                setLocalitySearch(val);
-                                                setForm((prev) => ({ ...prev, localityName: val, localityId: "" }));
-                                            }}
-                                        />
-                                        {renderFieldError("localityId")}
+                                {/* Add Locality — search with Places suggestions */}
+                                <div>
+                                    <p className="text-xs font-medium text-white/55 mb-2">Add Locality</p>
+                                    <LocalityAutocomplete
+                                        cityName={selectedCityName}
+                                        value={localitySearch}
+                                        onChange={(val) => {
+                                            setLocalitySearch(val);
+                                            setForm((prev) => ({ ...prev, localityName: val, localityId: "" }));
+                                        }}
+                                    />
+                                    {renderFieldError("localityId")}
+                                </div>
 
-                                        {/* Popular localities */}
-                                        <div>
-                                            <p className="text-xs font-medium text-white/40 mb-2">Popular localities</p>
-                                            <div className="flex flex-wrap gap-2">
-                                                {["HSR Layout","Bellandur","Whitefield","Marathahalli","Koramangala","Indiranagar","BTM Layout"].map((loc) => (
-                                                    <button
-                                                        key={loc}
-                                                        type="button"
-                                                        onClick={() => {
-                                                            const match = localityOptions.find(o => o.name.toLowerCase() === loc.toLowerCase());
-                                                            if (match) {
-                                                                setForm((prev) => ({ ...prev, localityId: match.id, localityName: "" }));
-                                                            } else {
-                                                                setForm((prev) => ({ ...prev, localityName: loc, localityId: "" }));
-                                                            }
-                                                            setLocalitySearch("");
-                                                        }}
-                                                        className={chipClass}
-                                                    >
-                                                        {loc}
-                                                    </button>
-                                                ))}
-                                            </div>
+                                {/* Selected Localities */}
+                                {(form.localityId || form.localityName?.trim()) && (
+                                    <div>
+                                        <p className="text-xs font-medium text-white/55 mb-2">Selected Localities</p>
+                                        <div className="flex flex-wrap gap-2">
+                                            <span className="flex items-center gap-1.5 rounded-full border border-[#B7F041] bg-[#B7F041] px-3 py-1 text-xs font-semibold text-[#111]">
+                                                {selectedLocalityName || form.localityName}
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setForm((prev) => ({ ...prev, localityId: "", localityName: "" }));
+                                                        setLocalitySearch("");
+                                                    }}
+                                                    className="ml-0.5 text-sm leading-none"
+                                                >×</button>
+                                            </span>
                                         </div>
-                                    </>
+                                    </div>
                                 )}
+
+                                {/* Popular Localities — always visible */}
+                                <div>
+                                    <p className="text-xs font-medium text-white/40 mb-2">Popular Localities</p>
+                                    <div className="flex flex-wrap gap-2">
+                                        {["BTM Layout","HSR Layout","Bellandur","Marathahalli","Whitefield","Koramangala","Indiranagar"].map((loc) => {
+                                            const match = localityOptions.find(o => o.name.toLowerCase() === loc.toLowerCase());
+                                            const isActive = match ? form.localityId === match.id : form.localityName === loc;
+                                            return (
+                                                <button
+                                                    key={loc}
+                                                    type="button"
+                                                    onClick={() => {
+                                                        if (match) {
+                                                            setForm((prev) => ({ ...prev, localityId: match.id, localityName: "" }));
+                                                        } else {
+                                                            setForm((prev) => ({ ...prev, localityName: loc, localityId: "" }));
+                                                        }
+                                                        setLocalitySearch("");
+                                                    }}
+                                                    className={`${chipClass} ${isActive ? "border-[#B7F041] bg-[#B7F041] text-[#111]" : ""}`}
+                                                >
+                                                    {loc}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
                             </section>
 
                             {/* Address fields */}
