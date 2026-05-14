@@ -1158,9 +1158,10 @@ export default function OwnerListingWizard({ mode = "create", propertyId, initia
                                     {renderFieldError("cityId")}
                                 </div>
 
+
                                 {/* Add Locality — search with Places suggestions */}
                                 <div>
-                                    <p className="text-xs font-medium text-white/55 mb-2">Add Locality</p>
+                                    <p className="text-xs font-medium text-white/55 mb-2">Currently Live in</p>
                                     <LocalityAutocomplete
                                         cityName={selectedCityName}
                                         value={localitySearch}
@@ -1177,17 +1178,17 @@ export default function OwnerListingWizard({ mode = "create", propertyId, initia
                                     <div>
                                         <p className="text-xs font-medium text-white/55 mb-2">Selected Localities</p>
                                         <div className="flex flex-wrap gap-2">
-                                            <span className="flex items-center gap-1.5 rounded-full border border-[#B7F041] bg-[#B7F041] px-3 py-1 text-xs font-semibold text-[#111]">
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setForm((prev) => ({ ...prev, localityId: "", localityName: "" }));
+                                                    setLocalitySearch("");
+                                                }}
+                                                className={`${chipClass} flex items-center gap-1.5 border-[#B7F041] bg-[#B7F041] text-[#111]`}
+                                            >
                                                 {selectedLocalityName || form.localityName}
-                                                <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                        setForm((prev) => ({ ...prev, localityId: "", localityName: "" }));
-                                                        setLocalitySearch("");
-                                                    }}
-                                                    className="ml-0.5 text-sm leading-none"
-                                                >×</button>
-                                            </span>
+                                                <span className="leading-none">×</span>
+                                            </button>
                                         </div>
                                     </div>
                                 )}
