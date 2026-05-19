@@ -282,6 +282,28 @@ export default function OwnerListingWizard({
     const [prefillHydrated, setPrefillHydrated] = useState(false);
 
     useEffect(() => {
+        if (isAgentFlow || isEditMode) return;
+
+        let mounted = true;
+        const redirectAgentToAgentFlow = async () => {
+            try {
+                const profile = await agentAdapter.getAgentProfile();
+                if (!mounted) return;
+                if (profile?.is_agent && profile.employee) {
+                    router.replace("/agent/list-property");
+                }
+            } catch {
+                // If the agent check fails, keep the normal owner flow available.
+            }
+        };
+
+        redirectAgentToAgentFlow();
+        return () => {
+            mounted = false;
+        };
+    }, [isAgentFlow, isEditMode, router]);
+
+    useEffect(() => {
         if (isAgentFlow || !isEditMode) {
             setLoadingInitial(false);
             return;
