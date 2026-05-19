@@ -9,7 +9,7 @@ import PrimaryButton from "@/components/revamp/PrimaryButton";
 import ShimmerBlock from "@/components/revamp/ShimmerBlock";
 import SwipeUnlock from "@/components/revamp/SwipeUnlock";
 import { OwnerDashboardData, OwnerListingSummary, OwnerListingVerificationState } from "@/lib/adapters/types";
-import { ownerAdapter } from "@/lib/adapters";
+import { ownerAdapter, agentAdapter } from "@/lib/adapters";
 
 const emptyDashboard: OwnerDashboardData = {
     ownerName: "Owner",
@@ -129,8 +129,18 @@ export default function OwnerDashboardPage() {
     );
 
     useEffect(() => {
-        loadDashboard("initial");
-    }, [loadDashboard]);
+        let mounted = true;
+        agentAdapter.getAgentProfile()
+            .then((p) => {
+                if (!mounted) return;
+                if (p?.is_agent && p.employee) router.replace("/agent/dashboard");
+                else loadDashboard("initial");
+            })
+            .catch(() => {
+                if (mounted) loadDashboard("initial");
+            });
+        return () => { mounted = false; };
+    }, [loadDashboard, router]);
 
     const normalizedSearch = searchQuery.trim().toLowerCase();
     const visibleListings = useMemo(() => {

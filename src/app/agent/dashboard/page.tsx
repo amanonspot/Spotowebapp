@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Plus } from "lucide-react";
+import { Plus, Home } from "lucide-react";
 import BlurImage from "@/components/revamp/BlurImage";
 import ShimmerBlock from "@/components/revamp/ShimmerBlock";
 import { agentAdapter } from "@/lib/adapters";
@@ -48,6 +48,13 @@ export default function AgentDashboardPage() {
     return (
         <main className="min-h-screen bg-[#050507] text-white">
             <div className="mx-auto w-full max-w-[420px] px-4 pb-10 pt-6 sm:max-w-lg">
+                <Link
+                    href="/"
+                    className="mb-5 inline-flex items-center gap-1.5 text-sm text-white/50 hover:text-white/80"
+                >
+                    <Home className="h-4 w-4" />
+                    Home
+                </Link>
                 <div className="mb-6 flex items-start justify-between gap-3">
                     <div>
                         <h1 className="text-2xl font-semibold">Field agent</h1>
