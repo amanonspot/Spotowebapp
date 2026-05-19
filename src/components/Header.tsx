@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { userService } from "@/lib/api";
@@ -39,6 +39,7 @@ export default function Header({
     showHomeIcon = true,
 }: HeaderProps) {
     const router = useRouter();
+    const pathname = usePathname();
     const { isAuthenticated, user, logout } = useAuth();
     const [showProfileMenu, setShowProfileMenu] = useState(false);
     const [showLocationMenu, setShowLocationMenu] = useState(false);
@@ -53,17 +54,41 @@ export default function Header({
     const [isAgent, setIsAgent] = useState(false);
     const profileMenuRef = useRef<HTMLDivElement>(null);
 
-    // Check agent status as soon as user is authenticated
+    // Check agent status — instant from pathname or sessionStorage, then confirm via API
     useEffect(() => {
-        if (!isAuthenticated) { setIsAgent(false); return; }
+        if (!isAuthenticated) {
+            setIsAgent(false);
+            sessionStorage.removeItem("spoto_is_agent");
+            return;
+        }
+        // If already on an agent page, we know immediately
+        if (pathname.startsWith("/agent")) {
+            setIsAgent(true);
+            sessionStorage.setItem("spoto_is_agent", "1");
+            return;
+        }
+        // Check cached value first (instant)
+        if (sessionStorage.getItem("spoto_is_agent") === "1") {
+            setIsAgent(true);
+        }
+        // Always re-verify via API in background
         let active = true;
         import("@/lib/adapters").then(({ agentAdapter }) =>
             agentAdapter.getAgentProfile()
-                .then((p) => { if (active && p?.is_agent && p.employee) setIsAgent(true); })
+                .then((p) => {
+                    if (!active) return;
+                    if (p?.is_agent && p.employee) {
+                        setIsAgent(true);
+                        sessionStorage.setItem("spoto_is_agent", "1");
+                    } else {
+                        setIsAgent(false);
+                        sessionStorage.removeItem("spoto_is_agent");
+                    }
+                })
                 .catch(() => {})
         );
         return () => { active = false; };
-    }, [isAuthenticated]);
+    }, [isAuthenticated, pathname]);
     const locationMenuRef = useRef<HTMLDivElement>(null);
     
     // Google Places autocomplete for location search
