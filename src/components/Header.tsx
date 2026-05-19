@@ -52,6 +52,18 @@ export default function Header({
     const [passLoading, setPassLoading] = useState(false);
     const [isAgent, setIsAgent] = useState(false);
     const profileMenuRef = useRef<HTMLDivElement>(null);
+
+    // Check agent status as soon as user is authenticated
+    useEffect(() => {
+        if (!isAuthenticated) { setIsAgent(false); return; }
+        let active = true;
+        import("@/lib/adapters").then(({ agentAdapter }) =>
+            agentAdapter.getAgentProfile()
+                .then((p) => { if (active && p?.is_agent && p.employee) setIsAgent(true); })
+                .catch(() => {})
+        );
+        return () => { active = false; };
+    }, [isAuthenticated]);
     const locationMenuRef = useRef<HTMLDivElement>(null);
     
     // Google Places autocomplete for location search
@@ -138,13 +150,6 @@ export default function Header({
                 setPassLoading(false);
             }
 
-            try {
-                const { agentAdapter } = await import("@/lib/adapters");
-                const profile = await agentAdapter.getAgentProfile();
-                if (profile?.is_agent && profile.employee) setIsAgent(true);
-            } catch {
-                // silently ignore
-            }
         }
     };
 
