@@ -191,9 +191,36 @@ export interface RentalPassActivateDataDto {
 
 export type RentalPassActivateResponseDto = ApiSuccessEnvelope<RentalPassActivateDataDto> | ApiErrorShape | ApiFailureEnvelope;
 
+export interface RentalAgentEmployeeDto {
+    id: string;
+    employee_id: string;
+    user_id?: string | null;
+    user_phone?: string | null;
+    name: string;
+    phone?: string;
+    email?: string;
+    is_active: boolean;
+}
+
+export interface RentalAgentMeDataDto {
+    is_agent: boolean;
+    employee: RentalAgentEmployeeDto | null;
+}
+
+export interface RentalAgentCreateDataDto {
+    property_id: string;
+    owner_phone?: string;
+    owner_id?: string;
+    verification_status?: string;
+    is_verified?: boolean;
+    listed_by_employee_id?: string;
+    document?: RentalOwnerDocumentDto | null;
+}
+
 export interface OwnerPropertyUpsertPayload {
     propertyTitle: string;
     ownerName?: string;
+    ownerPhone?: string;
     propertyTypeId: string;
     cityId: string;
     localityId: string;

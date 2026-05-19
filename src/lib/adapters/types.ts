@@ -124,6 +124,7 @@ export interface AuthSession {
     userId?: string;
     accessToken?: string;
     refreshToken?: string;
+    activatedListingsCount?: number;
 }
 
 export interface OtpRequestResult {
@@ -279,6 +280,7 @@ export interface OwnerListingSummary {
 
 export type OwnerListingVerificationState =
     | "in_review"
+    | "awaiting_owner_login"
     | "verification_pending"
     | "verifying"
     | "live"

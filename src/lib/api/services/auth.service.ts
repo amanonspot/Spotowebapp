@@ -20,6 +20,9 @@ const normalizeVerifyPayload = (payload: VerifyPayload): VerifyOTPResponse => {
   const refresh = typeof data.refresh === 'string' ? data.refresh : '';
   const message = typeof data.message === 'string' ? data.message : 'OTP verified successfully.';
   const userId = typeof data.user_id === 'string' && data.user_id.trim() ? data.user_id : undefined;
+  const activatedRaw = data.activated_listings_count;
+  const activatedListingsCount =
+    typeof activatedRaw === 'number' && Number.isFinite(activatedRaw) ? Math.max(0, Math.floor(activatedRaw)) : undefined;
 
   if (!access || !refresh) {
     throw new Error('Unable to verify OTP right now. Please try again.');
@@ -30,6 +33,7 @@ const normalizeVerifyPayload = (payload: VerifyPayload): VerifyOTPResponse => {
     refresh,
     message,
     user_id: userId,
+    activated_listings_count: activatedListingsCount,
   };
 };
 

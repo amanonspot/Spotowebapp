@@ -10,7 +10,7 @@ import AddressAutocomplete from "@/components/owner/AddressAutocomplete";
 import PrimaryButton from "@/components/revamp/PrimaryButton";
 import ShimmerBlock from "@/components/revamp/ShimmerBlock";
 import config from "@/config/config";
-import { ownerAdapter } from "@/lib/adapters";
+import { agentAdapter, ownerAdapter } from "@/lib/adapters";
 import { extractLatLngFromGoogleMapsUrl } from "@/lib/maps/parseGoogleMapsUrl";
 import { OwnerListingFormInput, OwnerMastersData, SelectOption } from "@/lib/adapters/types";
 import { RENTALS_MOCK_MODE } from "@/lib/rentals";
@@ -150,6 +150,7 @@ const propertyTypeIcon = (index: number) => {
 
 interface OwnerListingWizardProps {
     mode?: "create" | "edit";
+    flow?: "owner" | "agent";
     propertyId?: string;
     initialValue?: OwnerListingFormInput | null;
 }
@@ -253,9 +254,16 @@ const parseFieldErrors = (error: unknown): OwnerFieldErrors => {
     return mapped;
 };
 
-export default function OwnerListingWizard({ mode = "create", propertyId, initialValue = null }: OwnerListingWizardProps) {
+export default function OwnerListingWizard({
+    mode = "create",
+    flow = "owner",
+    propertyId,
+    initialValue = null,
+}: OwnerListingWizardProps) {
     const router = useRouter();
-    const isEditMode = mode === "edit";
+    const isAgentFlow = flow === "agent";
+    const isEditMode = !isAgentFlow && mode === "edit";
+    const homePath = isAgentFlow ? "/agent/dashboard" : "/owner/dashboard";
     const stepTitles = isEditMode ? EDIT_STEP_TITLES : CREATE_STEP_TITLES;
     const totalSteps = stepTitles.length;
     const [step, setStep] = useState(1);
@@ -274,7 +282,7 @@ export default function OwnerListingWizard({ mode = "create", propertyId, initia
     const [prefillHydrated, setPrefillHydrated] = useState(false);
 
     useEffect(() => {
-        if (!isEditMode) {
+        if (isAgentFlow || !isEditMode) {
             setLoadingInitial(false);
             return;
         }
@@ -310,7 +318,7 @@ export default function OwnerListingWizard({ mode = "create", propertyId, initia
         return () => {
             mounted = false;
         };
-    }, [isEditMode, initialValue, propertyId, initialLoadNonce]);
+    }, [isAgentFlow, isEditMode, initialValue, propertyId, initialLoadNonce]);
 
     useEffect(() => {
         let mounted = true;
@@ -343,6 +351,10 @@ export default function OwnerListingWizard({ mode = "create", propertyId, initia
     }, [form.cityId, masters.cities]);
 
     useEffect(() => {
+        if (isAgentFlow) {
+            setPrefillHydrated(true);
+            return;
+        }
         if (prefillHydrated) return;
         if (isEditMode && loadingInitial) return;
 
@@ -590,7 +602,7 @@ export default function OwnerListingWizard({ mode = "create", propertyId, initia
 
     const goBack = () => {
         if (step === 1) {
-            router.push("/");
+            router.push(isAgentFlow ? homePath : "/");
             return;
         }
         setStep((prev) => Math.max(1, prev - 1));
@@ -631,6 +643,16 @@ export default function OwnerListingWizard({ mode = "create", propertyId, initia
             if (isEditMode && propertyId) {
                 await ownerAdapter.updateProperty(propertyId, payload);
                 router.push("/owner/dashboard");
+                return;
+            }
+
+            if (isAgentFlow) {
+                const created = await agentAdapter.submitAgentListing(payload);
+                const query = new URLSearchParams({
+                    property_id: created.id,
+                    owner_phone: created.ownerPhone,
+                });
+                router.push(`/agent/list-property/success?${query.toString()}`);
                 return;
             }
 
@@ -690,7 +712,7 @@ export default function OwnerListingWizard({ mode = "create", propertyId, initia
 
                     <button
                         type="button"
-                        onClick={() => router.push("/owner/dashboard")}
+                        onClick={() => router.push(homePath)}
                         className="btn-shimmer inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/20 text-white/90 hover:border-[#A67AEB] active:scale-95"
                     >
                         <Bell className="h-5 w-5" />
@@ -1293,7 +1315,14 @@ export default function OwnerListingWizard({ mode = "create", propertyId, initia
                             </section>
 
                             <section className={`${sectionCardClass} space-y-3`}>
-                                <p className="text-sm font-semibold text-white/90">Owner contact</p>
+                                <p className="text-sm font-semibold text-white/90">
+                                    {isAgentFlow ? "Property owner (required)" : "Owner contact"}
+                                </p>
+                                {isAgentFlow ? (
+                                    <p className="text-xs text-white/55">
+                                        Enter the owner&apos;s mobile number. They will log in later to activate this listing.
+                                    </p>
+                                ) : null}
                                 <input
                                     value={form.ownerName || ""}
                                     onChange={(event) => updateField("ownerName", sanitizeTextInput(event.target.value))}
@@ -1403,16 +1432,20 @@ export default function OwnerListingWizard({ mode = "create", propertyId, initia
                                 {renderFieldError("documentType", "documentFile")}
                             </section>
 
-                            <section className={`${sectionCardClass} space-y-3`}>
-                                <p className="text-sm font-semibold text-white/90">SPOTO employee ID (optional)</p>
-                                <input
-                                    value={form.employeeId || ""}
-                                    onChange={(event) => updateField("employeeId", sanitizeTextInput(event.target.value))}
-                                    placeholder="Employee ID (optional)"
-                                    className="h-12 w-full rounded-xl border border-white/20 bg-[#0d0d14] px-3 text-sm text-white/90 outline-none placeholder:text-white/35 focus:border-[#A67AEB]"
-                                />
-                                {renderFieldError("employeeId")}
-                            </section>
+                            {!isAgentFlow ? (
+                                <section className={`${sectionCardClass} space-y-3`}>
+                                    <p className="text-sm font-semibold text-white/90">SPOTO employee ID (optional)</p>
+                                    <input
+                                        value={form.employeeId || ""}
+                                        onChange={(event) =>
+                                            updateField("employeeId", sanitizeTextInput(event.target.value))
+                                        }
+                                        placeholder="Employee ID (optional)"
+                                        className="h-12 w-full rounded-xl border border-white/20 bg-[#0d0d14] px-3 text-sm text-white/90 outline-none placeholder:text-white/35 focus:border-[#A67AEB]"
+                                    />
+                                    {renderFieldError("employeeId")}
+                                </section>
+                            ) : null}
                         </>
                     )}
                 </div>

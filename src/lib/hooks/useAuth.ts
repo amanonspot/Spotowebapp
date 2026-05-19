@@ -130,7 +130,16 @@ export const useAuth = () => {
       await loadUserData({ force: true, strict: true });
       syncAuthState();
       
-      toast.success('Login successful!');
+      const activated = response.activatedListingsCount ?? 0;
+      if (activated > 0) {
+        toast.success(
+          activated === 1
+            ? 'Login successful! 1 listing from your field visit is now active.'
+            : `Login successful! ${activated} listings from your field visits are now active.`
+        );
+      } else {
+        toast.success('Login successful!');
+      }
       return response;
     } catch (err: any) {
       const errorMessage = err.message || 'Failed to verify OTP';

@@ -2,6 +2,8 @@ import { api, apiFormData } from "@/lib/api";
 import { clearCache } from "@/lib/api/client";
 import {
     OwnerPropertyUpsertPayload,
+    RentalAgentCreateDataDto,
+    RentalAgentMeDataDto,
     RentalContactUnlockRequestDto,
     RentalContactUnlockResponseDto,
     RentalMasterOptionDto,
@@ -86,6 +88,9 @@ const buildOwnerFormData = (
     }
     if (shouldInclude(mode, changedKeys, "ownerName")) {
         appendText(formData, "owner_name", payload.ownerName || "");
+    }
+    if (payload.ownerPhone && mode === "create") {
+        appendText(formData, "owner_phone", payload.ownerPhone);
     }
     if (shouldInclude(mode, changedKeys, "propertyTypeId")) {
         appendText(formData, "property_type_id", payload.propertyTypeId);
@@ -223,6 +228,27 @@ export const rentalsService = {
             formData.append("property_id", payload.property_id);
         }
         return apiFormData.post<RentalPassActivateResponseDto>("/api/rental/passes/activate/", formData);
+    },
+
+    getAgentMe: () => api.get<WireApiEnvelope<RentalAgentMeDataDto>>("/api/rental/agent/me/"),
+
+    getAgentProperties: () =>
+        api.get<WireApiEnvelope<RentalPropertyDto[]>>("/api/rental/agent/properties/"),
+
+    createAgentProperty: async (payload: OwnerPropertyUpsertPayload) => {
+        const phone = (payload.ownerPhone || payload.contactPhone || "").replace(/\D/g, "").slice(-10);
+        if (phone.length !== 10) {
+            throw new Error("Owner phone must be a valid 10-digit mobile number.");
+        }
+        const body = buildOwnerFormData({ ...payload, ownerPhone: phone, contactPhone: phone }, { mode: "create" });
+        const created = await apiFormData.post<WireApiEnvelope<RentalAgentCreateDataDto>>(
+            "/api/rental/agent/properties/create/",
+            body
+        );
+        clearCache("/api/rental/agent/properties/");
+        clearCache("/api/rental/my/properties/");
+        clearCache("/api/rental/properties/");
+        return created;
     },
 
     getOwnerProperties: () => api.get<WireApiEnvelope<RentalPropertyDto[]>>("/api/rental/my/properties/"),

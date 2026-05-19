@@ -286,6 +286,7 @@ const mapVerificationState = (params: {
 }): OwnerListingVerificationState => {
     const raw = firstString(params.verificationStatus, params.status).toLowerCase();
     if (raw === "live") return "live";
+    if (raw === "awaiting_owner_login") return "awaiting_owner_login";
     if (raw === "rejected") return "rejected";
     if (raw === "verification_pending") return "verification_pending";
     if (raw === "verification_retry") return "verification_retry";
@@ -301,6 +302,9 @@ const mapVerificationState = (params: {
 const verificationMessage = (state: OwnerListingVerificationState, reason?: string): string => {
     if (reason && reason.trim()) return reason.trim();
     if (state === "live") return "Property is live now.";
+    if (state === "awaiting_owner_login") {
+        return "Your field agent submitted this listing. Log in with this phone number to activate it.";
+    }
     if (state === "rejected") return "Property verification was rejected.";
     if (state === "verifying" || state === "verification_retry" || state === "verification_pending") {
         return "Employee code verification is in progress.";

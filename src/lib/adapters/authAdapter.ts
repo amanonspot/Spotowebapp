@@ -82,6 +82,7 @@ interface VerifyPayloadLike {
     access?: string;
     refresh?: string;
     first_name?: string;
+    activated_listings_count?: number;
 }
 
 const toSession = (phone: string, payload?: VerifyPayloadLike): AuthSession => ({
@@ -92,6 +93,10 @@ const toSession = (phone: string, payload?: VerifyPayloadLike): AuthSession => (
     userId: payload?.user_id,
     accessToken: payload?.access,
     refreshToken: payload?.refresh,
+    activatedListingsCount:
+        typeof payload?.activated_listings_count === "number" && payload.activated_listings_count > 0
+            ? payload.activated_listings_count
+            : undefined,
 });
 
 class HybridAuthAdapter implements AuthAdapter {

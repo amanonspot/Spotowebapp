@@ -29,6 +29,7 @@ const formatCurrency = (value: number) => `₹${value.toLocaleString("en-IN")}`;
 const normalizeVerificationState = (listing: OwnerListingSummary): OwnerListingVerificationState => {
     if (listing.verificationState) return listing.verificationState;
     const status = `${listing.verificationStatus || listing.status || ""}`.toLowerCase();
+    if (status.includes("awaiting_owner") || status.includes("owner_login")) return "awaiting_owner_login";
     if (status.includes("reject")) return "rejected";
     if (status.includes("retry") || status.includes("verifying") || status.includes("pending")) return "verification_pending";
     if (status.includes("in_review") || status.includes("review")) return "in_review";
@@ -51,6 +52,14 @@ const ListingStatusBadge = ({ state }: { state: OwnerListingVerificationState })
         return (
             <span className="absolute right-3 top-3 inline-flex items-center gap-2 rounded-xl bg-[#7f7b77cc] px-3 py-1.5 text-sm font-bold text-white">
                 Rejected <span className="h-3 w-3 rounded-full bg-[#ff3848]" />
+            </span>
+        );
+    }
+
+    if (state === "awaiting_owner_login") {
+        return (
+            <span className="absolute right-3 top-3 inline-flex max-w-[58%] items-center gap-2 rounded-xl bg-[#7f7b77cc] px-3 py-1.5 text-xs font-bold text-white sm:text-sm">
+                Awaiting login <span aria-hidden>📱</span>
             </span>
         );
     }

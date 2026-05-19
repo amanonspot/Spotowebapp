@@ -15,6 +15,7 @@ const publicRoutes = [
 // Routes that ALWAYS require authentication (even if prefix matches a public route)
 const protectedRoutes = [
     "/owner",
+    "/agent",
 ];
 
 export function middleware(request: NextRequest) {

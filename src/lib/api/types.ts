@@ -24,6 +24,7 @@ export interface VerifyOTPResponse {
   refresh: string;
   user_id?: string;
   message: string;
+  activated_listings_count?: number;
 }
 
 export interface GoogleSignInHeaders {
