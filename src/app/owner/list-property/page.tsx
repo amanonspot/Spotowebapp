@@ -3,7 +3,6 @@
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import OwnerListingWizard from "@/components/owner/OwnerListingWizard";
-import { agentAdapter } from "@/lib/adapters";
 
 export default function OwnerListPropertyPage() {
     const router = useRouter();
@@ -12,8 +11,9 @@ export default function OwnerListPropertyPage() {
     useEffect(() => {
         let mounted = true;
 
-        const routeAgentToAgentFlow = async () => {
+        const check = async () => {
             try {
+                const { agentAdapter } = await import("@/lib/adapters");
                 const profile = await agentAdapter.getAgentProfile();
                 if (!mounted) return;
                 if (profile?.is_agent && profile.employee) {
@@ -21,12 +21,13 @@ export default function OwnerListPropertyPage() {
                     return;
                 }
             } catch {
-                // Non-agent users or failed checks should continue with normal owner listing.
+                // Any error: fall through to normal owner listing
+            } finally {
+                if (mounted) setCheckingAgent(false);
             }
-            if (mounted) setCheckingAgent(false);
         };
 
-        routeAgentToAgentFlow();
+        check();
         return () => {
             mounted = false;
         };
@@ -37,7 +38,7 @@ export default function OwnerListPropertyPage() {
             <main className="min-h-screen bg-[#050507] text-white">
                 <div className="mx-auto w-full max-w-[420px] px-4 py-12">
                     <div className="rounded-2xl border border-white/15 bg-[#101018] p-4 text-sm text-white/70">
-                        Checking listing access...
+                        Loading...
                     </div>
                 </div>
             </main>
