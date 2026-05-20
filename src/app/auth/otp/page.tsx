@@ -50,6 +50,41 @@ export default function OTPPage() {
         return () => clearInterval(t);
     }, [timer]);
 
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+        if (!("OTPCredential" in window)) return;
+
+        const ac = new AbortController();
+        const nav = navigator as Navigator & {
+            credentials?: {
+                get?: (options: Record<string, unknown>) => Promise<unknown>;
+            };
+        };
+
+        const startWebOtp = async () => {
+            try {
+                const credential = (await nav.credentials?.get?.({
+                    otp: { transport: ["sms"] },
+                    signal: ac.signal,
+                })) as { code?: string } | undefined;
+
+                const code = (credential?.code || "").replace(/\D/g, "").slice(0, 4);
+                if (!code) return;
+
+                const next = ["", "", "", ""];
+                code.split("").forEach((digit, idx) => {
+                    next[idx] = digit;
+                });
+                setOtp(next);
+            } catch {
+                // Ignore abort and unsupported runtime errors.
+            }
+        };
+
+        startWebOtp();
+        return () => ac.abort();
+    }, [phoneNumber]);
+
     const handleOtpChange = (newOtp: string[]) => {
         setOtp(newOtp);
     };
