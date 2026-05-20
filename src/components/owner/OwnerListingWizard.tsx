@@ -1081,19 +1081,12 @@ export default function OwnerListingWizard({
                                             </button>
                                         ) : null}
                                     </div>
-                                    <div className={`relative mt-2 ${form.availabilityId ? "opacity-45 pointer-events-none" : ""}`}>
-                                        {/* Styled display layer */}
-                                        <div className="flex h-12 w-full items-center rounded-xl border border-white/20 bg-[#0d0d14] px-3 text-sm text-white/90">
-                                            {form.availableFromDate
-                                                ? new Date(form.availableFromDate + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
-                                                : <span className="text-white/35">Select date</span>
-                                            }
-                                        </div>
-                                        {/* Native date input — invisible, covers full area for tap */}
+                                    <div className={`mt-2 ${form.availabilityId ? "opacity-45 pointer-events-none" : ""}`}>
                                         <input
                                             type="date"
                                             value={form.availableFromDate || ""}
                                             disabled={Boolean(form.availabilityId)}
+                                            min={new Date().toISOString().split("T")[0]}
                                             onChange={(event) => {
                                                 const nextDate = event.target.value;
                                                 updateField("availableFromDate", nextDate);
@@ -1104,7 +1097,7 @@ export default function OwnerListingWizard({
                                                     updateField("availabilityMode", "immediate");
                                                 }
                                             }}
-                                            className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                                            className="h-12 w-full cursor-pointer rounded-xl border border-white/20 bg-[#0d0d14] px-3 text-sm text-white/90 outline-none focus:border-[#A67AEB] [color-scheme:dark] [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-60 [&::-webkit-calendar-picker-indicator]:invert"
                                         />
                                     </div>
                                     <p className="mt-2 text-xs text-white/45">

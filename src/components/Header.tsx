@@ -54,24 +54,24 @@ export default function Header({
     const [isAgent, setIsAgent] = useState(false);
     const profileMenuRef = useRef<HTMLDivElement>(null);
 
-    // Check agent status — instant from pathname or sessionStorage, then confirm via API
+    // Check agent status — instant from pathname or localStorage, then confirm via API
     useEffect(() => {
         if (!isAuthenticated) {
             setIsAgent(false);
-            sessionStorage.removeItem("spoto_is_agent");
+            localStorage.removeItem("spoto_is_agent");
             return;
         }
-        // If already on an agent page, we know immediately
+        // If already on an agent page, we know immediately — persist it
         if (pathname.startsWith("/agent")) {
             setIsAgent(true);
-            sessionStorage.setItem("spoto_is_agent", "1");
+            localStorage.setItem("spoto_is_agent", "1");
             return;
         }
-        // Check cached value first (instant)
-        if (sessionStorage.getItem("spoto_is_agent") === "1") {
+        // Check persisted value first (instant, no API needed)
+        if (localStorage.getItem("spoto_is_agent") === "1") {
             setIsAgent(true);
         }
-        // Always re-verify via API in background
+        // Re-verify via API in background (works once migration is applied)
         let active = true;
         import("@/lib/adapters").then(({ agentAdapter }) =>
             agentAdapter.getAgentProfile()
@@ -79,13 +79,16 @@ export default function Header({
                     if (!active) return;
                     if (p?.is_agent && p.employee) {
                         setIsAgent(true);
-                        sessionStorage.setItem("spoto_is_agent", "1");
+                        localStorage.setItem("spoto_is_agent", "1");
                     } else {
+                        // Only clear if API explicitly says not an agent (not on error)
                         setIsAgent(false);
-                        sessionStorage.removeItem("spoto_is_agent");
+                        localStorage.removeItem("spoto_is_agent");
                     }
                 })
-                .catch(() => {})
+                .catch(() => {
+                    // API failed (e.g. migration not applied) — keep existing localStorage value
+                })
         );
         return () => { active = false; };
     }, [isAuthenticated, pathname]);

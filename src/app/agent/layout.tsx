@@ -40,7 +40,13 @@ export default function AgentLayout({ children }: AgentLayoutProps) {
             try {
                 const profile = await agentAdapter.getAgentProfile();
                 if (!mounted) return;
-                setGate(profile?.is_agent && profile.employee ? "allowed" : "denied");
+                if (profile?.is_agent && profile.employee) {
+                    localStorage.setItem("spoto_is_agent", "1");
+                    setGate("allowed");
+                } else {
+                    localStorage.removeItem("spoto_is_agent");
+                    setGate("denied");
+                }
             } catch {
                 if (mounted) setGate("denied");
             }
