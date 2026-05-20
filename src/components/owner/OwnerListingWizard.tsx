@@ -680,7 +680,7 @@ export default function OwnerListingWizard({
                 : "Submit"
             : "Next";
 
-    const sectionCardClass = "rounded-2xl border border-white/20 bg-[#12121A] p-4";
+    const sectionCardClass = "rounded-2xl border border-white/20 bg-[#12121A] p-4 overflow-hidden";
     const chipClass =
         "rounded-xl border border-white/20 px-3 py-2 text-sm text-white/85 transition hover:border-[#A67AEB] active:scale-[0.98]";
 
@@ -1081,7 +1081,7 @@ export default function OwnerListingWizard({
                                             </button>
                                         ) : null}
                                     </div>
-                                    <div className={`mt-2 ${form.availabilityId ? "opacity-45 pointer-events-none" : ""}`}>
+                                    <div className={`mt-2 w-full overflow-hidden ${form.availabilityId ? "opacity-45 pointer-events-none" : ""}`}>
                                         <input
                                             type="date"
                                             value={form.availableFromDate || ""}
@@ -1097,7 +1097,8 @@ export default function OwnerListingWizard({
                                                     updateField("availabilityMode", "immediate");
                                                 }
                                             }}
-                                            className="h-12 w-full cursor-pointer rounded-xl border border-white/20 bg-[#0d0d14] px-3 text-sm text-white/90 outline-none focus:border-[#A67AEB] [color-scheme:dark] [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-60 [&::-webkit-calendar-picker-indicator]:invert"
+                                            className="h-12 w-full max-w-full cursor-pointer rounded-xl border border-white/20 bg-[#0d0d14] px-3 text-sm text-white/90 outline-none focus:border-[#A67AEB] [color-scheme:dark] [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-60 [&::-webkit-calendar-picker-indicator]:invert"
+                                            style={{ boxSizing: "border-box" }}
                                         />
                                     </div>
                                     <p className="mt-2 text-xs text-white/45">

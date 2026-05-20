@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 
 interface SimpleOTPInputProps {
     otp: string[];
@@ -11,11 +11,25 @@ export default function SimpleOTPInput({ otp, onOtpChange }: SimpleOTPInputProps
     const inputRef = useRef<HTMLInputElement>(null);
     const [focused, setFocused] = useState(false);
 
-    const value = otp.join("");
-    const filledCount = value.length;
+    // When otp is reset externally (e.g. on Resend), sync the real DOM input too
+    useEffect(() => {
+        if (inputRef.current) {
+            const domValue = inputRef.current.value;
+            const stateValue = otp.join("");
+            if (domValue !== stateValue) {
+                inputRef.current.value = stateValue;
+            }
+        }
+    }, [otp]);
 
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const normalized = e.target.value.replace(/\D/g, "").slice(0, 4);
+    const handleInput = () => {
+        const raw = inputRef.current?.value ?? "";
+        // Keep only digits, max 4
+        const normalized = raw.replace(/\D/g, "").slice(0, 4);
+        // Keep DOM clean
+        if (inputRef.current && inputRef.current.value !== normalized) {
+            inputRef.current.value = normalized;
+        }
         const next: string[] = ["", "", "", ""];
         normalized.split("").forEach((d, i) => {
             next[i] = d;
@@ -23,25 +37,26 @@ export default function SimpleOTPInput({ otp, onOtpChange }: SimpleOTPInputProps
         onOtpChange(next);
     };
 
+    const filledCount = otp.join("").length;
+
     return (
         <div
             className="relative mb-8 flex justify-center gap-4 px-4"
             onClick={() => inputRef.current?.focus()}
         >
             {/*
-             * Single real <input> — absolutely positioned over the boxes.
-             * Text/caret are transparent so only the visual boxes below are visible.
-             * autoComplete="one-time-code" + type="tel" is what triggers SMS OTP
-             * banner on Android & iOS.
+             * UNCONTROLLED input (no value prop).
+             * Browser can autofill freely — no React interference.
+             * opacity:0.01 keeps it "visible" for SMS autofill banner.
+             * onInput fires for both typing and autofill.
              */}
             <input
                 ref={inputRef}
                 type="tel"
                 inputMode="numeric"
                 autoComplete="one-time-code"
-                value={value}
                 maxLength={4}
-                onChange={handleChange}
+                onInput={handleInput}
                 onFocus={() => setFocused(true)}
                 onBlur={() => setFocused(false)}
                 // eslint-disable-next-line jsx-a11y/no-autofocus
@@ -52,14 +67,17 @@ export default function SimpleOTPInput({ otp, onOtpChange }: SimpleOTPInputProps
                     inset: 0,
                     width: "100%",
                     height: "100%",
-                    opacity: 0.01,          // not 0 — keeps the element "visible" for browser autofill
+                    opacity: 0.01,
                     cursor: "text",
                     zIndex: 10,
-                    fontSize: "1px",        // tiny so the blinking cursor doesn't peek through
+                    fontSize: "1px",
+                    background: "transparent",
+                    border: "none",
+                    outline: "none",
                 }}
             />
 
-            {/* Visual digit boxes (pointer-events none so clicks pass through to the real input) */}
+            {/* Visual boxes — pointer-events:none so clicks pass to the real input */}
             {otp.map((digit, index) => (
                 <div
                     key={index}
