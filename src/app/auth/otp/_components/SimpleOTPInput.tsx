@@ -22,14 +22,22 @@ export default function SimpleOTPInput({ otp, onOtpChange }: SimpleOTPInputProps
     const value = otp.join("");
 
     return (
-        <div className="mb-8 flex justify-center px-4">
+        <form
+            autoComplete="on"
+            className="mb-8 flex justify-center px-4"
+            onSubmit={(event) => event.preventDefault()}
+        >
             <input
                 ref={inputRef}
-                type="tel"
-                name="otp"
+                id="one-time-code"
+                type="text"
+                name="one-time-code"
                 inputMode="numeric"
                 pattern="[0-9]*"
                 autoComplete="one-time-code"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck={false}
                 value={value}
                 maxLength={4}
                 onChange={(event) => setOtpFromValue(event.target.value)}
@@ -45,6 +53,6 @@ export default function SimpleOTPInput({ otp, onOtpChange }: SimpleOTPInputProps
                 placeholder="••••"
                 className="h-16 w-64 rounded-lg border-2 border-white/10 bg-[#1a1c2e] px-8 text-center font-mono text-3xl tracking-[0.9em] text-white outline-none transition-all placeholder:text-white/25 focus:border-[#AF7AEB]"
             />
-        </div>
+        </form>
     );
 }
