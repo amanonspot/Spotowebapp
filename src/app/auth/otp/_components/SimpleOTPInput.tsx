@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useRef, useState } from "react";
 
 interface SimpleOTPInputProps {
     otp: string[];
@@ -11,30 +11,25 @@ export default function SimpleOTPInput({ otp, onOtpChange }: SimpleOTPInputProps
     const inputRef = useRef<HTMLInputElement>(null);
     const [focused, setFocused] = useState(false);
 
-    // When otp is reset externally (e.g. on Resend), sync the real DOM input too
-    useEffect(() => {
-        if (inputRef.current) {
-            const domValue = inputRef.current.value;
-            const stateValue = otp.join("");
-            if (domValue !== stateValue) {
-                inputRef.current.value = stateValue;
-            }
-        }
-    }, [otp]);
-
-    const handleInput = () => {
+    const updateOtpFromInput = () => {
         const raw = inputRef.current?.value ?? "";
-        // Keep only digits, max 4
         const normalized = raw.replace(/\D/g, "").slice(0, 4);
-        // Keep DOM clean
+
         if (inputRef.current && inputRef.current.value !== normalized) {
             inputRef.current.value = normalized;
         }
+
         const next: string[] = ["", "", "", ""];
         normalized.split("").forEach((d, i) => {
             next[i] = d;
         });
         onOtpChange(next);
+    };
+
+    const handleInput = () => {
+        updateOtpFromInput();
+        requestAnimationFrame(updateOtpFromInput);
+        window.setTimeout(updateOtpFromInput, 50);
     };
 
     const filledCount = otp.join("").length;
@@ -46,7 +41,7 @@ export default function SimpleOTPInput({ otp, onOtpChange }: SimpleOTPInputProps
         >
             {/*
              * UNCONTROLLED input (no value prop).
-             * Browser can autofill freely — no React interference.
+             * Browser can autofill freely — no React value-sync interference.
              * opacity:0.01 keeps it "visible" for SMS autofill banner.
              * onInput fires for both typing and autofill.
              */}
@@ -57,6 +52,7 @@ export default function SimpleOTPInput({ otp, onOtpChange }: SimpleOTPInputProps
                 autoComplete="one-time-code"
                 maxLength={4}
                 onInput={handleInput}
+                onChange={handleInput}
                 onFocus={() => setFocused(true)}
                 onBlur={() => setFocused(false)}
                 // eslint-disable-next-line jsx-a11y/no-autofocus
