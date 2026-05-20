@@ -96,6 +96,7 @@ export default function HomePage() {
     const [savedUnlockedContacts, setSavedUnlockedContacts] = useState<UnlockedContactRecord[]>([]);
     const [passStatus, setPassStatus] = useState<PassStatus | null>(null);
     const [passLoading, setPassLoading] = useState(false);
+    const [isAgent, setIsAgent] = useState(false);
     const [homePaymentFlowState, setHomePaymentFlowState] = useState<UnlockPaymentFlowState>("idle");
     const [homePaymentContext, setHomePaymentContext] = useState<UnlockPaymentContext | null>(null);
     const [homePaymentSessionId, setHomePaymentSessionId] = useState<string | null>(null);
@@ -105,6 +106,63 @@ export default function HomePage() {
     const bannerResumeHandledRef = useRef(false);
     const resumeAction = searchParams.get("resume");
     const globalPassOneDayAmount = 99;
+
+    useEffect(() => {
+        if (!isAuthenticated) {
+            setIsAgent(false);
+            localStorage.removeItem("spoto_is_agent");
+            return;
+        }
+
+        if (localStorage.getItem("spoto_is_agent") === "1") {
+            setIsAgent(true);
+        }
+
+        let active = true;
+        import("@/lib/adapters").then(({ agentAdapter }) =>
+            agentAdapter.getAgentProfile()
+                .then((profile) => {
+                    if (!active) return;
+                    if (profile?.is_agent && profile.employee) {
+                        setIsAgent(true);
+                        localStorage.setItem("spoto_is_agent", "1");
+                    } else {
+                        setIsAgent(false);
+                        localStorage.removeItem("spoto_is_agent");
+                    }
+                })
+                .catch(() => {
+                    // Keep cached status if the backend check fails.
+                })
+        );
+
+        return () => {
+            active = false;
+        };
+    }, [isAuthenticated]);
+
+    const handleDashboardClick = async () => {
+        setShowProfileMenu(false);
+        if (isAgent || localStorage.getItem("spoto_is_agent") === "1") {
+            router.push("/agent/dashboard");
+            return;
+        }
+
+        try {
+            const { agentAdapter } = await import("@/lib/adapters");
+            const profile = await agentAdapter.getAgentProfile();
+            if (profile?.is_agent && profile.employee) {
+                setIsAgent(true);
+                localStorage.setItem("spoto_is_agent", "1");
+                router.push("/agent/dashboard");
+                return;
+            }
+        } catch {
+            // Fall back to owner dashboard when agent status cannot be confirmed.
+        }
+
+        router.push("/owner/dashboard");
+    };
 
     const handleProfileClick = async () => {
         if (!isAuthenticated) {
@@ -669,13 +727,13 @@ export default function HomePage() {
                                     {/* Actions */}
                                     <div className="px-4 pb-4 pt-3 border-t border-white/10 space-y-2">
                                         <button
-                                            onClick={() => { setShowProfileMenu(false); router.push("/owner/dashboard"); }}
+                                            onClick={handleDashboardClick}
                                             className="w-full flex items-center gap-2 px-3 py-2 text-sm text-white/70 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
                                         >
                                             <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
                                             </svg>
-                                            Owner Dashboard
+                                            {isAgent ? "Agent Dashboard" : "Dashboard"}
                                         </button>
                                         <button
                                             type="button"
