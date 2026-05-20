@@ -270,6 +270,29 @@ export default function Header({
         setShowLocationMenu(false);
     };
 
+    const handleDashboardClick = async () => {
+        setShowProfileMenu(false);
+        if (isAgent || localStorage.getItem("spoto_is_agent") === "1") {
+            router.push("/agent/dashboard");
+            return;
+        }
+
+        try {
+            const { agentAdapter } = await import("@/lib/adapters");
+            const profile = await agentAdapter.getAgentProfile();
+            if (profile?.is_agent && profile.employee) {
+                setIsAgent(true);
+                localStorage.setItem("spoto_is_agent", "1");
+                router.push("/agent/dashboard");
+                return;
+            }
+        } catch {
+            // If the agent check fails, fall back to the regular dashboard.
+        }
+
+        router.push("/owner/dashboard");
+    };
+
     return (
         <div className="flex justify-between items-center p-4 md:p-6 z-30 relative mobile-header font-opensans">
             {/* Location selector */}
@@ -621,16 +644,13 @@ export default function Header({
                             {/* Dashboard link — agent or owner */}
                             <div className="mb-3">
                                 <button
-                                    onClick={() => {
-                                        setShowProfileMenu(false);
-                                        router.push(isAgent ? "/agent/dashboard" : "/owner/dashboard");
-                                    }}
+                                    onClick={handleDashboardClick}
                                     className="w-full flex items-center gap-3 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
                                 >
                                     <svg className="w-4 h-4 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
                                     </svg>
-                                    <span>{isAgent ? "Agent Dashboard" : "Owner Dashboard"}</span>
+                                    <span>{isAgent ? "Agent Dashboard" : "Dashboard"}</span>
                                 </button>
                             </div>
 
