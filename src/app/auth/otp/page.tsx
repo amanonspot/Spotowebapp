@@ -90,7 +90,18 @@ export default function OTPPage() {
     };
 
     const handleOtpChangeDesktop = (index: number, value: string) => {
-        const digit = value.replace(/\D/g, "").slice(0, 1);
+        const digits = value.replace(/\D/g, "");
+
+        // Autofill / paste into single box — spread across all boxes
+        if (digits.length > 1) {
+            const next = ["", "", "", ""];
+            digits.slice(0, 4).split("").forEach((d, i) => { next[i] = d; });
+            setOtp(next);
+            inputRefs[Math.min(digits.length, 3)].current?.focus();
+            return;
+        }
+
+        const digit = digits.slice(0, 1);
         setOtp((prev) => {
             const next = [...prev];
             next[index] = digit;
