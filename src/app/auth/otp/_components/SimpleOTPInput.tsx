@@ -10,43 +10,42 @@ interface SimpleOTPInputProps {
 export default function SimpleOTPInput({ otp, onOtpChange }: SimpleOTPInputProps) {
     const inputRefs = useRef<Array<HTMLInputElement | null>>([]);
 
-    const setDigit = (index: number, digit: string) => {
-        const next = [...otp];
-        next[index] = digit;
-        onOtpChange(next);
-    };
-
     const focusIndex = (index: number) => {
-        const target = inputRefs.current[index];
-        target?.focus();
+        inputRefs.current[index]?.focus();
     };
 
     const handleChange = (index: number, value: string) => {
         const normalized = value.replace(/\D/g, "");
         if (!normalized) {
-            setDigit(index, "");
+            const next = [...otp];
+            next[index] = "";
+            onOtpChange(next);
             return;
         }
 
+        // SMS autofill / paste fills multiple digits at once
         if (normalized.length > 1) {
-            const next = [...otp];
+            const next = ["", "", "", ""];
             normalized.slice(0, 4).split("").forEach((digit, offset) => {
-                const targetIndex = index + offset;
-                if (targetIndex < 4) next[targetIndex] = digit;
+                if (offset < 4) next[offset] = digit;
             });
             onOtpChange(next);
-            focusIndex(Math.min(index + normalized.length, 3));
+            focusIndex(Math.min(normalized.length - 1, 3));
             return;
         }
 
-        setDigit(index, normalized);
+        const next = [...otp];
+        next[index] = normalized;
+        onOtpChange(next);
         if (index < 3) focusIndex(index + 1);
     };
 
     const handleKeyDown = (index: number, event: React.KeyboardEvent<HTMLInputElement>) => {
         if (event.key === "Backspace") {
             if (otp[index]) {
-                setDigit(index, "");
+                const next = [...otp];
+                next[index] = "";
+                onOtpChange(next);
             } else if (index > 0) {
                 focusIndex(index - 1);
             }
@@ -57,13 +56,10 @@ export default function SimpleOTPInput({ otp, onOtpChange }: SimpleOTPInputProps
         event.preventDefault();
         const digits = event.clipboardData.getData("text").replace(/\D/g, "").slice(0, 4);
         if (!digits) return;
-
         const next = ["", "", "", ""];
-        digits.split("").forEach((digit, index) => {
-            next[index] = digit;
-        });
+        digits.split("").forEach((d, i) => { next[i] = d; });
         onOtpChange(next);
-        focusIndex(Math.min(digits.length, 3));
+        focusIndex(Math.min(digits.length - 1, 3));
     };
 
     return (
@@ -71,15 +67,14 @@ export default function SimpleOTPInput({ otp, onOtpChange }: SimpleOTPInputProps
             {otp.map((digit, index) => (
                 <input
                     key={index}
-                    ref={(node) => {
-                        inputRefs.current[index] = node;
-                    }}
-                    type="text"
+                    ref={(node) => { inputRefs.current[index] = node; }}
+                    type="tel"
                     inputMode="numeric"
-                    maxLength={1}
+                    autoComplete={index === 0 ? "one-time-code" : "off"}
+                    maxLength={4}
                     value={digit}
-                    onChange={(event) => handleChange(index, event.target.value)}
-                    onKeyDown={(event) => handleKeyDown(index, event)}
+                    onChange={(e) => handleChange(index, e.target.value)}
+                    onKeyDown={(e) => handleKeyDown(index, e)}
                     onPaste={handlePaste}
                     autoFocus={index === 0}
                     className="h-16 w-16 rounded-lg border-2 border-white/10 bg-[#1a1c2e] text-center text-2xl font-normal text-white transition-all focus:border-[#AF7AEB] focus:outline-none"
@@ -88,4 +83,3 @@ export default function SimpleOTPInput({ otp, onOtpChange }: SimpleOTPInputProps
         </div>
     );
 }
-

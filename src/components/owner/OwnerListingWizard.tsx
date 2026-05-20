@@ -1363,10 +1363,13 @@ export default function OwnerListingWizard({
                                 </select>
                                 <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-white/20 bg-[#0d0d14] px-3 py-3 text-sm text-white/80">
                                     <Upload className="h-4 w-4" />
-                                    {documentSelected ? "Replace document file" : "Upload document file"}
+                                    <span className="flex flex-col">
+                                        <span>{documentSelected ? "Replace file" : "Upload document or image"}</span>
+                                        <span className="text-xs text-white/40">PDF, JPG, JPEG, PNG supported</span>
+                                    </span>
                                     <input
                                         type="file"
-                                        accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
+                                        accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png,image/jpg"
                                         onChange={(event) => {
                                             const next = (event.target.files || [])[0] || null;
                                             updateField("documentFile", next);
@@ -1391,11 +1394,21 @@ export default function OwnerListingWizard({
                                 </label>
                                 {documentSelected ? (
                                     <div className="rounded-xl border border-white/20 bg-[#0d0d14] px-3 py-2 text-xs text-white/75">
+                                        {/* Image preview */}
+                                        {form.documentFile &&
+                                            (form.documentFile.type.startsWith("image/") ||
+                                                /\.(jpg|jpeg|png)$/i.test(form.documentFile.name)) && (
+                                                <img
+                                                    src={URL.createObjectURL(form.documentFile)}
+                                                    alt="Document preview"
+                                                    className="mb-2 max-h-40 w-full rounded-lg object-contain"
+                                                />
+                                            )}
                                         <p className="font-semibold text-white/90">
                                             {form.documentMeta?.selectedName ||
                                                 form.documentFile?.name ||
                                                 form.documentMeta?.existingDocumentUrl?.split("/").pop() ||
-                                                "Document selected"}
+                                                "File selected"}
                                         </p>
                                         <p>
                                             {(form.documentMeta?.selectedSize || form.documentFile?.size || 0) > 0
@@ -1406,7 +1419,7 @@ export default function OwnerListingWizard({
                                                   ).toFixed(2)} MB`
                                                 : form.documentMeta?.existingUploadedAt
                                                   ? `Uploaded on ${new Date(form.documentMeta.existingUploadedAt).toLocaleString("en-IN")}`
-                                                  : "Existing document on file"}
+                                                  : "Existing file on record"}
                                         </p>
                                         <button
                                             type="button"
@@ -1418,7 +1431,7 @@ export default function OwnerListingWizard({
                                             }}
                                             className="mt-2 rounded-lg border border-red-400/40 px-2 py-1 text-red-200"
                                         >
-                                            Remove document
+                                            Remove file
                                         </button>
                                     </div>
                                 ) : null}
