@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 
 interface SimpleOTPInputProps {
     otp: string[];
@@ -10,6 +10,12 @@ interface SimpleOTPInputProps {
 export default function SimpleOTPInput({ otp, onOtpChange }: SimpleOTPInputProps) {
     const inputRef = useRef<HTMLInputElement>(null);
     const [focused, setFocused] = useState(false);
+
+    useEffect(() => {
+        if (otp.join("") === "" && inputRef.current?.value) {
+            inputRef.current.value = "";
+        }
+    }, [otp]);
 
     const updateOtpFromInput = () => {
         const raw = inputRef.current?.value ?? "";
@@ -30,6 +36,21 @@ export default function SimpleOTPInput({ otp, onOtpChange }: SimpleOTPInputProps
         updateOtpFromInput();
         requestAnimationFrame(updateOtpFromInput);
         window.setTimeout(updateOtpFromInput, 50);
+        window.setTimeout(updateOtpFromInput, 150);
+        window.setTimeout(updateOtpFromInput, 300);
+    };
+
+    const startShortPolling = () => {
+        setFocused(true);
+        inputRef.current?.focus();
+
+        const startedAt = Date.now();
+        const poll = window.setInterval(() => {
+            updateOtpFromInput();
+            if (Date.now() - startedAt > 2500 || (inputRef.current?.value ?? "").length >= 4) {
+                window.clearInterval(poll);
+            }
+        }, 100);
     };
 
     const filledCount = otp.join("").length;
@@ -37,43 +58,49 @@ export default function SimpleOTPInput({ otp, onOtpChange }: SimpleOTPInputProps
     return (
         <div
             className="relative mb-8 flex justify-center gap-4 px-4"
-            onClick={() => inputRef.current?.focus()}
+            onClick={startShortPolling}
         >
             {/*
-             * UNCONTROLLED input (no value prop).
-             * Browser can autofill freely — no React value-sync interference.
-             * opacity:0.01 keeps it "visible" for SMS autofill banner.
-             * onInput fires for both typing and autofill.
+             * Real uncontrolled input. It stays full size and visible to the browser
+             * so Android/iOS OTP autofill writes the complete code into one field.
+             * Text is transparent; the boxes below are the visible UI.
              */}
             <input
                 ref={inputRef}
                 type="tel"
+                name="otp"
                 inputMode="numeric"
+                pattern="[0-9]*"
                 autoComplete="one-time-code"
                 maxLength={4}
                 onInput={handleInput}
                 onChange={handleInput}
-                onFocus={() => setFocused(true)}
+                onFocus={startShortPolling}
                 onBlur={() => setFocused(false)}
                 // eslint-disable-next-line jsx-a11y/no-autofocus
                 autoFocus
                 aria-label="One-time password"
+                enterKeyHint="done"
                 style={{
                     position: "absolute",
                     inset: 0,
                     width: "100%",
                     height: "100%",
-                    opacity: 0.01,
+                    opacity: 1,
                     cursor: "text",
                     zIndex: 10,
-                    fontSize: "1px",
+                    color: "transparent",
+                    caretColor: "transparent",
+                    fontSize: "24px",
+                    letterSpacing: "40px",
                     background: "transparent",
                     border: "none",
                     outline: "none",
+                    WebkitTextFillColor: "transparent",
                 }}
             />
 
-            {/* Visual boxes — pointer-events:none so clicks pass to the real input */}
+            {/* Visual boxes: clicks pass through to the real input above. */}
             {otp.map((digit, index) => (
                 <div
                     key={index}
