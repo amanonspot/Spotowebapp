@@ -58,8 +58,8 @@ const ListingStatusBadge = ({ state }: { state: OwnerListingVerificationState })
 
     if (state === "awaiting_owner_login") {
         return (
-            <span className="absolute right-3 top-3 inline-flex max-w-[58%] items-center gap-2 rounded-xl bg-[#7f7b77cc] px-3 py-1.5 text-xs font-bold text-white sm:text-sm">
-                Awaiting login <span aria-hidden>📱</span>
+            <span className="absolute right-3 top-3 inline-flex items-center gap-1.5 rounded-xl bg-amber-500/80 px-3 py-1.5 text-xs font-bold text-white backdrop-blur-sm">
+                Awaiting owner login
             </span>
         );
     }
@@ -258,10 +258,21 @@ export default function OwnerDashboardPage() {
             );
         }
 
+        if (state === "awaiting_owner_login") {
+            return (
+                <div className="mt-4 rounded-xl border border-amber-400/25 bg-amber-500/8 px-4 py-3">
+                    <p className="text-sm font-semibold text-amber-300">Awaiting owner activation</p>
+                    <p className="mt-1 text-xs text-white/55">
+                        This listing was submitted by a field agent. It will go live once the property owner logs in with their registered phone number.
+                    </p>
+                </div>
+            );
+        }
+
         return (
             <section className="mt-4">
-                <p className="mb-2 text-lg font-semibold">SPOTO Employee Code — for Verification</p>
-                <div className="flex items-center rounded-2xl border border-white/30 bg-[#07070c] px-3 py-2">
+                <p className="mb-2 text-sm font-semibold text-white/80">SPOTO Employee Code — for Verification</p>
+                <div className="flex items-center rounded-2xl border border-white/20 bg-[#07070c] px-3 py-2">
                     <input
                         value={employeeCodeByListing[listing.id] || ""}
                         onChange={(event) =>
@@ -270,18 +281,18 @@ export default function OwnerDashboardPage() {
                                 [listing.id]: event.target.value,
                             }))
                         }
-                        placeholder={isVerifying ? "#verifying........" : "Enter Employee Code"}
-                        className="h-12 w-full bg-transparent text-lg font-semibold text-white outline-none placeholder:text-white/65"
+                        placeholder={isVerifying ? "Verifying..." : "Enter Employee Code"}
+                        className="h-11 w-full bg-transparent text-base font-semibold text-white outline-none placeholder:text-white/45"
                         disabled={isVerifying}
                     />
                     <button
                         type="button"
                         onClick={() => handleEmployeeCodeVerify(listing.id)}
                         disabled={isVerifying}
-                        className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-[#A67AEB] text-black disabled:opacity-60"
+                        className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#A67AEB] text-black disabled:opacity-60"
                         aria-label="Verify employee code"
                     >
-                        {isVerifying ? <RotateCw className="h-5 w-5 animate-spin" /> : <ArrowUp className="h-5 w-5" />}
+                        {isVerifying ? <RotateCw className="h-4 w-4 animate-spin" /> : <ArrowUp className="h-4 w-4" />}
                     </button>
                 </div>
             </section>
