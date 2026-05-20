@@ -42,7 +42,7 @@ const normalizeVerificationState = (listing: OwnerListingSummary): OwnerListingV
 const ListingStatusBadge = ({ state }: { state: OwnerListingVerificationState }) => {
     if (state === "live") {
         return (
-            <span className="absolute right-3 top-3 inline-flex items-center gap-2 rounded-xl bg-[#7f7b77cc] px-3 py-1.5 text-sm font-bold text-white">
+            <span className="inline-flex shrink-0 items-center gap-2 rounded-full border border-[#b7f041]/30 bg-[#b7f041]/15 px-3 py-1 text-xs font-bold uppercase tracking-wide text-[#b7f041]">
                 LIVE <span className="h-3 w-3 rounded-full bg-[#b7f041]" />
             </span>
         );
@@ -50,7 +50,7 @@ const ListingStatusBadge = ({ state }: { state: OwnerListingVerificationState })
 
     if (state === "rejected") {
         return (
-            <span className="absolute right-3 top-3 inline-flex items-center gap-2 rounded-xl bg-[#7f7b77cc] px-3 py-1.5 text-sm font-bold text-white">
+            <span className="inline-flex shrink-0 items-center gap-2 rounded-full border border-red-400/30 bg-red-500/15 px-3 py-1 text-xs font-bold uppercase tracking-wide text-red-300">
                 Rejected <span className="h-3 w-3 rounded-full bg-[#ff3848]" />
             </span>
         );
@@ -58,14 +58,14 @@ const ListingStatusBadge = ({ state }: { state: OwnerListingVerificationState })
 
     if (state === "awaiting_owner_login") {
         return (
-            <span className="absolute right-3 top-3 inline-flex items-center gap-1.5 rounded-xl bg-amber-500/80 px-3 py-1.5 text-xs font-bold text-white backdrop-blur-sm">
+            <span className="inline-flex shrink-0 items-center rounded-full border border-amber-400/30 bg-amber-500/15 px-3 py-1 text-xs font-bold text-amber-300">
                 Awaiting owner login
             </span>
         );
     }
 
     return (
-        <span className="absolute right-3 top-3 inline-flex items-center gap-2 rounded-xl bg-[#7f7b77cc] px-3 py-1.5 text-sm font-bold text-white">
+        <span className="inline-flex shrink-0 items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-bold uppercase tracking-wide text-white/70">
             In Review <span aria-hidden>⏳</span>
         </span>
     );
@@ -240,19 +240,19 @@ export default function OwnerDashboardPage() {
 
         if (state === "live") {
             return (
-                <div className="mt-4 flex items-center justify-between rounded-2xl border border-white/25 bg-[#0b0b10] px-4 py-3">
-                    <span className="text-xl font-bold">Approved</span>
-                    <span className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-[#b7f041] text-black">✓</span>
+                <div className="mt-4 flex items-center justify-between rounded-xl border border-[#b7f041]/25 bg-[#b7f041]/10 px-3 py-2.5">
+                    <span className="text-sm font-semibold text-[#d7ff73]">Approved and live</span>
+                    <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#b7f041] text-sm font-bold text-black">✓</span>
                 </div>
             );
         }
 
         if (state === "rejected") {
             return (
-                <div className="mt-4 flex items-center justify-between rounded-2xl border border-white/25 bg-[#0b0b10] px-4 py-3">
-                    <span className="text-xl font-bold">Rejected</span>
-                    <span className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-[#ff3848] text-black">
-                        <X className="h-5 w-5" />
+                <div className="mt-4 flex items-center justify-between rounded-xl border border-red-400/25 bg-red-500/10 px-3 py-2.5">
+                    <span className="text-sm font-semibold text-red-200">Rejected</span>
+                    <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#ff3848] text-black">
+                        <X className="h-4 w-4" />
                     </span>
                 </div>
             );
@@ -384,17 +384,19 @@ export default function OwnerDashboardPage() {
                                             key={listing.id}
                                             className="card-hover overflow-hidden rounded-2xl border border-white/12 bg-[#101018] shadow-[0_8px_32px_rgba(0,0,0,0.35)]"
                                         >
-                                            <div className="relative h-52 sm:h-56">
+                                            <div className="relative h-44 overflow-hidden bg-[#0b0b10] sm:h-48">
                                                 <BlurImage
                                                     src={listing.image}
                                                     alt={listing.title}
                                                     wrapperClassName="h-full w-full"
-                                                    className="img-zoom h-full w-full"
+                                                    className="img-zoom h-full w-full object-cover"
                                                 />
-                                                <ListingStatusBadge state={normalizeVerificationState(listing)} />
                                             </div>
                                             <div className="p-4">
-                                                <h3 className="text-lg font-bold leading-tight">{listing.title}</h3>
+                                                <div className="flex items-start justify-between gap-3">
+                                                    <h3 className="min-w-0 text-lg font-bold leading-tight">{listing.title}</h3>
+                                                    <ListingStatusBadge state={normalizeVerificationState(listing)} />
+                                                </div>
                                                 <p className="mt-0.5 text-sm text-white/60">
                                                     {listing.locality}, {listing.city}
                                                 </p>
