@@ -38,13 +38,16 @@ export default function PhoneInput({
                 {/* Phone Number Input */}
                 <input
                     type="tel"
+                    name="phone"
+                    id="phone"
                     placeholder="Enter mobile number"
                     value={phoneNumber}
                     onChange={handleChange}
                     onKeyDown={handleKeyDown}
                     maxLength={10}
                     autoFocus
-                    autoComplete="off"
+                    autoComplete="tel"
+                    inputMode="numeric"
                     className="flex-1 bg-[#2a2a2a] text-white text-base font-opensans placeholder:text-white/40 focus:outline-none"
                     style={{
                         colorScheme: 'dark',

@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import DesktopOTPView from "./_components/DesktopOTPView";
 import MobileOTPView from "./_components/MobileOTPView";
+import { otpArrayFromString } from "./_components/OtpCodeField";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { clearAuthIntent, consumeAuthIntentDestination } from "@/lib/auth/authIntent";
 import toast from "react-hot-toast";
@@ -23,16 +24,6 @@ export default function OTPPage() {
     const [resendLoading, setResendLoading] = useState(false);
     const [localError, setLocalError] = useState<string | undefined>(undefined);
 
-    const inputRefs = useMemo(
-        () => [
-            React.createRef<HTMLInputElement>(),
-            React.createRef<HTMLInputElement>(),
-            React.createRef<HTMLInputElement>(),
-            React.createRef<HTMLInputElement>(),
-        ],
-        []
-    );
-
     useEffect(() => {
         if (!phoneNumber) {
             router.push("/auth/login");
@@ -50,6 +41,7 @@ export default function OTPPage() {
         return () => clearInterval(t);
     }, [timer]);
 
+    // Android Chrome: Web OTP API (SMS must end with @yourdomain #1234 — needs DLT template update)
     useEffect(() => {
         if (typeof window === "undefined") return;
         if (!("OTPCredential" in window)) return;
@@ -68,20 +60,15 @@ export default function OTPPage() {
                     signal: ac.signal,
                 })) as { code?: string } | undefined;
 
-                const code = (credential?.code || "").replace(/\D/g, "").slice(0, 4);
+                const code = credential?.code || "";
                 if (!code) return;
-
-                const next = ["", "", "", ""];
-                code.split("").forEach((digit, idx) => {
-                    next[idx] = digit;
-                });
-                setOtp(next);
+                setOtp(otpArrayFromString(code));
             } catch {
-                // Ignore abort and unsupported runtime errors.
+                // User dismissed or SMS format not compatible with Web OTP
             }
         };
 
-        startWebOtp();
+        void startWebOtp();
         return () => ac.abort();
     }, [phoneNumber]);
 
@@ -89,47 +76,7 @@ export default function OTPPage() {
         setOtp(newOtp);
     };
 
-    const handleOtpChangeDesktop = (index: number, value: string) => {
-        const digits = value.replace(/\D/g, "");
-
-        // Autofill / paste into single box — spread across all boxes
-        if (digits.length > 1) {
-            const next = ["", "", "", ""];
-            digits.slice(0, 4).split("").forEach((d, i) => { next[i] = d; });
-            setOtp(next);
-            inputRefs[Math.min(digits.length, 3)].current?.focus();
-            return;
-        }
-
-        const digit = digits.slice(0, 1);
-        setOtp((prev) => {
-            const next = [...prev];
-            next[index] = digit;
-            return next;
-        });
-
-        if (digit && index < 3) {
-            inputRefs[index + 1].current?.focus();
-        }
-    };
-
-    const handleKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
-        if (e.key === "Backspace" && !otp[index] && index > 0) {
-            inputRefs[index - 1].current?.focus();
-        }
-    };
-
-    const handlePaste = (e: React.ClipboardEvent) => {
-        e.preventDefault();
-        const pasted = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 4);
-        const next = ["", "", "", ""];
-        pasted.split("").forEach((char, idx) => {
-            next[idx] = char;
-        });
-        setOtp(next);
-    };
-
-    const handleLogin = async () => {
+    const handleLogin = useCallback(async () => {
         const otpValue = otp.join("");
         if (otpValue.length !== 4) return;
         setLoading(true);
@@ -142,7 +89,7 @@ export default function OTPPage() {
         } finally {
             setLoading(false);
         }
-    };
+    }, [otp, verifyOtp, router]);
 
     const handleResend = async () => {
         if (!phoneNumber || phoneNumber.length !== 10) {
@@ -195,10 +142,7 @@ export default function OTPPage() {
                     phoneNumber={phoneNumber}
                     otp={otp}
                     timer={timer}
-                    inputRefs={inputRefs}
-                    onOtpChange={handleOtpChangeDesktop}
-                    onKeyDown={handleKeyDown}
-                    onPaste={handlePaste}
+                    onOtpChange={handleOtpChange}
                     onLogin={handleLogin}
                     onResend={handleResend}
                     loading={loading}

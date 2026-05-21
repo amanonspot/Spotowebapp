@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import backIcon from "../../../../../public/assets/images/back-icon.svg";
 import otpIcon from "../../../../../public/assets/images/otp-icon.svg";
-import OTPInput from "./OTPInput";
+import OtpCodeField from "./OtpCodeField";
 import LoginButton from "./LoginButton";
 import ResendButton from "./ResendButton";
 import OTPTimer from "./OTPTimer";
@@ -14,13 +14,7 @@ interface DesktopOTPViewProps {
     phoneNumber: string;
     otp: string[];
     timer: number;
-    inputRefs: React.RefObject<HTMLInputElement | null>[];
-    onOtpChange: (index: number, value: string) => void;
-    onKeyDown: (
-        index: number,
-        e: React.KeyboardEvent<HTMLInputElement>
-    ) => void;
-    onPaste: (e: React.ClipboardEvent) => void;
+    onOtpChange: (otp: string[]) => void;
     onLogin: () => void;
     onResend: () => void;
     loading?: boolean;
@@ -32,10 +26,7 @@ export default function DesktopOTPView({
     phoneNumber,
     otp,
     timer,
-    inputRefs,
     onOtpChange,
-    onKeyDown,
-    onPaste,
     onLogin,
     onResend,
     loading = false,
@@ -97,13 +88,7 @@ export default function DesktopOTPView({
                 </p>
 
                 {/* OTP Input Boxes */}
-                <OTPInput
-                    otp={otp}
-                    inputRefs={inputRefs}
-                    onOtpChange={onOtpChange}
-                    onKeyDown={onKeyDown}
-                    onPaste={onPaste}
-                />
+                <OtpCodeField otp={otp} onOtpChange={onOtpChange} />
 
                 {/* Login Button */}
                 <LoginButton

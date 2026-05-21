@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import backIcon from "../../../../../public/assets/images/back-icon.svg";
 import otpIcon from "../../../../../public/assets/images/otp-icon.svg";
-import SimpleOTPInput from "./SimpleOTPInput";
+import OtpCodeField from "./OtpCodeField";
 import LoginButton from "./LoginButton";
 import ResendButton from "./ResendButton";
 import OTPTimer from "./OTPTimer";
@@ -97,7 +97,7 @@ export default function MobileOTPView({
                     </p>
 
                     {/* OTP Input Boxes */}
-                    <SimpleOTPInput otp={otp} onOtpChange={onOtpChange} />
+                    <OtpCodeField otp={otp} onOtpChange={onOtpChange} />
 
                     {/* Login Button */}
                     <LoginButton
