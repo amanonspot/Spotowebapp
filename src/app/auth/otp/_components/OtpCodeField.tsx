@@ -37,18 +37,22 @@ interface OtpCodeFieldProps {
     onComplete?: (code: string) => void;
 }
 
+/**
+ * 4 visible boxes + one transparent input on top.
+ * iOS/Android autofill only works reliably on a single field with autocomplete="one-time-code".
+ */
 export default function OtpCodeField({ otp, onOtpChange, onComplete }: OtpCodeFieldProps) {
     const inputRef = useRef<HTMLInputElement>(null);
     const [pasted, setPasted] = useState(false);
-    const lastEmitted = useRef("");
 
     const applyCode = useCallback(
         (raw: string) => {
             const next = otpArrayFromString(raw);
             const joined = next.join("");
-            if (joined === lastEmitted.current) return;
-            lastEmitted.current = joined;
             onOtpChange(next);
+            if (inputRef.current && inputRef.current.value !== joined) {
+                inputRef.current.value = joined;
+            }
             if (joined.length === 4) {
                 onComplete?.(joined);
             }
@@ -62,18 +66,16 @@ export default function OtpCodeField({ otp, onOtpChange, onComplete }: OtpCodeFi
         applyCode(el.value);
     }, [applyCode]);
 
-    // iOS / Chrome autofill often skips React onChange — listen on the real DOM node
     useEffect(() => {
         const el = inputRef.current;
         if (!el) return;
 
-        const onNativeInput = () => syncFromDom();
-        const onNativeChange = () => syncFromDom();
+        const onInput = () => syncFromDom();
+        const onChange = () => syncFromDom();
 
-        el.addEventListener("input", onNativeInput);
-        el.addEventListener("change", onNativeChange);
+        el.addEventListener("input", onInput);
+        el.addEventListener("change", onChange);
 
-        // WebKit autofill fires a short animation on the field
         const onAnimation = (e: AnimationEvent) => {
             if (e.animationName === "spoto-otp-autofill") {
                 syncFromDom();
@@ -81,35 +83,25 @@ export default function OtpCodeField({ otp, onOtpChange, onComplete }: OtpCodeFi
         };
         el.addEventListener("animationstart", onAnimation);
 
-        const poll = window.setInterval(syncFromDom, 400);
-        const stopPoll = window.setTimeout(() => window.clearInterval(poll), 8000);
+        // SMS often arrives 5–30s after page load — keep syncing until user leaves
+        const poll = window.setInterval(syncFromDom, 250);
+
+        const focusTimer = window.setTimeout(() => el.focus(), 300);
 
         return () => {
-            el.removeEventListener("input", onNativeInput);
-            el.removeEventListener("change", onNativeChange);
+            el.removeEventListener("input", onInput);
+            el.removeEventListener("change", onChange);
             el.removeEventListener("animationstart", onAnimation);
             window.clearInterval(poll);
-            window.clearTimeout(stopPoll);
+            window.clearTimeout(focusTimer);
         };
     }, [syncFromDom]);
-
-    // Keep DOM in sync when parent sets OTP (Web OTP API, paste handler on page)
-    useEffect(() => {
-        const el = inputRef.current;
-        if (!el) return;
-        const joined = otp.join("");
-        if (el.value !== joined) {
-            el.value = joined;
-            lastEmitted.current = joined;
-        }
-    }, [otp]);
 
     const handlePasteFromClipboard = async () => {
         try {
             const text = await navigator.clipboard.readText();
             const digits = extractOtpDigits(text);
             if (digits.length === 4) {
-                if (inputRef.current) inputRef.current.value = digits;
                 applyCode(digits);
                 setPasted(true);
                 window.setTimeout(() => setPasted(false), 2000);
@@ -121,6 +113,9 @@ export default function OtpCodeField({ otp, onOtpChange, onComplete }: OtpCodeFi
         }
     };
 
+    const boxClass =
+        "flex h-16 w-14 items-center justify-center rounded-lg border-2 border-white/10 bg-[#1a1c2e] text-2xl font-normal text-white";
+
     return (
         <>
             <style>{`
@@ -128,52 +123,58 @@ export default function OtpCodeField({ otp, onOtpChange, onComplete }: OtpCodeFi
                     from { opacity: 1; }
                     to { opacity: 1; }
                 }
-                .spoto-otp-input:-webkit-autofill {
+                .spoto-otp-autofill-target:-webkit-autofill {
                     animation-name: spoto-otp-autofill;
                     animation-duration: 0.01s;
                 }
             `}</style>
             <form
                 autoComplete="on"
-                className="mb-6 flex flex-col items-center gap-3 px-4"
+                className="mb-6 flex flex-col items-center gap-4 px-4"
                 onSubmit={(e) => e.preventDefault()}
             >
-                {/* Helps iOS associate SMS OTP with this field */}
-                <input
-                    type="tel"
-                    name="tel"
-                    autoComplete="tel"
-                    tabIndex={-1}
-                    aria-hidden
-                    className="pointer-events-none absolute h-0 w-0 opacity-0"
-                    defaultValue=""
-                    readOnly
-                />
-                <input
-                    ref={inputRef}
-                    id="otp"
-                    name="otp"
-                    type="tel"
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    autoComplete="one-time-code"
-                    autoCorrect="off"
-                    autoCapitalize="off"
-                    spellCheck={false}
-                    maxLength={4}
-                    onInput={syncFromDom}
-                    onChange={syncFromDom}
-                    onPaste={(e) => {
-                        e.preventDefault();
-                        applyCode(e.clipboardData.getData("text"));
-                    }}
-                    // eslint-disable-next-line jsx-a11y/no-autofocus
-                    autoFocus
-                    aria-label="One-time password"
-                    enterKeyHint="done"
-                    placeholder="Enter 4-digit OTP"
-                    className="spoto-otp-input h-16 w-full max-w-[16rem] rounded-lg border-2 border-white/10 bg-[#1a1c2e] px-4 text-center font-mono text-3xl tracking-[0.5em] text-white outline-none transition-all placeholder:text-sm placeholder:tracking-normal placeholder:text-white/35 focus:border-[#AF7AEB]"
-                />
+                <div className="relative flex justify-center gap-3">
+                    {[0, 1, 2, 3].map((index) => (
+                        <div
+                            key={index}
+                            className={`${boxClass} ${otp[index] ? "border-[#AF7AEB]/50" : ""}`}
+                            aria-hidden
+                        >
+                            {otp[index] || ""}
+                        </div>
+                    ))}
+
+                    {/* Real field: receives keyboard, iOS "From Messages", Android Web OTP */}
+                    <input
+                        ref={inputRef}
+                        type="text"
+                        name="one-time-code"
+                        id="one-time-code"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        autoComplete="one-time-code"
+                        autoCorrect="off"
+                        autoCapitalize="off"
+                        spellCheck={false}
+                        maxLength={4}
+                        defaultValue=""
+                        onInput={syncFromDom}
+                        onChange={syncFromDom}
+                        onPaste={(e) => {
+                            e.preventDefault();
+                            applyCode(e.clipboardData.getData("text"));
+                        }}
+                        aria-label="Enter 4-digit OTP"
+                        enterKeyHint="done"
+                        className="spoto-otp-autofill-target absolute inset-0 z-10 h-full w-full cursor-text opacity-[0.02] text-transparent caret-transparent"
+                        style={{ fontSize: "16px", letterSpacing: "0.5em" }}
+                    />
+                </div>
+
+                <p className="text-center text-xs text-white/45">
+                    Tap the boxes — iOS may show OTP above the keyboard
+                </p>
+
                 <button
                     type="button"
                     onClick={handlePasteFromClipboard}

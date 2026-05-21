@@ -46,7 +46,7 @@ export default function PhoneInput({
                     onKeyDown={handleKeyDown}
                     maxLength={10}
                     autoFocus
-                    autoComplete="tel"
+                    autoComplete="username"
                     inputMode="numeric"
                     className="flex-1 bg-[#2a2a2a] text-white text-base font-opensans placeholder:text-white/40 focus:outline-none"
                     style={{
