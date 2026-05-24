@@ -8,13 +8,13 @@ import Chip from "@/components/revamp/Chip";
 import HomePromoBannerRotator from "@/components/revamp/HomePromoBannerRotator";
 import PrimaryButton from "@/components/revamp/PrimaryButton";
 import RevampPropertyCard from "@/components/revamp/PropertyCard";
-import { propertyAdapter } from "@/lib/adapters";
-import { HomeFeed, PropertyListItem, UnlockPaymentContext, UnlockPaymentFlowState } from "@/lib/adapters/types";
+import { checkoutAdapter, propertyAdapter } from "@/lib/adapters";
+import { CheckoutState, HomeFeed, PropertyListItem, UnlockPaymentContext, UnlockPaymentFlowState } from "@/lib/adapters/types";
 import { requireAuthThenContinue } from "@/lib/auth/requireAuthAction";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { getUnlockedTenantContacts, rentalsService, type UnlockedContactRecord } from "@/lib/rentals";
 import UnlockPaymentFlowOverlay from "@/app/(home)/booking/[slug]/_components/UnlockPaymentFlowOverlay";
-import { fakePaymentAdapter } from "@/lib/payments/fakePaymentAdapter";
+import { runRazorpayCheckout } from "@/lib/payments/razorpayCheckout";
 
 const initialFeed: HomeFeed = {
     categories: [],
@@ -99,7 +99,7 @@ export default function HomePage() {
     const [isAgent, setIsAgent] = useState(false);
     const [homePaymentFlowState, setHomePaymentFlowState] = useState<UnlockPaymentFlowState>("idle");
     const [homePaymentContext, setHomePaymentContext] = useState<UnlockPaymentContext | null>(null);
-    const [homePaymentSessionId, setHomePaymentSessionId] = useState<string | null>(null);
+    const [homeCheckoutState, setHomeCheckoutState] = useState<CheckoutState | null>(null);
     const [homePaymentBusy, setHomePaymentBusy] = useState(false);
     const [homePaymentError, setHomePaymentError] = useState<string | null>(null);
     const profileMenuRef = useRef<HTMLDivElement>(null);
@@ -372,35 +372,68 @@ export default function HomePage() {
         return feed.listings.filter((item) => matchesCategory(item, selectedCategory));
     }, [feed.listings, selectedCategory]);
 
+    const refreshHomePassStatus = async (): Promise<PassStatus | null> => {
+        try {
+            const res = await rentalsService.getMyPassStatus();
+            const data = ((res as { data?: PassStatus }).data ?? res) as PassStatus;
+            setPassStatus(data);
+            return data;
+        } catch {
+            return null;
+        }
+    };
+
+    const waitForPassActivation = async (): Promise<boolean> => {
+        for (let attempt = 0; attempt < 4; attempt++) {
+            const status = await refreshHomePassStatus();
+            if (status?.has_one_day_active || status?.has_weekly_active) {
+                return true;
+            }
+            if (attempt < 3) {
+                await new Promise((resolve) => setTimeout(resolve, 1500));
+            }
+        }
+        return false;
+    };
+
     const handleHomeOverlayPayNow = async () => {
         if (!homePaymentContext || homePaymentBusy) return;
         setHomePaymentBusy(true);
         setHomePaymentError(null);
         setHomePaymentFlowState("payment_initiated");
         try {
-            const session = await fakePaymentAdapter.initiate(homePaymentContext);
-            setHomePaymentSessionId(session.sessionId);
-            const resolved = await fakePaymentAdapter.resolve(session.sessionId);
-            if (resolved.lastOutcome === "success") {
-                setHomePaymentFlowState("payment_success");
-                try {
-                    const status = await rentalsService.getMyPassStatus();
-                    const liveData = (status as { data?: PassStatus }).data;
-                    if (liveData) setPassStatus(liveData);
-                } catch {
-                    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-                    setPassStatus((prev) => ({
-                        free_contacts_used: prev?.free_contacts_used ?? 0,
-                        free_contacts_remaining: prev?.free_contacts_remaining ?? 0,
-                        has_one_day_active: true,
-                        has_weekly_active: Boolean(prev?.has_weekly_active),
-                        one_day_pass_expires_at: expiresAt,
-                        weekly_pass_expires_at: prev?.weekly_pass_expires_at ?? null,
-                    }));
-                }
+            let baseState = homeCheckoutState;
+            if (!baseState || baseState.status === "success") {
+                baseState = await checkoutAdapter.startUnlock({
+                    propertyId: homePaymentContext.propertyId,
+                    amount: homePaymentContext.amount,
+                });
+                setHomeCheckoutState(baseState);
+            }
+
+            const passState = await checkoutAdapter.activatePass(baseState.id);
+            setHomeCheckoutState(passState);
+
+            if (passState.status === "failed" || !passState.payment?.razorpayOrderId) {
+                setHomePaymentFlowState("payment_failed");
+                setHomePaymentError(passState.message || "Failed to initiate payment.");
                 return;
             }
+
+            const outcome = await runRazorpayCheckout(passState.payment);
+            if (outcome !== "success") {
+                setHomePaymentFlowState("payment_failed");
+                return;
+            }
+
+            const activated = await waitForPassActivation();
+            if (activated) {
+                setHomePaymentFlowState("payment_success");
+                return;
+            }
+
             setHomePaymentFlowState("payment_failed");
+            setHomePaymentError("Payment received. Pass will activate shortly — please refresh.");
         } catch (err) {
             setHomePaymentFlowState("payment_failed");
             setHomePaymentError(err instanceof Error ? err.message : "Unable to process payment.");
@@ -410,32 +443,13 @@ export default function HomePage() {
     };
 
     const handleHomeOverlayRetry = async () => {
-        if (!homePaymentSessionId) {
-            await handleHomeOverlayPayNow();
-            return;
-        }
-        setHomePaymentBusy(true);
-        setHomePaymentError(null);
-        setHomePaymentFlowState("payment_initiated");
-        try {
-            const resolved = await fakePaymentAdapter.retry(homePaymentSessionId);
-            if (resolved.lastOutcome === "success") {
-                setHomePaymentFlowState("payment_success");
-                return;
-            }
-            setHomePaymentFlowState("payment_failed");
-        } catch (err) {
-            setHomePaymentFlowState("payment_failed");
-            setHomePaymentError(err instanceof Error ? err.message : "Unable to retry payment.");
-        } finally {
-            setHomePaymentBusy(false);
-        }
+        await handleHomeOverlayPayNow();
     };
 
     const resetHomePaymentFlow = () => {
         setHomePaymentFlowState("idle");
         setHomePaymentContext(null);
-        setHomePaymentSessionId(null);
+        setHomeCheckoutState(null);
         setHomePaymentError(null);
         setHomePaymentBusy(false);
     };

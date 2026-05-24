@@ -10,6 +10,7 @@ import { requireAuthThenContinue } from "@/lib/auth/requireAuthAction";
 import { rentalsService } from "@/lib/rentals/service";
 import UnlockPaymentFlowOverlay from "@/app/(home)/booking/[slug]/_components/UnlockPaymentFlowOverlay";
 import { extractLatLngFromGoogleMapsUrl } from "@/lib/maps/parseGoogleMapsUrl";
+import { runRazorpayCheckout } from "@/lib/payments/razorpayCheckout";
 
 interface PageProps {
     params: Promise<{ slug: string }>;
@@ -234,49 +235,6 @@ export default function BookingDetailPage({ params }: PageProps) {
 
                 openPaymentFlow(99);
             },
-        });
-    };
-
-    const runRazorpayCheckout = (payment: {
-        razorpayOrderId: string;
-        razorpayKeyId: string;
-        amount: number;
-        currency: string;
-    }): Promise<"success" | "failed"> => {
-        return new Promise((resolve) => {
-            // Load Razorpay script if not present
-            const loadScript = () => {
-                if ((window as unknown as Record<string, unknown>).Razorpay) {
-                    openCheckout();
-                    return;
-                }
-                const script = document.createElement("script");
-                script.src = "https://checkout.razorpay.com/v1/checkout.js";
-                script.async = true;
-                script.onload = openCheckout;
-                script.onerror = () => resolve("failed");
-                document.body.appendChild(script);
-            };
-
-            const openCheckout = () => {
-                const RazorpayConstructor = (window as unknown as Record<string, unknown>).Razorpay as new (opts: unknown) => { open: () => void; on: (event: string, cb: () => void) => void };
-                const options = {
-                    key: payment.razorpayKeyId,
-                    amount: payment.amount,
-                    currency: payment.currency,
-                    order_id: payment.razorpayOrderId,
-                    name: "SPOTO",
-                    description: "1-Day Unlimited Pass – ₹99",
-                    theme: { color: "#A67AEB" },
-                    handler: () => resolve("success"),
-                    modal: { ondismiss: () => resolve("failed") },
-                };
-                const rzp = new RazorpayConstructor(options);
-                rzp.on("payment.failed", () => resolve("failed"));
-                rzp.open();
-            };
-
-            loadScript();
         });
     };
 

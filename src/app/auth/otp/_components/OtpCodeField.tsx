@@ -37,6 +37,13 @@ interface OtpCodeFieldProps {
     onComplete?: (code: string) => void;
 }
 
+/** iOS Chrome (CriOS) does not get Apple's SMS OTP autofill — only Safari does. */
+function isIosChrome(): boolean {
+    if (typeof navigator === "undefined") return false;
+    const ua = navigator.userAgent;
+    return /iPhone|iPad|iPod/i.test(ua) && /CriOS/i.test(ua);
+}
+
 /**
  * 4 visible boxes + one transparent input on top.
  * iOS/Android autofill only works reliably on a single field with autocomplete="one-time-code".
@@ -44,6 +51,7 @@ interface OtpCodeFieldProps {
 export default function OtpCodeField({ otp, onOtpChange, onComplete }: OtpCodeFieldProps) {
     const inputRef = useRef<HTMLInputElement>(null);
     const [pasted, setPasted] = useState(false);
+    const iosChrome = typeof window !== "undefined" && isIosChrome();
 
     const applyCode = useCallback(
         (raw: string) => {
@@ -171,17 +179,26 @@ export default function OtpCodeField({ otp, onOtpChange, onComplete }: OtpCodeFi
                     />
                 </div>
 
-                <p className="text-center text-xs text-white/45">
-                    Tap the boxes — iOS may show OTP above the keyboard
-                </p>
+                {iosChrome ? (
+                    <p className="max-w-xs text-center text-xs leading-relaxed text-[#E8DBFF]/90">
+                        iPhone Chrome does not support automatic OTP from Messages (Apple
+                        limitation). Copy the code from SMS, then tap the button below.
+                    </p>
+                ) : (
+                    <p className="text-center text-xs text-white/45">
+                        Tap the boxes — Safari may show OTP above the keyboard
+                    </p>
+                )}
 
                 <button
                     type="button"
                     onClick={handlePasteFromClipboard}
-                    className={`flex items-center gap-1.5 rounded-full border px-4 py-1.5 text-sm font-medium transition-all ${
+                    className={`flex items-center gap-1.5 rounded-full border px-5 py-2.5 text-sm font-semibold transition-all ${
                         pasted
                             ? "border-[#B7F041]/60 bg-[#B7F041]/15 text-[#B7F041]"
-                            : "border-white/20 bg-white/5 text-white/60 active:scale-95"
+                            : iosChrome
+                              ? "border-[#A67AEB]/55 bg-[#A67AEB]/20 text-[#E8DBFF] active:scale-95"
+                              : "border-white/20 bg-white/5 text-white/60 active:scale-95"
                     }`}
                 >
                     {pasted ? "OTP pasted" : "Paste from SMS"}

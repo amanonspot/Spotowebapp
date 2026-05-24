@@ -259,9 +259,11 @@ class HybridCheckoutAdapter implements CheckoutAdapter {
         if (!current) throw new Error("Checkout session not found");
 
         try {
+            const propertyId =
+                current.propertyId && current.propertyId !== "global_pass" ? current.propertyId : undefined;
             const response = (await rentalsService.activatePass({
                 pass_type: "one_day",
-                property_id: current.propertyId,
+                property_id: propertyId,
             })) as RentalPassActivateResponseDto;
 
             const envelope = asRecord(response);
