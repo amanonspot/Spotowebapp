@@ -651,6 +651,7 @@ export default function OwnerListingWizard({
                 const query = new URLSearchParams({
                     property_id: created.id,
                     owner_phone: created.ownerPhone,
+                    verification_status: created.verificationStatus,
                 });
                 router.push(`/agent/list-property/success?${query.toString()}`);
                 return;
