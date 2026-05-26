@@ -9,7 +9,10 @@ import { CheckoutState, PropertyDetail, UnlockPaymentContext, UnlockPaymentFlowS
 import { requireAuthThenContinue } from "@/lib/auth/requireAuthAction";
 import { rentalsService } from "@/lib/rentals/service";
 import UnlockPaymentFlowOverlay from "@/app/(home)/booking/[slug]/_components/UnlockPaymentFlowOverlay";
+import PropertyMediaPreview from "@/components/revamp/PropertyMediaPreview";
 import { extractLatLngFromGoogleMapsUrl } from "@/lib/maps/parseGoogleMapsUrl";
+import { isVideoMediaUrl } from "@/lib/rentals/mediaUtils";
+import type { PropertyMediaItem } from "@/lib/rentals/mediaUtils";
 import { runRazorpayCheckout } from "@/lib/payments/razorpayCheckout";
 
 interface PageProps {
@@ -386,9 +389,19 @@ export default function BookingDetailPage({ params }: PageProps) {
                   documents: checkoutState.unlockedDocuments || property.owner.documents || [],
               }
             : property.owner;
-    const galleryImages =
-        property.galleryImages && property.galleryImages.length > 0 ? property.galleryImages : [property.image];
-    const activeImage = galleryImages[Math.min(activeImageIndex, galleryImages.length - 1)] || property.image;
+    const galleryMedia: PropertyMediaItem[] =
+        property.galleryMedia && property.galleryMedia.length > 0
+            ? property.galleryMedia
+            : (property.galleryImages && property.galleryImages.length > 0
+                  ? property.galleryImages
+                  : property.image
+                    ? [property.image]
+                    : []
+              ).map((url) => ({
+                  url,
+                  mediaType: isVideoMediaUrl(url) ? "video" : "image",
+              }));
+    const activeMedia = galleryMedia[Math.min(activeImageIndex, galleryMedia.length - 1)] || galleryMedia[0];
 
     /** Map + directions: same gate as owner contact — listing unlocked or any active day/weekly pass */
     const hasMapAccess = isUnlocked || Boolean(activePassInfo);
@@ -463,7 +476,17 @@ export default function BookingDetailPage({ params }: PageProps) {
         <main className="min-h-screen bg-[#040405] pb-28 text-white md:pb-10">
             {/* Hero image with gradient overlay */}
             <div className="relative h-56 w-full overflow-hidden sm:h-72 md:h-[420px]">
-                <img src={activeImage} alt={property.title} className="h-full w-full object-cover transition-all duration-500" />
+                {activeMedia ? (
+                    <PropertyMediaPreview
+                        item={activeMedia}
+                        alt={property.title}
+                        className="h-full w-full object-cover transition-all duration-500"
+                        controls={activeMedia.mediaType === "video"}
+                        autoPlay={activeMedia.mediaType === "video"}
+                        muted
+                        loop
+                    />
+                ) : null}
                 {/* Gradient overlays */}
                 <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#040405] via-transparent to-black/30" />
                 <button
@@ -489,20 +512,24 @@ export default function BookingDetailPage({ params }: PageProps) {
             </div>
 
             {/* Thumbnail strip */}
-            {galleryImages.length > 1 && (
+            {galleryMedia.length > 1 && (
                 <div className="scrollbar-hide mx-auto mt-2 flex max-w-[1180px] gap-2 overflow-x-auto px-4 md:px-6 lg:px-8">
-                    {galleryImages.map((image, index) => (
+                    {galleryMedia.map((media, index) => (
                         <button
-                            key={`${image}-${index}`}
+                            key={`${media.url}-${index}`}
                             type="button"
                             onClick={() => setActiveImageIndex(index)}
-                            className={`h-14 w-20 shrink-0 overflow-hidden rounded-xl border transition-all duration-200 md:h-16 md:w-24 ${
+                            className={`relative h-14 w-20 shrink-0 overflow-hidden rounded-xl border transition-all duration-200 md:h-16 md:w-24 ${
                                 activeImageIndex === index
                                     ? "border-[#B7F041] shadow-[0_0_10px_rgba(183,240,65,0.3)] scale-105"
                                     : "border-white/15 opacity-70 hover:opacity-100"
                             }`}
                         >
-                            <img src={image} alt={`${property.title}-${index + 1}`} className="h-full w-full object-cover" />
+                            {media.mediaType === "video" ? (
+                                <video src={media.url} className="h-full w-full object-cover" muted playsInline preload="metadata" />
+                            ) : (
+                                <img src={media.url} alt={`${property.title}-${index + 1}`} className="h-full w-full object-cover" />
+                            )}
                         </button>
                     ))}
                 </div>

@@ -92,6 +92,9 @@ const buildOwnerFormData = (
     if (payload.ownerPhone && mode === "create") {
         appendText(formData, "owner_phone", payload.ownerPhone);
     }
+    if (payload.ownerPhone && shouldInclude(mode, changedKeys, "ownerPhone")) {
+        appendText(formData, "owner_phone", payload.ownerPhone);
+    }
     if (shouldInclude(mode, changedKeys, "propertyTypeId")) {
         appendText(formData, "property_type_id", payload.propertyTypeId);
     }
@@ -228,6 +231,26 @@ export const rentalsService = {
             formData.append("property_id", payload.property_id);
         }
         return apiFormData.post<RentalPassActivateResponseDto>("/api/rental/passes/activate/", formData);
+    },
+
+    updateAgentProperty: async (
+        propertyId: string,
+        payload: OwnerPropertyUpsertPayload,
+        changedKeys?: Set<keyof OwnerPropertyUpsertPayload>
+    ) => {
+        const updated = await api.patch<WireApiEnvelope<RentalAgentCreateDataDto>>(
+            `/api/rental/agent/properties/update/?property_id=${encodeURIComponent(propertyId)}`,
+            buildOwnerFormData({ ...payload, ownerPhone: payload.ownerPhone || payload.contactPhone }, { mode: "update", changedKeys }),
+            {
+                headers: {
+                    "Content-Type": "multipart/form-data",
+                },
+            }
+        );
+        clearCache("/api/rental/agent/properties/");
+        clearCache("/api/rental/properties/");
+        clearCache(`/api/rental/properties/?property_id=${encodeURIComponent(propertyId)}`);
+        return updated;
     },
 
     getAgentMe: () => api.get<WireApiEnvelope<RentalAgentMeDataDto>>("/api/rental/agent/me/"),

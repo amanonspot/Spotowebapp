@@ -279,7 +279,9 @@ const resolveAvailabilityId = (wire: RentalPropertyDto, options: NormalizerConte
         resolveIdFromMasterMap(wire.availability_name, options.availabilityIdByToken)
     );
 
-const toImageCandidates = (wire: RentalPropertyDto): Array<{ url: string; isPrimary: boolean; sortOrder: number }> => {
+const toImageCandidates = (
+    wire: RentalPropertyDto
+): Array<{ url: string; mediaType: "image" | "video"; isPrimary: boolean; sortOrder: number }> => {
     const wireRecord = wire as UnknownRecord;
     const mediaCandidates = [
         ...asArray<UnknownRecord>(wire.images),
@@ -290,21 +292,30 @@ const toImageCandidates = (wire: RentalPropertyDto): Array<{ url: string; isPrim
     ];
 
     const objectCandidates = mediaCandidates
-        .map((candidate, index) => ({
-            url: firstString(
+        .map((candidate, index) => {
+            const mediaTypeRaw = firstString(candidate.media_type).toLowerCase();
+            const mediaType: "image" | "video" =
+                mediaTypeRaw === "video" || Boolean(firstString(candidate.video_url)) ? "video" : "image";
+            const url = firstString(
+                candidate.media_url,
+                mediaType === "video" ? candidate.video_url : "",
                 candidate.image_url,
                 candidate.url,
                 candidate.image,
                 candidate.file,
                 candidate.media_file,
-                candidate.media_url,
                 candidate.src,
                 candidate.document_file_url,
                 candidate.file_url
-            ),
-            isPrimary: Boolean(candidate.is_primary || candidate.is_cover || candidate.is_display || candidate.display_image),
-            sortOrder: numberOrFallback(candidate.sort_order, index),
-        }));
+            );
+            return {
+                url,
+                mediaType,
+                isPrimary: Boolean(candidate.is_primary || candidate.is_cover || candidate.is_display || candidate.display_image),
+                sortOrder: numberOrFallback(candidate.sort_order, index),
+            };
+        })
+        .filter((item) => Boolean(item.url));
 
     const stringCandidates = [
         ...parseLooseUrlList(wireRecord.gallery_images),
@@ -315,6 +326,7 @@ const toImageCandidates = (wire: RentalPropertyDto): Array<{ url: string; isPrim
         ...parseLooseUrlList(wireRecord.photos_urls),
     ].map((url, index) => ({
         url: stringOrFallback(url),
+        mediaType: "image" as const,
         isPrimary: false,
         sortOrder: mediaCandidates.length + index,
     }));
@@ -336,6 +348,7 @@ const toImageCandidates = (wire: RentalPropertyDto): Array<{ url: string; isPrim
     ]
         .map((url, index) => ({
             url: stringOrFallback(url),
+            mediaType: "image" as const,
             isPrimary: index === 0,
             sortOrder: mediaCandidates.length + stringCandidates.length + index,
         }))
@@ -500,8 +513,18 @@ export const normalizePropertyList = (payload: WireApiEnvelope<unknown>, options
         const deposit = numberOrFallback(wire.deposit, fallback?.deposit || 0);
         const furnishingName = firstString(wire.furnishing_name, wire.furnishing_code).toLowerCase();
         const furnished = furnishingName.includes("full") || furnishingName.includes("semi") ? true : fallback?.furnished || false;
-        const images = toImageCandidates(wire).map((item) => item.url);
-        const primaryImage = firstString(images[0], fallback?.image || "");
+        const mediaItems = toImageCandidates(wire).map((item) => ({
+            url: item.url,
+            mediaType: item.mediaType,
+            isPrimary: item.isPrimary,
+            sortOrder: item.sortOrder,
+        }));
+        const images = mediaItems.map((item) => item.url);
+        const primaryImageItem =
+            mediaItems.find((item) => item.isPrimary && item.mediaType === "image") ||
+            mediaItems.find((item) => item.mediaType === "image") ||
+            mediaItems[0];
+        const primaryImage = firstString(primaryImageItem?.url, images[0], fallback?.image || "");
         const bhk = toBhk(wire);
         const propertyTypes = toPropertyTypes(wire);
         const moveInOptions = toMoveInOptions(wire);
@@ -524,6 +547,7 @@ export const normalizePropertyList = (payload: WireApiEnvelope<unknown>, options
             furnished,
             image: primaryImage,
             galleryImages: images.length > 0 ? images : primaryImage ? [primaryImage] : [],
+            galleryMedia: mediaItems.length > 0 ? mediaItems : [],
             bhk,
             bhkId: resolveBhkId(wire, options || {}),
             propertyTypes,
@@ -588,6 +612,7 @@ export const normalizePropertyDetail = (
             furnished: false,
             image: "",
             galleryImages: [],
+            galleryMedia: [],
             bhk: "1_bhk",
             propertyTypes: [],
             moveInOptions: [],
@@ -616,6 +641,7 @@ export const normalizePropertyDetail = (
             furnished: false,
             image: "",
             galleryImages: [],
+            galleryMedia: [],
             bhk: "1_bhk",
             propertyTypes: [],
             moveInOptions: [],

@@ -1,3 +1,5 @@
+import type { PropertyMediaItem } from "@/lib/rentals/mediaUtils";
+
 export type BHKOption = "1_rk" | "1_bhk" | "2_bhk" | "3_bhk";
 export type PropertyType = "rent_house" | "pg" | "zero_deposit" | "co_living";
 export type MoveInOption = "immediately" | "15_days" | "30_days";
@@ -35,6 +37,7 @@ export interface PropertyListItem {
     furnished: boolean;
     image: string;
     galleryImages?: string[];
+    galleryMedia?: PropertyMediaItem[];
     bhk: BHKOption;
     bhkId?: string;
     propertyTypes: PropertyType[];

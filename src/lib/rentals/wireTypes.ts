@@ -38,7 +38,10 @@ export interface RentalMasterOptionDto extends UnknownRecord {
 
 export interface RentalPropertyImageDto {
     id: string;
-    image_url: string;
+    image_url?: string;
+    video_url?: string;
+    media_url?: string;
+    media_type?: "image" | "video";
     is_primary: boolean;
     sort_order: number;
 }

@@ -184,6 +184,13 @@ export default function AgentDashboardPage() {
                                             {deposit ? (
                                                 <p className="text-sm text-white/55">{deposit} Deposit</p>
                                             ) : null}
+                                            <button
+                                                type="button"
+                                                onClick={() => router.push(`/agent/property/${item.id}/edit`)}
+                                                className="mt-4 w-full rounded-xl border border-[#A67AEB]/40 bg-[#A67AEB]/10 px-4 py-2.5 text-sm font-semibold text-[#D9C4FF] transition hover:bg-[#A67AEB]/20"
+                                            >
+                                                Edit listing
+                                            </button>
                                         </div>
                                     </article>
                                 );

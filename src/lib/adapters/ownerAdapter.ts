@@ -423,6 +423,7 @@ const toPayloadFromWire = (wire: RentalPropertyDto): OwnerPropertyUpsertPayload 
     addressLine: firstString(wire.address_line),
     description: firstString(wire.description),
     contactPhone: firstString(wire.contact_phone),
+    ownerPhone: firstString(wire.contact_phone).replace(/\D/g, "").slice(-10) || undefined,
     amenityIds: (() => {
         const fromObjects = asArray<RentalMasterOptionDto>(wire.amenities)
             .map((item) => firstString(item.id))
@@ -837,3 +838,5 @@ class HybridOwnerAdapter implements OwnerListingAdapter {
 export const ownerAdapter = new HybridOwnerAdapter();
 
 export const getOwnerUnlockedContacts = () => getUnlockedOwnerContacts();
+
+export { toFormFromWire, toPayloadFromWire, buildChangedKeys, unwrapToList as unwrapRentalPropertyList };

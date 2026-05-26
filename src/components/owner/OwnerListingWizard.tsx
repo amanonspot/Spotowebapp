@@ -14,18 +14,19 @@ import { agentAdapter, ownerAdapter } from "@/lib/adapters";
 import { extractLatLngFromGoogleMapsUrl } from "@/lib/maps/parseGoogleMapsUrl";
 import { OwnerListingFormInput, OwnerMastersData, SelectOption } from "@/lib/adapters/types";
 import { RENTALS_MOCK_MODE } from "@/lib/rentals";
+import { isVideoFile } from "@/lib/rentals/mediaUtils";
 
 const CREATE_STEP_TITLES = [
     "Select Property Type",
     "Property Details",
-    "Photos & Keywords",
+    "Photos, Videos & Keywords",
     "Pricing & Possession",
     "Address & Submission",
 ];
 const EDIT_STEP_TITLES = [
     "Select Property Type",
     "Property Details",
-    "Photos & Keywords",
+    "Photos, Videos & Keywords",
     "Pricing & Possession",
     "Address & Submission",
 ];
@@ -262,7 +263,7 @@ export default function OwnerListingWizard({
 }: OwnerListingWizardProps) {
     const router = useRouter();
     const isAgentFlow = flow === "agent";
-    const isEditMode = !isAgentFlow && mode === "edit";
+    const isEditMode = mode === "edit";
     const homePath = isAgentFlow ? "/agent/dashboard" : "/owner/dashboard";
     const stepTitles = isEditMode ? EDIT_STEP_TITLES : CREATE_STEP_TITLES;
     const totalSteps = stepTitles.length;
@@ -282,7 +283,7 @@ export default function OwnerListingWizard({
     const [prefillHydrated, setPrefillHydrated] = useState(false);
 
     useEffect(() => {
-        if (isAgentFlow || !isEditMode) {
+        if (!isEditMode) {
             setLoadingInitial(false);
             return;
         }
@@ -298,7 +299,9 @@ export default function OwnerListingWizard({
                     return;
                 }
                 if (propertyId) {
-                    const editable = await ownerAdapter.getPropertyForEdit(propertyId);
+                    const editable = isAgentFlow
+                        ? await agentAdapter.getPropertyForEdit(propertyId)
+                        : await ownerAdapter.getPropertyForEdit(propertyId);
                     if (mounted) {
                         setForm((prev) => ({ ...prev, ...editable }));
                         setLoadingInitial(false);
@@ -444,13 +447,17 @@ export default function OwnerListingWizard({
     const hasGoogleMapsKey = Boolean((config.googleMapsApiKey || config.googlePlacesApiKey || "").trim());
 
     const imagePreviews = useMemo(
-        () => form.imageFiles.map((file) => URL.createObjectURL(file)),
+        () =>
+            form.imageFiles.map((file) => ({
+                url: URL.createObjectURL(file),
+                isVideo: isVideoFile(file),
+            })),
         [form.imageFiles]
     );
 
     useEffect(() => {
         return () => {
-            imagePreviews.forEach((url) => URL.revokeObjectURL(url));
+            imagePreviews.forEach((preview) => URL.revokeObjectURL(preview.url));
         };
     }, [imagePreviews]);
 
@@ -641,8 +648,13 @@ export default function OwnerListingWizard({
             };
 
             if (isEditMode && propertyId) {
-                await ownerAdapter.updateProperty(propertyId, payload);
-                router.push("/owner/dashboard");
+                if (isAgentFlow) {
+                    await agentAdapter.updateProperty(propertyId, payload);
+                    router.push("/agent/dashboard");
+                } else {
+                    await ownerAdapter.updateProperty(propertyId, payload);
+                    router.push("/owner/dashboard");
+                }
                 return;
             }
 
@@ -882,28 +894,50 @@ export default function OwnerListingWizard({
                                         <Plus className="h-4 w-4" />
                                     </span>
                                     <div>
-                                        <p className="text-sm font-semibold">Add Property Photos</p>
-                                        <p className="text-xs text-white/45">Max 10 photos · less than 5 MB each</p>
+                                        <p className="text-sm font-semibold">Add Photos & Videos</p>
+                                        <p className="text-xs text-white/45">
+                                            Max 10 items · up to 3 videos (50 MB each) · photos under 5 MB
+                                        </p>
                                     </div>
                                     <input
                                         type="file"
-                                        accept="image/jpeg,image/png,image/webp,image/jpg"
+                                        accept="image/jpeg,image/png,image/webp,image/jpg,video/mp4,video/quicktime,video/webm"
                                         multiple
                                         onChange={(event) => {
-                                            const MAX_PHOTOS = 10;
-                                            const MAX_SIZE_MB = 5;
+                                            const MAX_MEDIA = 10;
+                                            const MAX_VIDEOS = 3;
+                                            const MAX_PHOTO_SIZE_MB = 5;
+                                            const MAX_VIDEO_SIZE_MB = 50;
                                             const incoming = Array.from(event.target.files || []);
                                             if (incoming.length === 0) return;
 
-                                            const oversized = incoming.filter(f => f.size > MAX_SIZE_MB * 1024 * 1024);
-                                            if (oversized.length > 0) {
-                                                alert(`${oversized.map(f => f.name).join(", ")} — max size is ${MAX_SIZE_MB}MB per photo.`);
+                                            const combined = [...form.imageFiles, ...incoming];
+                                            if (combined.length > MAX_MEDIA) {
+                                                alert(
+                                                    `You can upload max ${MAX_MEDIA} photos and videos combined. Currently have ${form.imageFiles.length}, tried to add ${incoming.length}.`
+                                                );
                                                 return;
                                             }
 
-                                            const combined = [...form.imageFiles, ...incoming];
-                                            if (combined.length > MAX_PHOTOS) {
-                                                alert(`You can upload max ${MAX_PHOTOS} photos. Currently have ${form.imageFiles.length}, tried to add ${incoming.length}.`);
+                                            const nextVideoCount = combined.filter((file) => isVideoFile(file)).length;
+                                            if (nextVideoCount > MAX_VIDEOS) {
+                                                alert(`You can upload max ${MAX_VIDEOS} videos.`);
+                                                return;
+                                            }
+
+                                            const oversizedPhoto = incoming.find(
+                                                (file) => !isVideoFile(file) && file.size > MAX_PHOTO_SIZE_MB * 1024 * 1024
+                                            );
+                                            if (oversizedPhoto) {
+                                                alert(`${oversizedPhoto.name} — max size is ${MAX_PHOTO_SIZE_MB}MB per photo.`);
+                                                return;
+                                            }
+
+                                            const oversizedVideo = incoming.find(
+                                                (file) => isVideoFile(file) && file.size > MAX_VIDEO_SIZE_MB * 1024 * 1024
+                                            );
+                                            if (oversizedVideo) {
+                                                alert(`${oversizedVideo.name} — max size is ${MAX_VIDEO_SIZE_MB}MB per video.`);
                                                 return;
                                             }
 
@@ -922,14 +956,33 @@ export default function OwnerListingWizard({
                                                 const active = coverIndex === index;
                                                 return (
                                                     <button
-                                                        key={`${preview}-${index}`}
+                                                        key={`${preview.url}-${index}`}
                                                         type="button"
                                                         onClick={() => setCoverIndex(index)}
                                                         className={`relative overflow-hidden rounded-xl border ${
                                                             active ? "border-[#B7F041]" : "border-white/20"
                                                         }`}
                                                     >
-                                                        <img src={preview} alt={`property-${index + 1}`} className="h-32 w-full object-cover" />
+                                                        {preview.isVideo ? (
+                                                            <video
+                                                                src={preview.url}
+                                                                className="h-32 w-full object-cover"
+                                                                muted
+                                                                playsInline
+                                                                preload="metadata"
+                                                            />
+                                                        ) : (
+                                                            <img
+                                                                src={preview.url}
+                                                                alt={`property-${index + 1}`}
+                                                                className="h-32 w-full object-cover"
+                                                            />
+                                                        )}
+                                                        {preview.isVideo ? (
+                                                            <span className="absolute left-2 bottom-2 rounded-md bg-black/70 px-2 py-1 text-[10px] font-semibold text-white">
+                                                                Video
+                                                            </span>
+                                                        ) : null}
                                                         {active ? (
                                                             <span className="absolute left-2 top-2 rounded-md bg-[#B7F041] px-2 py-1 text-[10px] font-semibold text-black">
                                                                 Cover

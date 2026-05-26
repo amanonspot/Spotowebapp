@@ -370,6 +370,7 @@ class ApiFirstPropertyAdapter implements PropertyAdapter {
                         furnished: detail.furnished,
                         image: detail.image,
                         galleryImages: detail.galleryImages,
+                        galleryMedia: detail.galleryMedia,
                         bhk: detail.bhk,
                         bhkId: detail.bhkId,
                         propertyTypes: detail.propertyTypes,

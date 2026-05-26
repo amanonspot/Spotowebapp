@@ -1,9 +1,16 @@
 import { OwnerListingFormInput } from "@/lib/adapters/types";
+import {
+    buildChangedKeys,
+    toFormFromWire,
+    toPayloadFromWire,
+    unwrapRentalPropertyList,
+} from "@/lib/adapters/ownerAdapter";
 import { normalizePropertyList, rentalsService, WireApiEnvelope } from "@/lib/rentals";
 import {
     OwnerPropertyUpsertPayload,
     RentalAgentCreateDataDto,
     RentalAgentMeDataDto,
+    RentalPropertyDto,
 } from "@/lib/rentals/wireTypes";
 
 const unwrapData = <T,>(payload: WireApiEnvelope<T>) => {
@@ -52,7 +59,19 @@ const toAgentPayload = (input: OwnerListingFormInput): OwnerPropertyUpsertPayloa
         documentType: input.documentType,
         imageFiles: input.imageFiles,
         documentFile: input.documentFile,
+        clearImages: input.clearImages,
+        clearDocuments: input.clearDocuments,
     };
+};
+
+const findAgentPropertyWire = async (propertyId: string): Promise<RentalPropertyDto> => {
+    const response = await rentalsService.getAgentProperties();
+    const wires = unwrapRentalPropertyList(response);
+    const wire = wires.find((item) => firstString(item.id, item.property_id) === propertyId);
+    if (!wire) {
+        throw new Error("Property not found in your agent listings.");
+    }
+    return wire;
 };
 
 export const agentAdapter = {
@@ -65,6 +84,43 @@ export const agentAdapter = {
         const response = await rentalsService.getAgentProperties();
         const list = unwrapData(response);
         return normalizePropertyList(Array.isArray(list) ? list : []);
+    },
+
+    async getPropertyForEdit(id: string): Promise<OwnerListingFormInput> {
+        const wire = await findAgentPropertyWire(id);
+        return toFormFromWire(wire);
+    },
+
+    async updateProperty(id: string, input: OwnerListingFormInput) {
+        const phone = normalizePhone10(input.contactPhone || "");
+        if (phone.length !== 10) {
+            throw new Error("Enter a valid 10-digit owner mobile number.");
+        }
+        if (!(input.ownerName || "").trim()) {
+            throw new Error("Owner name is required.");
+        }
+
+        const wire = await findAgentPropertyWire(id);
+        const previous = toPayloadFromWire(wire);
+        const current = toAgentPayload(input);
+        const changedKeys = buildChangedKeys(current, previous);
+
+        if ((input.imageFiles?.length || 0) > 0) changedKeys.add("imageFiles");
+        if (input.documentFile) changedKeys.add("documentFile");
+        if (input.clearImages) changedKeys.add("clearImages");
+        if (input.clearDocuments) changedKeys.add("clearDocuments");
+
+        if (changedKeys.size === 0) {
+            throw new Error("No changes to update.");
+        }
+
+        await rentalsService.updateAgentProperty(id, current, changedKeys);
+        const listings = await this.listAgentProperties();
+        const updated = listings.find((item) => item.id === id);
+        if (!updated) {
+            throw new Error("Update succeeded but refreshed agent listings did not return this property.");
+        }
+        return updated;
     },
 
     async submitAgentListing(input: OwnerListingFormInput) {
