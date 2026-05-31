@@ -31,6 +31,7 @@ import {
 } from "@/lib/rentals";
 import { userService } from "@/lib/api";
 import { authAdapter } from "@/lib/adapters/authAdapter";
+import { isVideoMediaUrl, PropertyMediaItem } from "@/lib/rentals/mediaUtils";
 
 const OWNER_LEADS_KEY = "spoto_owner_leads_v1";
 
@@ -59,6 +60,7 @@ const defaultFormInput: OwnerListingFormInput = {
     keywords: [],
     documentType: "",
     imageFiles: [],
+    existingMediaItems: [],
     documentFile: null,
     documentMeta: { uploadState: "idle" },
     availableFromDate: "",
@@ -439,6 +441,23 @@ const toPayloadFromWire = (wire: RentalPropertyDto): OwnerPropertyUpsertPayload 
     clearDocuments: false,
 });
 
+const toExistingMediaFromWire = (wire: RentalPropertyDto): PropertyMediaItem[] => {
+    return asArray<UnknownRecord>(wire.images)
+        .map((img) => {
+            const mediaTypeRaw = firstString(img.media_type).toLowerCase();
+            const videoUrl = firstString(img.video_url, img.media_url);
+            const imageUrl = firstString(img.image_url, img.media_url, img.url);
+            const isVideo = mediaTypeRaw === "video" || (Boolean(videoUrl) && !imageUrl);
+            const url = isVideo ? videoUrl || imageUrl : imageUrl || videoUrl;
+            if (!url) return null;
+            return {
+                url,
+                mediaType: isVideo || isVideoMediaUrl(url) ? ("video" as const) : ("image" as const),
+            };
+        })
+        .filter((item): item is PropertyMediaItem => item !== null);
+};
+
 const toFormFromWire = (wire: RentalPropertyDto): OwnerListingFormInput => ({
     ...defaultFormInput,
     propertyTitle: firstString(wire.property_title),
@@ -469,6 +488,7 @@ const toFormFromWire = (wire: RentalPropertyDto): OwnerListingFormInput => ({
         return parseStringArray(wire.amenity_ids).filter(Boolean);
     })(),
     keywords: parseStringArray(wire.keywords),
+    existingMediaItems: toExistingMediaFromWire(wire),
     documentType: firstString(asArray<UnknownRecord>((wire as UnknownRecord).documents)[0]?.document_type),
     documentMeta: (() => {
         const documents = asArray<UnknownRecord>((wire as UnknownRecord).documents);
@@ -712,7 +732,7 @@ class HybridOwnerAdapter implements OwnerListingAdapter {
             const current = toUpsertPayload(input);
             const changedKeys = buildChangedKeys(current, previous);
 
-            if ((input.imageFiles?.length || 0) > 0) changedKeys.add("imageFiles");
+            if (input.imageFiles.length > 0) changedKeys.add("imageFiles");
             if (input.documentFile) changedKeys.add("documentFile");
             if (input.clearImages) changedKeys.add("clearImages");
             if (input.clearDocuments) changedKeys.add("clearDocuments");

@@ -71,6 +71,7 @@ const emptyForm: OwnerListingFormInput = {
     keywords: [],
     documentType: "",
     imageFiles: [],
+    existingMediaItems: [],
     documentFile: null,
     documentMeta: { uploadState: "idle" },
     availableFromDate: "",
@@ -446,6 +447,9 @@ export default function OwnerListingWizard({
 
     const hasGoogleMapsKey = Boolean((config.googleMapsApiKey || config.googlePlacesApiKey || "").trim());
 
+    const existingMediaCount = form.existingMediaItems?.length || 0;
+    const totalMediaCount = existingMediaCount + form.imageFiles.length;
+
     const imagePreviews = useMemo(
         () =>
             form.imageFiles.map((file) => ({
@@ -593,7 +597,7 @@ export default function OwnerListingWizard({
                     form.bhkId &&
                     form.furnishingId
             );
-        if (step === 3) return form.imageFiles.length > 0;
+        if (step === 3) return totalMediaCount > 0;
         if (step === 4) return Boolean(form.rent && form.deposit && form.builtUpAreaSqft && availabilityValid);
         if (step === 5)
             return Boolean(
@@ -605,7 +609,7 @@ export default function OwnerListingWizard({
                     (!form.documentFile || Boolean(form.documentType))
             );
         return false;
-    }, [step, form]);
+    }, [step, form, totalMediaCount]);
 
     const goBack = () => {
         if (step === 1) {
@@ -630,6 +634,14 @@ export default function OwnerListingWizard({
         setSubmitError(null);
         setFieldErrors({});
         try {
+            if (totalMediaCount > 10) {
+                throw new Error(
+                    existingMediaCount > 0
+                        ? `This listing already has ${existingMediaCount} photo(s)/video(s). Max 10 total — remove some before adding more.`
+                        : "You can upload a maximum of 10 photos and videos combined."
+                );
+            }
+
             const orderedImages = [...form.imageFiles];
             if (coverIndex > 0 && orderedImages[coverIndex]) {
                 const [cover] = orderedImages.splice(coverIndex, 1);
@@ -889,20 +901,65 @@ export default function OwnerListingWizard({
                     {step === 3 && (
                         <>
                             <section className={sectionCardClass}>
-                                <label className="flex cursor-pointer items-center gap-3 rounded-2xl border border-dashed border-white/25 bg-[#0f0f16] px-4 py-5">
+                                {existingMediaCount > 0 ? (
+                                    <>
+                                        <p className="text-sm font-semibold text-white/80">
+                                            Saved photos & videos ({existingMediaCount})
+                                        </p>
+                                        <p className="mt-1 text-xs text-white/45">
+                                            Already on this listing. Add more below only if you need to (max 10 total).
+                                        </p>
+                                        <div className="mt-3 grid grid-cols-2 gap-2">
+                                            {(form.existingMediaItems || []).map((item, index) => (
+                                                <div
+                                                    key={`existing-${item.url}-${index}`}
+                                                    className="relative overflow-hidden rounded-xl border border-white/20"
+                                                >
+                                                    {item.mediaType === "video" ? (
+                                                        <video
+                                                            src={item.url}
+                                                            className="h-32 w-full object-cover"
+                                                            muted
+                                                            playsInline
+                                                            preload="metadata"
+                                                        />
+                                                    ) : (
+                                                        <img
+                                                            src={item.url}
+                                                            alt={`saved-${index + 1}`}
+                                                            className="h-32 w-full object-cover"
+                                                        />
+                                                    )}
+                                                    <span className="absolute left-2 bottom-2 rounded-md bg-black/70 px-2 py-1 text-[10px] font-semibold text-white">
+                                                        Saved
+                                                    </span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </>
+                                ) : null}
+
+                                <label
+                                    className={`flex cursor-pointer items-center gap-3 rounded-2xl border border-dashed border-white/25 bg-[#0f0f16] px-4 py-5 ${existingMediaCount > 0 ? "mt-4" : ""}`}
+                                >
                                     <span className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/35">
                                         <Plus className="h-4 w-4" />
                                     </span>
                                     <div>
-                                        <p className="text-sm font-semibold">Add Photos & Videos</p>
+                                        <p className="text-sm font-semibold">
+                                            {existingMediaCount > 0 ? "Add more photos & videos" : "Add Photos & Videos"}
+                                        </p>
                                         <p className="text-xs text-white/45">
-                                            Max 10 items · up to 3 videos (50 MB each) · photos under 5 MB
+                                            {existingMediaCount > 0
+                                                ? `${totalMediaCount}/10 used · up to 3 videos · photos under 5 MB`
+                                                : "Max 10 items · up to 3 videos (50 MB each) · photos under 5 MB"}
                                         </p>
                                     </div>
                                     <input
                                         type="file"
                                         accept="image/jpeg,image/png,image/webp,image/jpg,video/mp4,video/quicktime,video/webm"
                                         multiple
+                                        disabled={totalMediaCount >= 10}
                                         onChange={(event) => {
                                             const MAX_MEDIA = 10;
                                             const MAX_VIDEOS = 3;
@@ -911,15 +968,24 @@ export default function OwnerListingWizard({
                                             const incoming = Array.from(event.target.files || []);
                                             if (incoming.length === 0) return;
 
-                                            const combined = [...form.imageFiles, ...incoming];
-                                            if (combined.length > MAX_MEDIA) {
+                                            const nextTotal = existingMediaCount + form.imageFiles.length + incoming.length;
+                                            if (nextTotal > MAX_MEDIA) {
+                                                const remaining = MAX_MEDIA - existingMediaCount - form.imageFiles.length;
                                                 alert(
-                                                    `You can upload max ${MAX_MEDIA} photos and videos combined. Currently have ${form.imageFiles.length}, tried to add ${incoming.length}.`
+                                                    remaining > 0
+                                                        ? `You can add ${remaining} more item(s). This listing already has ${existingMediaCount} saved photo(s)/video(s).`
+                                                        : `This listing already has ${existingMediaCount} saved photo(s)/video(s). Max 10 total.`
                                                 );
                                                 return;
                                             }
 
-                                            const nextVideoCount = combined.filter((file) => isVideoFile(file)).length;
+                                            const existingVideos = (form.existingMediaItems || []).filter(
+                                                (item) => item.mediaType === "video"
+                                            ).length;
+                                            const nextVideoCount =
+                                                existingVideos +
+                                                form.imageFiles.filter((file) => isVideoFile(file)).length +
+                                                incoming.filter((file) => isVideoFile(file)).length;
                                             if (nextVideoCount > MAX_VIDEOS) {
                                                 alert(`You can upload max ${MAX_VIDEOS} videos.`);
                                                 return;
@@ -942,7 +1008,7 @@ export default function OwnerListingWizard({
                                             }
 
                                             event.target.value = "";
-                                            updateField("imageFiles", combined);
+                                            updateField("imageFiles", [...form.imageFiles, ...incoming]);
                                         }}
                                         className="hidden"
                                     />
@@ -950,7 +1016,7 @@ export default function OwnerListingWizard({
 
                                 {form.imageFiles.length > 0 && (
                                     <>
-                                        <p className="mt-4 text-sm font-semibold text-white/80">Cover</p>
+                                        <p className="mt-4 text-sm font-semibold text-white/80">New uploads</p>
                                         <div className="mt-2 grid grid-cols-2 gap-2">
                                             {imagePreviews.map((preview, index) => {
                                                 const active = coverIndex === index;

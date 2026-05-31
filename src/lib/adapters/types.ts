@@ -253,6 +253,8 @@ export interface OwnerListingFormInput {
     keywords: string[];
     documentType: string;
     imageFiles: File[];
+    /** Saved property media shown in edit mode — not re-uploaded unless user adds new files. */
+    existingMediaItems?: PropertyMediaItem[];
     documentFile: File | null;
     documentMeta?: OwnerDocumentMeta;
     availableFromDate?: string;
