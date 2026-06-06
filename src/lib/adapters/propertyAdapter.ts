@@ -163,10 +163,13 @@ const buildNormalizationContextFast = async (
     prefetchedMasters?: PromiseSettledResult<WireApiEnvelope<unknown>>[]
 ) => {
     const cityIds = cityIdsFromPayload(payload);
-    const [masters, localitiesRes] = await Promise.all([
+    const [masters, localitiesSettled] = await Promise.all([
         prefetchedMasters ?? fetchMastersBundle(),
-        Promise.allSettled(Promise.all(Array.from(cityIds).map((cityId) => rentalsService.listLocalities(cityId)))),
+        Promise.allSettled([
+            Promise.all(Array.from(cityIds).map((cityId) => rentalsService.listLocalities(cityId))),
+        ]),
     ]);
+    const localitiesRes = localitiesSettled[0]!;
 
     const [citiesRes, amenitiesRes, propertyTypesRes, bhkRes, furnishingRes, availabilityRes] = masters;
 
@@ -199,6 +202,8 @@ const mapFiltersToApiParams = (filters: FilterState) => {
         rent_max?: number;
         amenity_ids?: string[];
         keywords?: string[];
+        page?: number;
+        page_size?: number;
     } = {};
     if (filters.budgetMin > 0) params.rent_min = filters.budgetMin;
     if (filters.budgetMax > 0) params.rent_max = filters.budgetMax;
