@@ -3,7 +3,7 @@ import { getApiBaseUrl } from "@/lib/runtime/publicEnv";
 
 const API_BASE_URL = getApiBaseUrl();
 
-const CACHE_DURATION_MS = 30_000;
+const CACHE_DURATION_MS = 300_000; // 5 min — masters/listings repeat less on navigation
 const requestCache = new Map<string, { data: unknown; timestamp: number }>();
 
 const getAccessToken = () => {
@@ -37,6 +37,66 @@ const persistTokensFromBody = (data: unknown) => {
     const access = typeof payload.access === "string" ? payload.access : "";
     const refresh = typeof payload.refresh === "string" ? payload.refresh : "";
     if (access || refresh) persistTokens(access || undefined, refresh || undefined);
+};
+
+const updateAuthCookie = (accessToken: string) => {
+    if (typeof document !== "undefined") {
+        document.cookie = `auth-token=${accessToken}; path=/; max-age=604800; SameSite=Strict`;
+    }
+};
+
+const persistTokensFromHeaders = (headers: unknown) => {
+    if (!headers || typeof headers !== "object") return;
+    const record = headers as Record<string, unknown>;
+    const access =
+        typeof record["x-new-access-token"] === "string"
+            ? record["x-new-access-token"]
+            : typeof record["X-New-Access-Token"] === "string"
+              ? record["X-New-Access-Token"]
+              : "";
+    const refresh =
+        typeof record["x-new-refresh-token"] === "string"
+            ? record["x-new-refresh-token"]
+            : typeof record["X-New-Refresh-Token"] === "string"
+              ? record["X-New-Refresh-Token"]
+              : "";
+    if (access || refresh) {
+        persistTokens(access || undefined, refresh || undefined);
+        if (access) updateAuthCookie(access);
+    }
+};
+
+type RefreshedTokens = { access: string; refresh?: string };
+
+/** Single in-flight refresh — avoids rotate/blacklist races during pass payment polling. */
+let refreshInFlight: Promise<RefreshedTokens> | null = null;
+
+const refreshAccessToken = (): Promise<RefreshedTokens> => {
+    if (refreshInFlight) return refreshInFlight;
+
+    const refreshToken = getRefreshToken();
+    if (!refreshToken) {
+        return Promise.reject(new Error("No refresh token"));
+    }
+
+    refreshInFlight = axios
+        .post<{ access: string; refresh?: string }>(
+            `${API_BASE_URL}/api/token/refresh/`,
+            { refresh: refreshToken },
+            { headers: { "Content-Type": "application/json" } }
+        )
+        .then((response) => {
+            const access = response.data.access;
+            const refresh = response.data.refresh;
+            persistTokens(access, refresh);
+            if (access) updateAuthCookie(access);
+            return { access, refresh };
+        })
+        .finally(() => {
+            refreshInFlight = null;
+        });
+
+    return refreshInFlight;
 };
 
 const extractFieldError = (payload: unknown): string => {
@@ -114,19 +174,23 @@ const apiClient: AxiosInstance = axios.create({
 apiClient.interceptors.request.use((config) => {
     const skipAuth = Boolean((config as RequestConfig).skipAuth);
     const token = getAccessToken();
+    const refreshToken = getRefreshToken();
     if (!skipAuth) {
         config.headers = config.headers || {};
         if (token) config.headers.Authorization = `Bearer ${token}`;
+        if (refreshToken) config.headers["X-Refresh-Token"] = refreshToken;
     }
     return config;
 });
 
 apiClient.interceptors.response.use(
     async (response) => {
+        persistTokensFromHeaders(response.headers);
         persistTokensFromBody(response.data);
         return response;
     },
     async (error: AxiosError) => {
+        persistTokensFromHeaders(error.response?.headers);
         persistTokensFromBody(error.response?.data);
 
         const status = error.response?.status;
@@ -138,26 +202,11 @@ apiClient.interceptors.response.use(
             originalConfig._retry = true;
 
             try {
-                // Call the token refresh endpoint to get a new access token
-                const refreshResponse = await axios.post<{ access: string; refresh?: string }>(
-                    `${API_BASE_URL}/api/token/refresh/`,
-                    { refresh: refreshToken },
-                    { headers: { "Content-Type": "application/json" } }
-                );
+                const { access, refresh } = await refreshAccessToken();
 
-                const newAccessToken = refreshResponse.data.access;
-                const newRefreshToken = refreshResponse.data.refresh;
-
-                persistTokens(newAccessToken, newRefreshToken);
-
-                // Update auth-token cookie with new access token
-                if (typeof document !== "undefined") {
-                    document.cookie = `auth-token=${newAccessToken}; path=/; max-age=604800; SameSite=Strict`;
-                }
-
-                // Retry the original request with the new access token
                 originalConfig.headers = originalConfig.headers || {};
-                originalConfig.headers.Authorization = `Bearer ${newAccessToken}`;
+                originalConfig.headers.Authorization = `Bearer ${access}`;
+                if (refresh) originalConfig.headers["X-Refresh-Token"] = refresh;
                 return await apiClient.request(originalConfig);
             } catch {
                 clearAuthTokens();

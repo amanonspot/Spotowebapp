@@ -28,6 +28,8 @@ export interface RentalPropertyListParams {
     lat?: number;
     lng?: number;
     radius_km?: number;
+    page?: number;
+    page_size?: number;
 }
 
 type UpsertMode = "create" | "update";

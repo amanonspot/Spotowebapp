@@ -16,6 +16,9 @@ import { getUnlockedTenantContacts, rentalsService, type UnlockedContactRecord }
 import UnlockPaymentFlowOverlay from "@/app/(home)/booking/[slug]/_components/UnlockPaymentFlowOverlay";
 import { runRazorpayCheckout } from "@/lib/payments/razorpayCheckout";
 
+const INITIAL_VISIBLE_LISTINGS = 9;
+const LISTINGS_APPEND_CHUNK = 6;
+
 const initialFeed: HomeFeed = {
     categories: [],
     localities: [],
@@ -104,6 +107,9 @@ export default function HomePage() {
     const [homePaymentError, setHomePaymentError] = useState<string | null>(null);
     const profileMenuRef = useRef<HTMLDivElement>(null);
     const bannerResumeHandledRef = useRef(false);
+    const loadMoreRef = useRef<HTMLDivElement | null>(null);
+    const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE_LISTINGS);
+    const [isAppendingListings, setIsAppendingListings] = useState(false);
     const resumeAction = searchParams.get("resume");
     const globalPassOneDayAmount = 99;
 
@@ -367,10 +373,42 @@ export default function HomePage() {
         router.replace("/");
     }, [isAuthenticated, resumeAction, router]);
 
-    const visibleListings = useMemo(() => {
+    const filteredListings = useMemo(() => {
         if (!selectedCategory) return feed.listings;
         return feed.listings.filter((item) => matchesCategory(item, selectedCategory));
     }, [feed.listings, selectedCategory]);
+
+    const visibleListings = useMemo(
+        () => filteredListings.slice(0, visibleCount),
+        [filteredListings, visibleCount]
+    );
+
+    const hasMoreListings = visibleCount < filteredListings.length;
+
+    useEffect(() => {
+        setVisibleCount(Math.min(INITIAL_VISIBLE_LISTINGS, filteredListings.length));
+    }, [filteredListings, selectedCategory]);
+
+    useEffect(() => {
+        if (!hasMoreListings || loading) return;
+        const node = loadMoreRef.current;
+        if (!node) return;
+
+        const observer = new IntersectionObserver(
+            (entries) => {
+                if (!entries[0]?.isIntersecting || isAppendingListings) return;
+                setIsAppendingListings(true);
+                window.setTimeout(() => {
+                    setVisibleCount((prev) => Math.min(filteredListings.length, prev + LISTINGS_APPEND_CHUNK));
+                    setIsAppendingListings(false);
+                }, 80);
+            },
+            { rootMargin: "280px 0px" }
+        );
+
+        observer.observe(node);
+        return () => observer.disconnect();
+    }, [hasMoreListings, isAppendingListings, loading, filteredListings.length]);
 
     const refreshHomePassStatus = async (): Promise<PassStatus | null> => {
         try {
@@ -882,20 +920,27 @@ export default function HomePage() {
                             )}
                         </div>
                     ) : (
-                        <div className="grid grid-cols-1 items-stretch gap-5 sm:grid-cols-2 sm:gap-6 xl:grid-cols-3">
-                            {visibleListings.map((property, idx) => (
-                                <div
-                                    key={property.id}
-                                    className="animate-card"
-                                    style={{ animationDelay: `${Math.min(idx * 0.06, 0.4)}s` }}
-                                >
-                                    <RevampPropertyCard
-                                        property={property}
-                                        onClick={() => router.push(`/booking/${property.id}`)}
-                                    />
+                        <>
+                            <div className="grid grid-cols-1 items-stretch gap-5 sm:grid-cols-2 sm:gap-6 xl:grid-cols-3">
+                                {visibleListings.map((property, idx) => (
+                                    <div
+                                        key={property.id}
+                                        className="animate-card"
+                                        style={{ animationDelay: `${Math.min(idx * 0.06, 0.4)}s` }}
+                                    >
+                                        <RevampPropertyCard
+                                            property={property}
+                                            onClick={() => router.push(`/booking/${property.id}`)}
+                                        />
+                                    </div>
+                                ))}
+                            </div>
+                            {hasMoreListings ? (
+                                <div ref={loadMoreRef} className="mt-6 flex justify-center py-4 text-sm text-white/45">
+                                    {isAppendingListings ? "Loading more..." : "Scroll for more listings"}
                                 </div>
-                            ))}
-                        </div>
+                            ) : null}
+                        </>
                     )}
                 </section>
 

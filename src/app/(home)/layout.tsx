@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
-import AuthLayoutWrapper from "@/components/AuthLayoutWrapper";
 import SiteFooter from "@/components/legal/SiteFooter";
 import { getPublicSiteUrl } from "@/lib/runtime/publicEnv";
 export const metadata: Metadata = {
@@ -26,19 +25,17 @@ export default function HomeLayout({
     children: React.ReactNode;
 }) {
     return (
-        <AuthLayoutWrapper>
-            <Suspense
-                fallback={
-                    <div className="flex h-screen w-full items-center justify-center bg-[#040405]">
-                        <div className="text-xl text-white">Loading...</div>
-                    </div>
-                }
-            >
-                <div className="flex min-h-screen w-full flex-col bg-[#040405]">
-                    <div className="flex-1">{children}</div>
-                    <SiteFooter />
+        <Suspense
+            fallback={
+                <div className="flex min-h-screen w-full items-center justify-center bg-[#040405] text-white/60">
+                    Loading...
                 </div>
-            </Suspense>
-        </AuthLayoutWrapper>
+            }
+        >
+            <div className="flex min-h-screen w-full flex-col bg-[#040405]">
+                <div className="flex-1">{children}</div>
+                <SiteFooter />
+            </div>
+        </Suspense>
     );
 }

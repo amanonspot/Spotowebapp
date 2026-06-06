@@ -2,7 +2,6 @@
 
 import React from "react";
 import BlurImage from "@/components/revamp/BlurImage";
-import PropertyMediaPreview from "@/components/revamp/PropertyMediaPreview";
 import { PropertyListItem } from "@/lib/adapters/types";
 import { isVideoMediaUrl } from "@/lib/rentals/mediaUtils";
 
@@ -27,14 +26,12 @@ export default function RevampPropertyCard({ property, onClick, compact = false 
                 {/* Image container with zoom + gradient overlay */}
                 <div className={`relative w-full overflow-hidden ${compact ? "h-40 sm:h-48" : "h-48 sm:h-56"}`}>
                     {property.galleryMedia?.[0]?.mediaType === "video" || isVideoMediaUrl(property.image) ? (
-                        <PropertyMediaPreview
-                            item={property.galleryMedia?.[0] || property.image}
-                            alt={property.title}
-                            className="h-full w-full object-cover"
-                            controls={false}
-                            autoPlay
+                        <video
+                            src={property.galleryMedia?.[0]?.url || property.image}
+                            className="img-zoom h-full w-full object-cover"
                             muted
-                            loop
+                            playsInline
+                            preload="none"
                         />
                     ) : (
                         <BlurImage
@@ -45,6 +42,11 @@ export default function RevampPropertyCard({ property, onClick, compact = false 
                             loading="lazy"
                         />
                     )}
+                    {(property.galleryMedia?.[0]?.mediaType === "video" || isVideoMediaUrl(property.image)) ? (
+                        <span className="pointer-events-none absolute left-3 bottom-3 rounded-md bg-black/70 px-2 py-1 text-[10px] font-semibold text-white">
+                            Video
+                        </span>
+                    ) : null}
 
                     {/* Dark gradient overlay at bottom */}
                     <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />

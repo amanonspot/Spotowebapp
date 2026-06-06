@@ -56,7 +56,7 @@ export const useAuth = () => {
       return userData;
     } catch (err: any) {
       const status = err?.status;
-      if (status === 401 || status === 403) {
+      if (status === 401) {
         clearMockSession();
         authService.logout();
         resetSessionState();

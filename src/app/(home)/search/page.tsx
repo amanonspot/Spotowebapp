@@ -75,27 +75,29 @@ export default function SearchPage() {
 
         const boot = async () => {
             try {
-                const feed = await propertyAdapter.getHomeFeed();
-                if (mounted === false) return;
-
-                setLocalities(
-                    feed.localityOptions && feed.localityOptions.length > 0
-                        ? feed.localityOptions
-                        : feed.localities.map((name) => ({ id: name, name }))
-                );
-
-                const suggestionSet = new Set<string>();
-                feed.listings.forEach((listing) => {
-                    (listing.badges || []).forEach((badge) => suggestionSet.add(badge));
-                    (listing.features || []).forEach((feature) => suggestionSet.add(feature));
-                });
-                setKeywordSuggestions(Array.from(suggestionSet).slice(0, 12));
-
-                const [propertyTypesRes, bhkRes, amenitiesRes] = await Promise.allSettled([
+                const [propertyTypesRes, bhkRes, amenitiesRes, citiesRes] = await Promise.allSettled([
                     rentalsService.listPropertyTypes(),
                     rentalsService.listBhkTypes(),
                     rentalsService.listAmenities(),
+                    rentalsService.listCities(),
                 ]);
+                if (mounted === false) return;
+
+                const cityOptions =
+                    citiesRes.status === "fulfilled"
+                        ? normalizeMasterOptions(citiesRes.value).map(toMasterSelectOption)
+                        : [];
+                const primaryCityId = cityOptions[0]?.id;
+                if (primaryCityId) {
+                    try {
+                        const localityRes = await rentalsService.listLocalities(primaryCityId);
+                        if (mounted) {
+                            setLocalities(normalizeMasterOptions(localityRes).map(toMasterSelectOption));
+                        }
+                    } catch {
+                        // localities load with first search results
+                    }
+                }
 
                 if (propertyTypesRes.status === "fulfilled") {
                     setPropertyTypeOptions(normalizeMasterOptions(propertyTypesRes.value).map(toMasterSelectOption));

@@ -70,25 +70,26 @@ const toIdByTokenMap = (wires: RentalMasterOptionDto[]): Record<string, string> 
         return acc;
     }, {});
 
-const buildNormalizationContext = async (payload: WireApiEnvelope<unknown>) => {
-    const wires = unwrapToList(payload);
+const HOME_LIST_PAGE_SIZE = 24;
+
+const cityIdsFromPayload = (payload: WireApiEnvelope<unknown>) => {
     const cityIds = new Set<string>();
-    wires.forEach((wire) => {
+    unwrapToList(payload).forEach((wire) => {
         const cityId = `${wire.city_id || wire.city || ""}`.trim();
         if (isUuidLike(cityId)) cityIds.add(cityId);
     });
+    return cityIds;
+};
 
-    const [citiesRes, amenitiesRes, localitiesRes, propertyTypesRes, bhkRes, furnishingRes, availabilityRes] =
-        await Promise.allSettled([
-        rentalsService.listCities(),
-        rentalsService.listAmenities(),
-        Promise.all(Array.from(cityIds).map((cityId) => rentalsService.listLocalities(cityId))),
-        rentalsService.listPropertyTypes(),
-        rentalsService.listBhkTypes(),
-        rentalsService.listFurnishingTypes(),
-        rentalsService.listAvailabilityTypes(),
-    ]);
-
+const contextFromMasterResults = (
+    citiesRes: PromiseSettledResult<WireApiEnvelope<unknown>>,
+    amenitiesRes: PromiseSettledResult<WireApiEnvelope<unknown>>,
+    localitiesRes: PromiseSettledResult<WireApiEnvelope<unknown>[]>,
+    propertyTypesRes: PromiseSettledResult<WireApiEnvelope<unknown>>,
+    bhkRes: PromiseSettledResult<WireApiEnvelope<unknown>>,
+    furnishingRes: PromiseSettledResult<WireApiEnvelope<unknown>>,
+    availabilityRes: PromiseSettledResult<WireApiEnvelope<unknown>>
+) => {
     const propertyTypeWires =
         propertyTypesRes.status === "fulfilled" ? normalizeMasterOptions(propertyTypesRes.value) : [];
     const bhkWires = bhkRes.status === "fulfilled" ? normalizeMasterOptions(bhkRes.value) : [];
@@ -120,6 +121,64 @@ const buildNormalizationContext = async (payload: WireApiEnvelope<unknown>) => {
         furnishingIdByToken: toIdByTokenMap(furnishingWires),
         availabilityIdByToken: toIdByTokenMap(availabilityWires),
     };
+};
+
+const buildNormalizationContext = async (payload: WireApiEnvelope<unknown>) => {
+    const cityIds = cityIdsFromPayload(payload);
+
+    const [citiesRes, amenitiesRes, localitiesRes, propertyTypesRes, bhkRes, furnishingRes, availabilityRes] =
+        await Promise.allSettled([
+            rentalsService.listCities(),
+            rentalsService.listAmenities(),
+            Promise.all(Array.from(cityIds).map((cityId) => rentalsService.listLocalities(cityId))),
+            rentalsService.listPropertyTypes(),
+            rentalsService.listBhkTypes(),
+            rentalsService.listFurnishingTypes(),
+            rentalsService.listAvailabilityTypes(),
+        ]);
+
+    return contextFromMasterResults(
+        citiesRes,
+        amenitiesRes,
+        localitiesRes,
+        propertyTypesRes,
+        bhkRes,
+        furnishingRes,
+        availabilityRes
+    );
+};
+
+const fetchMastersBundle = () =>
+    Promise.allSettled([
+        rentalsService.listCities(),
+        rentalsService.listAmenities(),
+        rentalsService.listPropertyTypes(),
+        rentalsService.listBhkTypes(),
+        rentalsService.listFurnishingTypes(),
+        rentalsService.listAvailabilityTypes(),
+    ]);
+
+const buildNormalizationContextFast = async (
+    payload: WireApiEnvelope<unknown>,
+    prefetchedMasters?: PromiseSettledResult<WireApiEnvelope<unknown>>[]
+) => {
+    const cityIds = cityIdsFromPayload(payload);
+    const [masters, localitiesRes] = await Promise.all([
+        prefetchedMasters ?? fetchMastersBundle(),
+        Promise.allSettled(Promise.all(Array.from(cityIds).map((cityId) => rentalsService.listLocalities(cityId)))),
+    ]);
+
+    const [citiesRes, amenitiesRes, propertyTypesRes, bhkRes, furnishingRes, availabilityRes] = masters;
+
+    return contextFromMasterResults(
+        citiesRes,
+        amenitiesRes,
+        localitiesRes,
+        propertyTypesRes,
+        bhkRes,
+        furnishingRes,
+        availabilityRes
+    );
 };
 
 const isTenantVisible = (item: PropertyListItem): boolean => {
@@ -303,8 +362,11 @@ const toHomeFeed = (items: PropertyListItem[]): HomeFeed => {
 class ApiFirstPropertyAdapter implements PropertyAdapter {
     async getHomeFeed(): Promise<HomeFeed> {
         try {
-            const response = await rentalsService.listProperties();
-            const context = await buildNormalizationContext(response);
+            const [response, masters] = await Promise.all([
+                rentalsService.listProperties({ page: 1, page_size: HOME_LIST_PAGE_SIZE }),
+                fetchMastersBundle(),
+            ]);
+            const context = await buildNormalizationContextFast(response, masters);
             const normalized = normalizePropertyList(response, { fallbackToMock: RENTALS_MOCK_MODE, ...context });
             const liveVisible = RENTALS_MOCK_MODE ? normalized : normalized.filter(isTenantVisible);
             const merged = RENTALS_MOCK_MODE ? mergeListWithSynced(liveVisible) : liveVisible;
@@ -326,8 +388,15 @@ class ApiFirstPropertyAdapter implements PropertyAdapter {
             if (!params.bhk_id) {
                 params.bhk_id = await resolveBhkIdFromFilters(filters);
             }
-            const response = await rentalsService.listProperties(params);
-            const context = await buildNormalizationContext(response);
+            const [response, masters] = await Promise.all([
+                rentalsService.listProperties({
+                    ...params,
+                    page: params.page ?? 1,
+                    page_size: params.page_size ?? HOME_LIST_PAGE_SIZE,
+                }),
+                fetchMastersBundle(),
+            ]);
+            const context = await buildNormalizationContextFast(response, masters);
             const normalized = normalizePropertyList(response, { fallbackToMock: RENTALS_MOCK_MODE, ...context });
             const liveVisible = RENTALS_MOCK_MODE ? normalized : normalized.filter(isTenantVisible);
             const merged = RENTALS_MOCK_MODE ? mergeListWithSynced(liveVisible) : liveVisible;
