@@ -15,6 +15,7 @@ import { useAuth } from "@/lib/hooks/useAuth";
 import { getUnlockedTenantContacts, rentalsService, type UnlockedContactRecord } from "@/lib/rentals";
 import UnlockPaymentFlowOverlay from "@/app/(home)/booking/[slug]/_components/UnlockPaymentFlowOverlay";
 import { runRazorpayCheckout } from "@/lib/payments/razorpayCheckout";
+import { pushEvent, ANALYTICS_EVENTS } from "@/lib/analytics";
 
 const INITIAL_VISIBLE_LISTINGS = 9;
 const LISTINGS_APPEND_CHUNK = 6;
@@ -345,6 +346,10 @@ export default function HomePage() {
                 const nextFeed = await propertyAdapter.getHomeFeed();
                 if (mounted) {
                     setFeed(nextFeed);
+                    pushEvent(ANALYTICS_EVENTS.HOME_LOADED, {
+                        property_count: nextFeed.listings.length,
+                        is_logged_in: false,
+                    });
                 }
             } catch (feedError) {
                 if (mounted) {
@@ -871,7 +876,15 @@ export default function HomePage() {
                                 <RevampPropertyCard
                                     property={property}
                                     compact
-                                    onClick={() => router.push(`/booking/${property.id}`)}
+                                    onClick={() => {
+                                        pushEvent(ANALYTICS_EVENTS.PROPERTY_CARD_CLICKED, {
+                                            property_id: property.id,
+                                            city: '',
+                                            source: 'home',
+                                            position_index: 0,
+                                        });
+                                        router.push(`/booking/${property.id}`);
+                                    }}
                                 />
                             </div>
                         ))}
@@ -930,7 +943,15 @@ export default function HomePage() {
                                     >
                                         <RevampPropertyCard
                                             property={property}
-                                            onClick={() => router.push(`/booking/${property.id}`)}
+                                            onClick={() => {
+                                                pushEvent(ANALYTICS_EVENTS.PROPERTY_CARD_CLICKED, {
+                                                    property_id: property.id,
+                                                    city: '',
+                                                    source: 'home',
+                                                    position_index: idx,
+                                                });
+                                                router.push(`/booking/${property.id}`);
+                                            }}
                                         />
                                     </div>
                                 ))}

@@ -3,6 +3,9 @@ import { Suspense } from "react";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Toaster } from "react-hot-toast";
 import { getPublicSiteUrl } from "@/lib/runtime/publicEnv";
+import { GTMScript, GTMNoScript } from "@/components/gtm/GTMScript";
+import AnalyticsProvider from "@/lib/analytics/AnalyticsProvider";
+import CookieConsentBanner from "@/components/consent/CookieConsentBanner";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -49,44 +52,51 @@ export default function RootLayout({
 }>) {
     return (
         <html lang="en" translate="no">
+            <head>
+                <GTMScript />
+            </head>
             <body
                 className={`${geistSans.variable} ${geistMono.variable} antialiased`}
                 suppressHydrationWarning={true}
             >
-                <Suspense
-                    fallback={
-                        <div className="w-full h-screen bg-black flex items-center justify-center">
-                            <div className="text-white text-xl">Loading...</div>
-                        </div>
-                    }
-                >
-                    {children}
-                </Suspense>
-                <Toaster
-                    position="top-right"
-                    toastOptions={{
-                        duration: 4000,
-                        style: {
-                            background: '#1a1a1a',
-                            color: '#fff',
-                            border: '1px solid #333',
-                        },
-                        success: {
+                <GTMNoScript />
+                <AnalyticsProvider>
+                    <Suspense
+                        fallback={
+                            <div className="w-full h-screen bg-black flex items-center justify-center">
+                                <div className="text-white text-xl">Loading...</div>
+                            </div>
+                        }
+                    >
+                        {children}
+                    </Suspense>
+                    <Toaster
+                        position="top-right"
+                        toastOptions={{
+                            duration: 4000,
                             style: {
                                 background: '#1a1a1a',
                                 color: '#fff',
-                                border: '1px solid #4ade80',
+                                border: '1px solid #333',
                             },
-                        },
-                        error: {
-                            style: {
-                                background: '#1a1a1a',
-                                color: '#fff',
-                                border: '1px solid #ef4444',
+                            success: {
+                                style: {
+                                    background: '#1a1a1a',
+                                    color: '#fff',
+                                    border: '1px solid #4ade80',
+                                },
                             },
-                        },
-                    }}
-                />
+                            error: {
+                                style: {
+                                    background: '#1a1a1a',
+                                    color: '#fff',
+                                    border: '1px solid #ef4444',
+                                },
+                            },
+                        }}
+                    />
+                    <CookieConsentBanner />
+                </AnalyticsProvider>
             </body>
         </html>
     );

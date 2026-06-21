@@ -11,6 +11,7 @@ import { propertyAdapter } from "@/lib/adapters";
 import { FilterState, PropertyListItem, SelectOption } from "@/lib/adapters/types";
 import { normalizeMasterOptions, rentalsService, toMasterSelectOption } from "@/lib/rentals";
 import { defaultFilterState } from "@/mocks/properties";
+import { pushEvent, ANALYTICS_EVENTS } from "@/lib/analytics";
 
 const PREF_FLAG = "spoto_pref_completed";
 const INITIAL_VISIBLE_RESULTS = 9;
@@ -43,15 +44,39 @@ export default function SearchPage() {
     const appendTimerRef = useRef<number | null>(null);
     const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const latestFiltersRef = useRef<FilterState | null>(null);
+    const searchStartedRef = useRef(false);
+    const lastSearchedFiltersRef = useRef<FilterState | null>(null);
 
     const runSearch = useCallback(async (nextFilters: FilterState) => {
         setLoading(true);
         setError(null);
         try {
             const data = await propertyAdapter.searchProperties(nextFilters);
-            // Discard stale results if a newer search has already been queued
             if (latestFiltersRef.current !== nextFilters) return;
             setResults(data);
+            lastSearchedFiltersRef.current = nextFilters;
+
+            pushEvent(ANALYTICS_EVENTS.SEARCH_PERFORMED, {
+                city: nextFilters.query || undefined,
+                bhk_type: nextFilters.bhk?.join(',') || undefined,
+                min_rent: nextFilters.budgetMin || undefined,
+                max_rent: nextFilters.budgetMax || undefined,
+                filter_count: Object.values(nextFilters).filter(Boolean).length,
+            });
+
+            pushEvent(ANALYTICS_EVENTS.SEARCH_RESULTS_VIEWED, {
+                result_count: data.length,
+                city: nextFilters.query || undefined,
+            });
+
+            if (data.length === 0) {
+                pushEvent(ANALYTICS_EVENTS.NO_RESULTS_SHOWN, {
+                    city: nextFilters.query || undefined,
+                    bhk_type: nextFilters.bhk?.join(',') || undefined,
+                    min_rent: nextFilters.budgetMin || undefined,
+                    max_rent: nextFilters.budgetMax || undefined,
+                });
+            }
         } catch (searchError) {
             if (latestFiltersRef.current !== nextFilters) return;
             setResults([]);
@@ -202,6 +227,24 @@ export default function SearchPage() {
         runSearch(filters);
     };
 
+    // Fire search_abandoned on unmount if user typed but never saw results
+    useEffect(() => {
+        return () => {
+            const f = lastSearchedFiltersRef.current;
+            const hasInput = Boolean(filters.query || (f && f.query));
+            if (searchStartedRef.current && hasInput) {
+                pushEvent(ANALYTICS_EVENTS.SEARCH_ABANDONED, {
+                    city_filled: Boolean(filters.query),
+                    bhk_filled: Boolean(filters.bhk?.length),
+                    rent_filled: Boolean(filters.budgetMin || filters.budgetMax),
+                    time_spent_seconds: 0,
+                    fields_filled_count: [filters.query, filters.bhk?.length, filters.budgetMin, filters.budgetMax].filter(Boolean).length,
+                });
+            }
+        };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
     return (
         <main className="min-h-screen bg-[#040405] pb-24 text-white">
             <div className="mx-auto max-w-[1280px] px-4 pb-8 pt-4 sm:px-6 lg:px-8">
@@ -232,6 +275,12 @@ export default function SearchPage() {
                     <input
                         value={filters.query}
                         onChange={(e) => setFilters((prev) => ({ ...prev, query: e.target.value }))}
+                        onFocus={() => {
+                            if (!searchStartedRef.current) {
+                                searchStartedRef.current = true;
+                                pushEvent(ANALYTICS_EVENTS.SEARCH_STARTED, { source_page: 'search' });
+                            }
+                        }}
                         placeholder="Search locality, city or property..."
                         className="w-full bg-transparent text-base outline-none placeholder:text-white/35"
                     />
@@ -307,7 +356,15 @@ export default function SearchPage() {
                                 >
                                     <RevampPropertyCard
                                         property={property}
-                                        onClick={() => router.push("/booking/" + property.id)}
+                                        onClick={() => {
+                                            pushEvent(ANALYTICS_EVENTS.PROPERTY_CARD_CLICKED, {
+                                                property_id: property.id,
+                                                city: filters.query || '',
+                                                source: 'search',
+                                                position_index: idx,
+                                            });
+                                            router.push("/booking/" + property.id);
+                                        }}
                                     />
                                 </div>
                             ))}

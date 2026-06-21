@@ -14,6 +14,7 @@ import { extractLatLngFromGoogleMapsUrl } from "@/lib/maps/parseGoogleMapsUrl";
 import { isVideoMediaUrl } from "@/lib/rentals/mediaUtils";
 import type { PropertyMediaItem } from "@/lib/rentals/mediaUtils";
 import { runRazorpayCheckout } from "@/lib/payments/razorpayCheckout";
+import { pushEvent, ANALYTICS_EVENTS, generateEventId } from "@/lib/analytics";
 
 interface PageProps {
     params: Promise<{ slug: string }>;
@@ -68,6 +69,7 @@ export default function BookingDetailPage({ params }: PageProps) {
     } | null>(null);
     const [passStatusHydrated, setPassStatusHydrated] = useState(false);
     const resumeHandledRef = useRef(false);
+    const passEventIdRef = useRef<string>('');
     const resumeAction = searchParams.get("resume");
     const paymentAmount = 99;
 
@@ -130,6 +132,14 @@ export default function BookingDetailPage({ params }: PageProps) {
                 const detail = await propertyAdapter.getPropertyDetail(slug);
                 if (mounted) {
                     setProperty(detail);
+                    pushEvent(ANALYTICS_EVENTS.PROPERTY_DETAIL_VIEWED, {
+                        property_id: detail.id,
+                        city: detail.city ?? '',
+                        locality: detail.locality ?? '',
+                        bhk: detail.bhk ?? '',
+                        rent: detail.pricePerMonth ?? 0,
+                        property_type: detail.propertyTypes?.[0] ?? '',
+                    });
                 }
             } catch (err) {
                 if (mounted) {
@@ -179,6 +189,17 @@ export default function BookingDetailPage({ params }: PageProps) {
             onAuthenticated: async () => {
                 setUnlockBusy(true);
                 setPaymentError(null);
+
+                pushEvent(ANALYTICS_EVENTS.PROPERTY_UNLOCK_CLICKED, {
+                    property_id: property.id,
+                    city: property.city ?? '',
+                    bhk: property.bhk ?? '',
+                    rent: property.pricePerMonth ?? 0,
+                    credits_available: 0,
+                    has_pass: Boolean(activePassInfo),
+                    unlock_method_available: activePassInfo ? 'pass' : 'credit',
+                });
+
                 try {
                     const started = await checkoutAdapter.startUnlock({
                         propertyId: property.id,
@@ -190,16 +211,35 @@ export default function BookingDetailPage({ params }: PageProps) {
                     if (result.status === "success") {
                         setIsUnlocked(true);
                         setPaymentFlowState("idle");
+                        pushEvent(ANALYTICS_EVENTS.PROPERTY_UNLOCK_SUCCESS, {
+                            property_id: property.id,
+                            city: property.city ?? '',
+                            bhk: property.bhk ?? '',
+                            rent: property.pricePerMonth ?? 0,
+                            unlock_method: 'credit',
+                        });
                         return;
                     }
 
                     if (result.status === "paywall") {
                         const oneDayPrice = result.paywall?.oneDay?.price || paymentAmount;
                         openPaymentFlow(oneDayPrice);
+                        pushEvent(ANALYTICS_EVENTS.PROPERTY_UNLOCK_FAILED, {
+                            property_id: property.id,
+                            city: property.city ?? '',
+                            bhk: property.bhk ?? '',
+                            rent: property.pricePerMonth ?? 0,
+                            failure_reason: 'no_credits',
+                        });
                         return;
                     }
 
                     setPaymentError(result.message || "Unable to unlock owner contact.");
+                    pushEvent(ANALYTICS_EVENTS.PROPERTY_UNLOCK_FAILED, {
+                        property_id: property.id,
+                        city: property.city ?? '',
+                        failure_reason: 'api_error',
+                    });
                 } catch (error) {
                     setPaymentError(error instanceof Error ? error.message : "Unable to unlock owner contact.");
                 } finally {
@@ -247,6 +287,16 @@ export default function BookingDetailPage({ params }: PageProps) {
         setPaymentError(null);
         setPaymentFlowState("payment_initiated");
 
+        const eventId = generateEventId();
+        passEventIdRef.current = eventId;
+
+        pushEvent(ANALYTICS_EVENTS.PASS_PURCHASE_STARTED, {
+            pass_price: paymentContext.amount,
+            currency: 'INR',
+            source: 'property_detail',
+            property_id: property.id,
+        }, eventId);
+
         try {
             // Step 1: Create a checkout session state if not already created
             let baseState = checkoutState;
@@ -273,6 +323,10 @@ export default function BookingDetailPage({ params }: PageProps) {
 
             if (outcome !== "success") {
                 setPaymentFlowState("payment_failed");
+                pushEvent(ANALYTICS_EVENTS.PASS_PURCHASE_CANCELLED, {
+                    pass_price: paymentContext.amount,
+                    currency: 'INR',
+                }, passEventIdRef.current);
                 return;
             }
 
@@ -293,6 +347,11 @@ export default function BookingDetailPage({ params }: PageProps) {
                 setIsUnlocked(true);
                 setPaymentFlowState("payment_success");
                 await refreshPassStatus();
+                pushEvent(ANALYTICS_EVENTS.PASS_PURCHASE_COMPLETED, {
+                    pass_price: paymentContext.amount,
+                    currency: 'INR',
+                    razorpay_payment_id: passState.payment?.razorpayOrderId ?? '',
+                }, passEventIdRef.current);
             } else {
                 setPaymentFlowState("payment_failed");
                 setPaymentError("Payment received. Contact will unlock shortly — please refresh.");
@@ -300,6 +359,11 @@ export default function BookingDetailPage({ params }: PageProps) {
         } catch (err) {
             setPaymentFlowState("payment_failed");
             setPaymentError(err instanceof Error ? err.message : "Unable to process payment.");
+            pushEvent(ANALYTICS_EVENTS.PASS_PURCHASE_FAILED, {
+                pass_price: paymentContext?.amount ?? 99,
+                currency: 'INR',
+                failure_reason: err instanceof Error ? err.message : 'unknown',
+            }, passEventIdRef.current);
         } finally {
             setPaymentBusy(false);
         }

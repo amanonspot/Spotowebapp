@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Bell, Building2, ChevronLeft, House, Plus, Upload, X } from "lucide-react";
 import OwnerMapPinPicker from "@/components/owner/OwnerMapPinPicker";
@@ -15,6 +15,7 @@ import { extractLatLngFromGoogleMapsUrl } from "@/lib/maps/parseGoogleMapsUrl";
 import { OwnerListingFormInput, OwnerMastersData, SelectOption } from "@/lib/adapters/types";
 import { RENTALS_MOCK_MODE } from "@/lib/rentals";
 import { isVideoFile } from "@/lib/rentals/mediaUtils";
+import { pushEvent, ANALYTICS_EVENTS } from "@/lib/analytics";
 
 const CREATE_STEP_TITLES = [
     "Select Property Type",
@@ -282,6 +283,34 @@ export default function OwnerListingWizard({
     const [initialLoadNonce, setInitialLoadNonce] = useState(0);
     const [localitySearch, setLocalitySearch] = useState("");
     const [prefillHydrated, setPrefillHydrated] = useState(false);
+
+    // ── Analytics: track time spent on each wizard step ───────────────────────
+    const stepStartRef = useRef<number>(Date.now());
+    const wizardStartedRef = useRef(false);
+
+    // Fire listing_wizard_started once on mount
+    useEffect(() => {
+        if (wizardStartedRef.current) return;
+        wizardStartedRef.current = true;
+        pushEvent(ANALYTICS_EVENTS.LISTING_WIZARD_STARTED, {
+            user_type: isAgentFlow ? "agent" : "owner",
+        });
+        stepStartRef.current = Date.now();
+    }, [isAgentFlow]);
+
+    // Fire listing_wizard_step_completed whenever the step advances
+    const prevStepRef = useRef(1);
+    useEffect(() => {
+        if (step === prevStepRef.current) return;
+        const timeOnStep = Math.round((Date.now() - stepStartRef.current) / 1000);
+        pushEvent(ANALYTICS_EVENTS.LISTING_WIZARD_STEP_COMPLETED, {
+            step_number: prevStepRef.current,
+            step_name: stepTitles[prevStepRef.current - 1],
+            time_on_step_seconds: timeOnStep,
+        });
+        prevStepRef.current = step;
+        stepStartRef.current = Date.now();
+    }, [step, stepTitles]);
 
     useEffect(() => {
         if (!isEditMode) {
@@ -635,6 +664,9 @@ export default function OwnerListingWizard({
         setFieldErrors({});
         try {
             if (totalMediaCount > 10) {
+                pushEvent(ANALYTICS_EVENTS.LISTING_PHOTO_UPLOAD_FAILED, {
+                    error_reason: "max_media_exceeded",
+                });
                 throw new Error(
                     existingMediaCount > 0
                         ? `This listing already has ${existingMediaCount} photo(s)/video(s). Max 10 total — remove some before adding more.`
@@ -672,6 +704,12 @@ export default function OwnerListingWizard({
 
             if (isAgentFlow) {
                 const created = await agentAdapter.submitAgentListing(payload);
+                pushEvent(ANALYTICS_EVENTS.LISTING_PUBLISHED, {
+                    property_id: created.id,
+                    city: selectedCityName,
+                    bhk: form.bhkId,
+                    rent: Number(form.rent) || undefined,
+                });
                 const query = new URLSearchParams({
                     property_id: created.id,
                     owner_phone: created.ownerPhone,
@@ -682,6 +720,12 @@ export default function OwnerListingWizard({
             }
 
             const created = await ownerAdapter.submitListingFinalStep(payload);
+            pushEvent(ANALYTICS_EVENTS.LISTING_PUBLISHED, {
+                property_id: created.id,
+                city: selectedCityName,
+                bhk: form.bhkId,
+                rent: Number(form.rent) || undefined,
+            });
             router.push(`/owner/list-property/pending?property_id=${encodeURIComponent(created.id)}`);
         } catch (submitError) {
             const message = submitError instanceof Error ? submitError.message : "Unable to publish listing.";
@@ -689,6 +733,13 @@ export default function OwnerListingWizard({
             const hasFieldErrors = Object.keys(parsedFieldErrors).length > 0;
             if (hasFieldErrors) setFieldErrors(parsedFieldErrors);
             setSubmitError(message);
+
+            pushEvent(ANALYTICS_EVENTS.LISTING_SUBMIT_FAILED, {
+                step_number: step,
+                step_name: stepTitles[step - 1],
+                field_name: Object.keys(parsedFieldErrors)[0] ?? "unknown",
+                error_message: message.slice(0, 200),
+            });
         } finally {
             setSubmitting(false);
         }
@@ -971,6 +1022,9 @@ export default function OwnerListingWizard({
                                             const nextTotal = existingMediaCount + form.imageFiles.length + incoming.length;
                                             if (nextTotal > MAX_MEDIA) {
                                                 const remaining = MAX_MEDIA - existingMediaCount - form.imageFiles.length;
+                                                pushEvent(ANALYTICS_EVENTS.LISTING_PHOTO_UPLOAD_FAILED, {
+                                                    error_reason: "max_media_exceeded",
+                                                });
                                                 alert(
                                                     remaining > 0
                                                         ? `You can add ${remaining} more item(s). This listing already has ${existingMediaCount} saved photo(s)/video(s).`
@@ -987,6 +1041,9 @@ export default function OwnerListingWizard({
                                                 form.imageFiles.filter((file) => isVideoFile(file)).length +
                                                 incoming.filter((file) => isVideoFile(file)).length;
                                             if (nextVideoCount > MAX_VIDEOS) {
+                                                pushEvent(ANALYTICS_EVENTS.LISTING_PHOTO_UPLOAD_FAILED, {
+                                                    error_reason: "max_videos_exceeded",
+                                                });
                                                 alert(`You can upload max ${MAX_VIDEOS} videos.`);
                                                 return;
                                             }
@@ -995,6 +1052,11 @@ export default function OwnerListingWizard({
                                                 (file) => !isVideoFile(file) && file.size > MAX_PHOTO_SIZE_MB * 1024 * 1024
                                             );
                                             if (oversizedPhoto) {
+                                                pushEvent(ANALYTICS_EVENTS.LISTING_PHOTO_UPLOAD_FAILED, {
+                                                    error_reason: "photo_too_large",
+                                                    file_size_mb: Math.round(oversizedPhoto.size / 1024 / 1024 * 10) / 10,
+                                                    file_type: oversizedPhoto.type,
+                                                });
                                                 alert(`${oversizedPhoto.name} — max size is ${MAX_PHOTO_SIZE_MB}MB per photo.`);
                                                 return;
                                             }
@@ -1003,6 +1065,11 @@ export default function OwnerListingWizard({
                                                 (file) => isVideoFile(file) && file.size > MAX_VIDEO_SIZE_MB * 1024 * 1024
                                             );
                                             if (oversizedVideo) {
+                                                pushEvent(ANALYTICS_EVENTS.LISTING_PHOTO_UPLOAD_FAILED, {
+                                                    error_reason: "video_too_large",
+                                                    file_size_mb: Math.round(oversizedVideo.size / 1024 / 1024 * 10) / 10,
+                                                    file_type: oversizedVideo.type,
+                                                });
                                                 alert(`${oversizedVideo.name} — max size is ${MAX_VIDEO_SIZE_MB}MB per video.`);
                                                 return;
                                             }

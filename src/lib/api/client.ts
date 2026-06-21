@@ -1,5 +1,6 @@
 import axios, { AxiosError, AxiosInstance, AxiosRequestConfig } from "axios";
 import { getApiBaseUrl } from "@/lib/runtime/publicEnv";
+import { getClientId, getSessionId } from "@/lib/analytics/sessionManager";
 
 const API_BASE_URL = getApiBaseUrl();
 
@@ -180,6 +181,16 @@ apiClient.interceptors.request.use((config) => {
         if (token) config.headers.Authorization = `Bearer ${token}`;
         if (refreshToken) config.headers["X-Refresh-Token"] = refreshToken;
     }
+
+    // Attach GA4 attribution headers for server-side event linking
+    if (typeof window !== "undefined") {
+        config.headers = config.headers || {};
+        const clientId = getClientId();
+        const sessionId = getSessionId();
+        if (clientId) config.headers["X-GA-Client-ID"] = clientId;
+        if (sessionId) config.headers["X-GA-Session-ID"] = sessionId;
+    }
+
     return config;
 });
 

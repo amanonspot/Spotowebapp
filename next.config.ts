@@ -13,6 +13,11 @@ const connectSrcHosts = [
     "https://checkout.razorpay.com",
     "https://api.razorpay.com",
     "https://lumberjack.razorpay.com",
+    // GA4 / GTM
+    "https://www.google-analytics.com",
+    "https://analytics.google.com",
+    "https://region1.google-analytics.com",
+    "https://stats.g.doubleclick.net",
 ];
 
 const scriptSrc = [
@@ -22,6 +27,9 @@ const scriptSrc = [
     "https://maps.googleapis.com",
     "https://maps.gstatic.com",
     "https://checkout.razorpay.com",
+    // GTM loader
+    "https://www.googletagmanager.com",
+    "https://www.google-analytics.com",
 ].join(" ");
 
 try {
@@ -35,10 +43,10 @@ const contentSecurityPolicy = [
     "default-src 'self'",
     `script-src ${scriptSrc}`,
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-    "img-src 'self' data: blob: https:",
+    "img-src 'self' data: blob: https: https://www.google-analytics.com https://www.googletagmanager.com",
     `connect-src ${Array.from(new Set(connectSrcHosts)).join(" ")}`,
     "font-src 'self' data: https://fonts.gstatic.com",
-    "frame-src 'self' https://checkout.razorpay.com https://api.razorpay.com https://razorpay.com https://maps.google.com https://www.google.com",
+    "frame-src 'self' https://checkout.razorpay.com https://api.razorpay.com https://razorpay.com https://maps.google.com https://www.google.com https://www.googletagmanager.com",
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",

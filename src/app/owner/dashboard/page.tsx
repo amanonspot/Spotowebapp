@@ -10,6 +10,7 @@ import ShimmerBlock from "@/components/revamp/ShimmerBlock";
 import SwipeUnlock from "@/components/revamp/SwipeUnlock";
 import { OwnerDashboardData, OwnerListingSummary, OwnerListingVerificationState } from "@/lib/adapters/types";
 import { ownerAdapter, agentAdapter } from "@/lib/adapters";
+import { pushEvent, ANALYTICS_EVENTS } from "@/lib/analytics";
 
 const emptyDashboard: OwnerDashboardData = {
     ownerName: "Owner",
@@ -114,6 +115,12 @@ export default function OwnerDashboardPage() {
             try {
                 const next = await ownerAdapter.getDashboard();
                 setDashboard(next);
+                if (mode === "initial") {
+                    pushEvent(ANALYTICS_EVENTS.OWNER_DASHBOARD_VIEWED, {
+                        listing_count: next.listings.length,
+                        total_leads: next.leads.length,
+                    });
+                }
             } catch (loadError) {
                 const message = loadError instanceof Error ? loadError.message : "Unable to load dashboard";
                 setError(message);
@@ -175,9 +182,14 @@ export default function OwnerDashboardPage() {
         setError(null);
         try {
             const unlocked = await ownerAdapter.unlockLead(leadId);
+            const creditsAfter = Math.max(0, dashboard.creditsLeft - 1);
+            pushEvent(ANALYTICS_EVENTS.OWNER_LEAD_UNLOCKED, {
+                lead_id: leadId,
+                credits_remaining_after: creditsAfter,
+            });
             setDashboard((prev) => ({
                 ...prev,
-                creditsLeft: Math.max(0, prev.creditsLeft - 1),
+                creditsLeft: creditsAfter,
                 leads: prev.leads.map((lead) => (lead.id === leadId ? unlocked : lead)),
             }));
             loadDashboard("sync");
