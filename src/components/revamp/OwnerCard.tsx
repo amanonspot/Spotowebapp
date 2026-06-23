@@ -3,11 +3,15 @@
 import React from "react";
 import { OwnerContact } from "@/lib/adapters/types";
 import SwipeUnlock from "@/components/revamp/SwipeUnlock";
+import { pushEvent, ANALYTICS_EVENTS } from "@/lib/analytics";
 
 interface OwnerCardProps {
     owner: OwnerContact;
     isUnlocked: boolean;
     onUnlock?: () => void;
+    propertyId?: string;
+    propertyCity?: string;
+    propertyBhk?: string;
 }
 
 const formatPhone = (phone: string) => {
@@ -22,7 +26,13 @@ const formatPhone = (phone: string) => {
     return `+91 ${local.slice(0, 5)} ${local.slice(5)}`;
 };
 
-export default function OwnerCard({ owner, isUnlocked, onUnlock }: OwnerCardProps) {
+export default function OwnerCard({ owner, isUnlocked, onUnlock, propertyId, propertyCity, propertyBhk }: OwnerCardProps) {
+    const leadContext = {
+        property_id: propertyId ?? '',
+        city: propertyCity ?? '',
+        bhk: propertyBhk ?? '',
+    };
+
     return (
         <section className="overflow-hidden rounded-2xl border border-white/15 bg-[#111116] shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
             <div className="p-4">
@@ -58,12 +68,14 @@ export default function OwnerCard({ owner, isUnlocked, onUnlock }: OwnerCardProp
                             href={`https://wa.me/${owner.whatsappNumber.replace(/\D/g, "")}`}
                             target="_blank"
                             rel="noopener noreferrer"
+                            onClick={() => pushEvent(ANALYTICS_EVENTS.WHATSAPP_OWNER_CLICKED, leadContext)}
                             className="btn-shimmer flex-1 rounded-xl bg-[#A67AEB] px-4 py-3 text-center text-base font-bold text-white"
                         >
                             WhatsApp
                         </a>
                         <a
                             href={`tel:${owner.whatsappNumber}`}
+                            onClick={() => pushEvent(ANALYTICS_EVENTS.CALL_OWNER_CLICKED, leadContext)}
                             className="btn-shimmer flex-1 rounded-xl border border-[#A67AEB]/50 px-4 py-3 text-center text-base font-bold text-white hover:bg-[#A67AEB]/10"
                         >
                             Call

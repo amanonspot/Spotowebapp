@@ -7,6 +7,7 @@ import BlurImage from "@/components/revamp/BlurImage";
 import ShimmerBlock from "@/components/revamp/ShimmerBlock";
 import { agentAdapter } from "@/lib/adapters";
 import { PropertyListItem } from "@/lib/adapters/types";
+import { pushEvent, ANALYTICS_EVENTS } from "@/lib/analytics";
 
 const formatMonth = () =>
     new Intl.DateTimeFormat("en-IN", { month: "long", year: "numeric" }).format(new Date());
@@ -55,6 +56,15 @@ export default function AgentDashboardPage() {
     }, []);
 
     useEffect(() => { load("initial"); }, [load]);
+
+    useEffect(() => {
+        if (!loading && listings.length >= 0) {
+            pushEvent(ANALYTICS_EVENTS.AGENT_DASHBOARD_VIEWED, {
+                listing_count: listings.length,
+            });
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [loading]);
 
     const normalizedSearch = searchQuery.trim().toLowerCase();
     const visible = useMemo(() => {

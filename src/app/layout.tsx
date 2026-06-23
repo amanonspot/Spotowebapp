@@ -4,8 +4,8 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { Toaster } from "react-hot-toast";
 import { getPublicSiteUrl } from "@/lib/runtime/publicEnv";
 import { GTMScript, GTMNoScript } from "@/components/gtm/GTMScript";
+import { MetaPixelScript } from "@/components/meta/MetaPixelScript";
 import AnalyticsProvider from "@/lib/analytics/AnalyticsProvider";
-import CookieConsentBanner from "@/components/consent/CookieConsentBanner";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -54,6 +54,7 @@ export default function RootLayout({
         <html lang="en" translate="no">
             <head>
                 <GTMScript />
+                <MetaPixelScript />
             </head>
             <body
                 className={`${geistSans.variable} ${geistMono.variable} antialiased`}
@@ -95,7 +96,6 @@ export default function RootLayout({
                             },
                         }}
                     />
-                    <CookieConsentBanner />
                 </AnalyticsProvider>
             </body>
         </html>

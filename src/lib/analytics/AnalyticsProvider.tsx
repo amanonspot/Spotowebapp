@@ -18,6 +18,7 @@ import { usePathname } from 'next/navigation';
 import { pushPageView } from './analytics';
 import { captureUtm } from './utmCapture';
 import { initWebVitals } from './webVitals';
+import { mpPageView } from './metaPixel';
 
 interface AnalyticsContextValue {
     /** No values needed publicly yet — extend if required */
@@ -52,6 +53,8 @@ export default function AnalyticsProvider({ children }: AnalyticsProviderProps) 
             return;
         }
         pushPageView(pathname);
+        // Meta Pixel PageView on every SPA navigation
+        mpPageView();
     }, [pathname]);
 
     return (

@@ -15,6 +15,7 @@ import { isVideoMediaUrl } from "@/lib/rentals/mediaUtils";
 import type { PropertyMediaItem } from "@/lib/rentals/mediaUtils";
 import { runRazorpayCheckout } from "@/lib/payments/razorpayCheckout";
 import { pushEvent, ANALYTICS_EVENTS, generateEventId } from "@/lib/analytics";
+import { mpViewContent, mpInitiateCheckout, mpPurchase, mpLead } from "@/lib/analytics/metaPixel";
 
 interface PageProps {
     params: Promise<{ slug: string }>;
@@ -73,7 +74,12 @@ export default function BookingDetailPage({ params }: PageProps) {
     const resumeAction = searchParams.get("resume");
     const paymentAmount = 99;
 
-    const openPaymentFlow = (amount = paymentAmount) => {
+    // ── Engagement tracking refs ───────────────────────────────────────────────
+    const pageEnteredAtRef = useRef<number>(Date.now());
+    const paywallOpenedAtRef = useRef<number | null>(null);
+    const sawPaywallRef = useRef(false);
+
+    const openPaymentFlow = (amount = paymentAmount, trigger: 'no_credits' | 'buy_pass_cta' | 'resume' = 'no_credits') => {
         const context: UnlockPaymentContext = {
             propertyId: property?.id || slug,
             returnPath: `/booking/${slug}`,
@@ -83,6 +89,20 @@ export default function BookingDetailPage({ params }: PageProps) {
         setPaymentContext(context);
         setPaymentError(null);
         setPaymentFlowState("paywall");
+
+        // Track paywall view
+        sawPaywallRef.current = true;
+        paywallOpenedAtRef.current = Date.now();
+        if (property) {
+            pushEvent(ANALYTICS_EVENTS.PASS_PAYWALL_VIEWED, {
+                property_id: property.id,
+                city: property.city ?? '',
+                bhk: property.bhk ?? '',
+                rent: property.pricePerMonth ?? 0,
+                trigger,
+            });
+            mpInitiateCheckout({ property_id: property.id, amount: amount });
+        }
     };
 
     const mapPassStatusToInfo = (data: PassStatusDto | undefined | null) => {
@@ -140,6 +160,12 @@ export default function BookingDetailPage({ params }: PageProps) {
                         rent: detail.pricePerMonth ?? 0,
                         property_type: detail.propertyTypes?.[0] ?? '',
                     });
+                    mpViewContent({
+                        property_id: detail.id,
+                        city: detail.city ?? '',
+                        bhk: detail.bhk ?? '',
+                        rent: detail.pricePerMonth ?? 0,
+                    });
                 }
             } catch (err) {
                 if (mounted) {
@@ -159,6 +185,21 @@ export default function BookingDetailPage({ params }: PageProps) {
         };
     }, [slug]);
 
+    // ── Property detail exit tracking ─────────────────────────────────────────
+    useEffect(() => {
+        pageEnteredAtRef.current = Date.now();
+        return () => {
+            const timeSpent = Math.round((Date.now() - pageEnteredAtRef.current) / 1000);
+            pushEvent(ANALYTICS_EVENTS.PROPERTY_DETAIL_EXITED, {
+                property_id: slug,
+                time_spent_seconds: timeSpent,
+                was_unlocked: false,
+                saw_paywall: sawPaywallRef.current,
+            });
+        };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [slug]);
+
     useEffect(() => {
         setActiveImageIndex(0);
     }, [property?.id]);
@@ -171,7 +212,7 @@ export default function BookingDetailPage({ params }: PageProps) {
         resumeHandledRef.current = true;
 
         const runResumeAction = () => {
-            openPaymentFlow();
+            openPaymentFlow(paymentAmount, 'resume');
             router.replace(`/booking/${slug}`);
         };
 
@@ -218,12 +259,13 @@ export default function BookingDetailPage({ params }: PageProps) {
                             rent: property.pricePerMonth ?? 0,
                             unlock_method: 'credit',
                         });
+                        mpLead({ property_id: property.id, city: property.city ?? '' });
                         return;
                     }
 
                     if (result.status === "paywall") {
                         const oneDayPrice = result.paywall?.oneDay?.price || paymentAmount;
-                        openPaymentFlow(oneDayPrice);
+                        openPaymentFlow(oneDayPrice, 'no_credits');
                         pushEvent(ANALYTICS_EVENTS.PROPERTY_UNLOCK_FAILED, {
                             property_id: property.id,
                             city: property.city ?? '',
@@ -276,7 +318,7 @@ export default function BookingDetailPage({ params }: PageProps) {
                     setUnlockBusy(false);
                 }
 
-                openPaymentFlow(99);
+                openPaymentFlow(99, 'buy_pass_cta');
             },
         });
     };
@@ -323,10 +365,24 @@ export default function BookingDetailPage({ params }: PageProps) {
 
             if (outcome !== "success") {
                 setPaymentFlowState("payment_failed");
+                const timeOnPaywall = paywallOpenedAtRef.current
+                    ? Math.round((Date.now() - paywallOpenedAtRef.current) / 1000)
+                    : 0;
                 pushEvent(ANALYTICS_EVENTS.PASS_PURCHASE_CANCELLED, {
                     pass_price: paymentContext.amount,
                     currency: 'INR',
+                    property_id: property.id,
+                    property_city: property.city ?? '',
+                    property_bhk: property.bhk ?? '',
                 }, passEventIdRef.current);
+                // Also fire paywall dismissed with reached_razorpay: true
+                pushEvent(ANALYTICS_EVENTS.PASS_PAYWALL_DISMISSED, {
+                    property_id: property.id,
+                    city: property.city ?? '',
+                    bhk: property.bhk ?? '',
+                    time_spent_seconds: timeOnPaywall,
+                    reached_razorpay: true,
+                });
                 return;
             }
 
@@ -352,6 +408,13 @@ export default function BookingDetailPage({ params }: PageProps) {
                     currency: 'INR',
                     razorpay_payment_id: passState.payment?.razorpayOrderId ?? '',
                 }, passEventIdRef.current);
+                mpPurchase({
+                    property_id: property.id,
+                    amount: paymentContext.amount,
+                    pass_type: paymentContext.passType,
+                    event_id: passEventIdRef.current,
+                });
+                mpLead({ property_id: property.id, city: property.city ?? '' });
             } else {
                 setPaymentFlowState("payment_failed");
                 setPaymentError("Payment received. Contact will unlock shortly — please refresh.");
@@ -395,6 +458,17 @@ export default function BookingDetailPage({ params }: PageProps) {
     };
 
     const dismissDropoff = () => {
+        const timeOnPaywall = paywallOpenedAtRef.current
+            ? Math.round((Date.now() - paywallOpenedAtRef.current) / 1000)
+            : 0;
+        pushEvent(ANALYTICS_EVENTS.PASS_PAYWALL_DISMISSED, {
+            property_id: property?.id ?? slug,
+            city: property?.city ?? '',
+            bhk: property?.bhk ?? '',
+            time_spent_seconds: timeOnPaywall,
+            reached_razorpay: false,
+        });
+        paywallOpenedAtRef.current = null;
         setPaymentFlowState("idle");
         setPaymentContext(null);
         setPaymentError(null);
@@ -722,7 +796,14 @@ export default function BookingDetailPage({ params }: PageProps) {
 
                 {/* Right — owner & unlock */}
                 <aside className="animate-slide-r space-y-3 md:sticky md:top-4 md:h-fit" style={{ animationDelay: "0.1s" }}>
-                    <OwnerCard owner={effectiveOwner} isUnlocked={isUnlocked} onUnlock={isUnlocked ? undefined : handlePayNow} />
+                    <OwnerCard
+                        owner={effectiveOwner}
+                        isUnlocked={isUnlocked}
+                        onUnlock={isUnlocked ? undefined : handlePayNow}
+                        propertyId={property.id}
+                        propertyCity={property.city ?? ''}
+                        propertyBhk={property.bhk ?? ''}
+                    />
 
                     <UnlockCard
                         offer={property.unlockOffer}

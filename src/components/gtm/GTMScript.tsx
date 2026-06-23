@@ -1,17 +1,9 @@
 /**
  * GTMScript.tsx
  *
- * Renders the Google Tag Manager snippet for Next.js App Router.
- *
- * The GTM head script is loaded with strategy="afterInteractive" so it does
- * not block the page's critical rendering path. The <noscript> fallback is
- * rendered at the top of <body> for users with JavaScript disabled.
- *
- * Consent Mode v2: A consent-defaults script runs BEFORE GTM loads.
- * This sets analytics_storage=denied by default until the user explicitly
- * accepts via the CookieConsentBanner component.
- *
- * Usage: Add <GTMScript /> and <GTMNoScript /> to the root layout.
+ * Consent Mode v2 defaults are set to 'granted' for all storage types.
+ * India mein abhi GDPR jaisa strict law nahi hai, isliye consent banner
+ * nahi hai aur tracking by default enabled hai.
  */
 
 import Script from 'next/script';
@@ -20,18 +12,13 @@ const GTM_ID = process.env.NEXT_PUBLIC_GTM_ID;
 
 const CONSENT_DEFAULT_SCRIPT = `
 (function(){
-  var CONSENT_KEY='spoto_cookie_consent_v1';
-  var stored=null;
-  try { stored=window.localStorage.getItem(CONSENT_KEY); } catch(e){}
-  var granted = stored==='accepted';
   window.dataLayer=window.dataLayer||[];
   function gtag(){window.dataLayer.push(arguments);}
   gtag('consent','default',{
-    analytics_storage: granted?'granted':'denied',
-    ad_storage:'denied',
+    analytics_storage:'granted',
+    ad_storage:'granted',
     functionality_storage:'granted',
-    security_storage:'granted',
-    wait_for_update: granted ? 0 : 500
+    security_storage:'granted'
   });
 })();
 `;

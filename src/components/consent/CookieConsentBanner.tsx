@@ -17,6 +17,7 @@
  */
 
 import { useEffect, useState } from 'react';
+import { metaPixelGrantConsent, metaPixelRevokeConsent } from '@/lib/analytics/metaPixel';
 
 const CONSENT_KEY = 'spoto_cookie_consent_v1';
 
@@ -68,12 +69,14 @@ export default function CookieConsentBanner() {
     const handleAccept = () => {
         storeConsent('accepted');
         updateGtmConsent(true);
+        metaPixelGrantConsent();
         setVisible(false);
     };
 
     const handleDecline = () => {
         storeConsent('declined');
         updateGtmConsent(false);
+        metaPixelRevokeConsent();
         setVisible(false);
     };
 

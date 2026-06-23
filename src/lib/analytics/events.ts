@@ -106,6 +106,13 @@ export const ANALYTICS_EVENTS = {
     // ── Pass Purchase Flow ─────────────────────────────────────────────────────
     /** Fires when user clicks "Buy Day Pass" CTA. */
     PASS_PURCHASE_INITIATED: 'pass_purchase_initiated',
+    /** Fires when the pass paywall overlay is shown to the user. */
+    PASS_PAYWALL_VIEWED: 'pass_paywall_viewed',
+    /**
+     * Fires when user dismisses the paywall overlay without paying.
+     * Includes time_spent_seconds on the paywall.
+     */
+    PASS_PAYWALL_DISMISSED: 'pass_paywall_dismissed',
     /** Fires when runRazorpayCheckout is called (modal about to open). */
     PASS_PURCHASE_STARTED: 'pass_purchase_started',
     /** Fires when Razorpay modal is dismissed by the user. */
@@ -137,6 +144,18 @@ export const ANALYTICS_EVENTS = {
     AUTH_SIGNUP_COMPLETED: 'auth_signup_completed',
     /** Fires when user logs out. */
     AUTH_LOGOUT: 'auth_logout',
+    /**
+     * Fires when an unauthenticated user tries to unlock/buy a pass.
+     * They are redirected to login — this tracks the intent drop-off.
+     */
+    AUTH_WALL_HIT: 'auth_wall_hit',
+
+    // ── Property Detail Engagement ─────────────────────────────────────────────
+    /**
+     * Fires when user navigates away from a property detail page.
+     * Includes time_spent_seconds, was_unlocked, saw_paywall.
+     */
+    PROPERTY_DETAIL_EXITED: 'property_detail_exited',
 
     // ── Owner Listing Wizard ───────────────────────────────────────────────────
     /** Fires when owner opens /owner/list-property. */
@@ -276,6 +295,39 @@ export interface PassPurchaseParams {
     pass_price: number;
     currency: string;
     source?: string;
+    property_id?: string;
+    property_city?: string;
+    property_bhk?: string;
+}
+
+export interface PassPaywallViewedParams {
+    property_id: string;
+    city?: string;
+    bhk?: string;
+    rent?: number;
+    trigger: 'no_credits' | 'buy_pass_cta' | 'resume';
+}
+
+export interface PassPaywallDismissedParams {
+    property_id: string;
+    city?: string;
+    bhk?: string;
+    time_spent_seconds: number;
+    reached_razorpay: boolean;
+}
+
+export interface PropertyDetailExitedParams {
+    property_id: string;
+    city?: string;
+    bhk?: string;
+    time_spent_seconds: number;
+    was_unlocked: boolean;
+    saw_paywall: boolean;
+    exited_to?: string;
+}
+
+export interface AuthWallHitParams {
+    intent: 'unlock_contact' | 'buy_pass';
     property_id?: string;
 }
 
