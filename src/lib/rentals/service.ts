@@ -235,6 +235,18 @@ export const rentalsService = {
         return apiFormData.post<RentalPassActivateResponseDto>("/api/rental/passes/activate/", formData);
     },
 
+    confirmPaymentAndUnlock: (payload: {
+        razorpay_payment_id: string;
+        razorpay_order_id: string;
+        razorpay_signature: string;
+        property_id?: string;
+        name?: string;
+        phone?: string;
+    }) =>
+        api.post<RentalContactUnlockResponseDto>("/api/rental/passes/confirm-and-unlock/", payload, {
+            headers: { "Content-Type": "application/json" },
+        }),
+
     updateAgentProperty: async (
         propertyId: string,
         payload: OwnerPropertyUpsertPayload,

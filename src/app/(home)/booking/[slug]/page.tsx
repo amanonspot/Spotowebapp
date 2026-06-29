@@ -363,7 +363,7 @@ export default function BookingDetailPage({ params }: PageProps) {
             // Step 3: Open Razorpay checkout
             const outcome = await runRazorpayCheckout(passState.payment);
 
-            if (outcome !== "success") {
+            if (outcome.status !== "success" || !outcome.paymentId || !outcome.signature) {
                 setPaymentFlowState("payment_failed");
                 const timeOnPaywall = paywallOpenedAtRef.current
                     ? Math.round((Date.now() - paywallOpenedAtRef.current) / 1000)
@@ -375,7 +375,6 @@ export default function BookingDetailPage({ params }: PageProps) {
                     property_city: property.city ?? '',
                     property_bhk: property.bhk ?? '',
                 }, passEventIdRef.current);
-                // Also fire paywall dismissed with reached_razorpay: true
                 pushEvent(ANALYTICS_EVENTS.PASS_PAYWALL_DISMISSED, {
                     property_id: property.id,
                     city: property.city ?? '',
@@ -386,16 +385,17 @@ export default function BookingDetailPage({ params }: PageProps) {
                 return;
             }
 
-            // Step 4: Confirm unlock via backend (retries for webhook delay)
-            let unlocked = await checkoutAdapter.confirmUnlock(baseState.id);
-            if (unlocked.status !== "success") {
-                // Retry up to 3 times with 1.5s delay (waiting for webhook)
-                for (let attempt = 0; attempt < 3; attempt++) {
-                    await new Promise((r) => setTimeout(r, 1500));
-                    unlocked = await checkoutAdapter.confirmUnlock(baseState.id);
-                    if (unlocked.status === "success") break;
-                }
-            }
+            // Step 4: Verify payment server-side + unlock contact atomically.
+            // Backend verifies Razorpay signature — no webhook, no race condition.
+            const session = authAdapter.getSession();
+            const unlocked = await checkoutAdapter.verifyAndUnlock({
+                razorpayPaymentId: outcome.paymentId,
+                razorpayOrderId: outcome.orderId ?? passState.payment.razorpayOrderId,
+                razorpaySignature: outcome.signature,
+                propertyId: property.id,
+                name: session.userName ?? undefined,
+                phone: session.phone ?? undefined,
+            });
 
             setCheckoutState(unlocked);
 
@@ -406,7 +406,7 @@ export default function BookingDetailPage({ params }: PageProps) {
                 pushEvent(ANALYTICS_EVENTS.PASS_PURCHASE_COMPLETED, {
                     pass_price: paymentContext.amount,
                     currency: 'INR',
-                    razorpay_payment_id: passState.payment?.razorpayOrderId ?? '',
+                    razorpay_payment_id: outcome.paymentId,
                 }, passEventIdRef.current);
                 mpPurchase({
                     property_id: property.id,
@@ -417,7 +417,7 @@ export default function BookingDetailPage({ params }: PageProps) {
                 mpLead({ property_id: property.id, city: property.city ?? '' });
             } else {
                 setPaymentFlowState("payment_failed");
-                setPaymentError("Payment received. Contact will unlock shortly — please refresh.");
+                setPaymentError(unlocked.message || "Payment received. Contact will unlock shortly — please refresh.");
             }
         } catch (err) {
             setPaymentFlowState("payment_failed");

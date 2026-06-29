@@ -124,6 +124,82 @@ const parseUnlockSuccess = (response: RentalContactUnlockResponseDto) => {
 };
 
 class HybridCheckoutAdapter implements CheckoutAdapter {
+    async verifyAndUnlock(params: {
+        razorpayPaymentId: string;
+        razorpayOrderId: string;
+        razorpaySignature: string;
+        propertyId: string;
+        name?: string;
+        phone?: string;
+    }): Promise<CheckoutState> {
+        const session = authAdapter.getSession();
+        const store = readStore();
+        // Find the checkout session for this property
+        const current = Object.values(store).find(s => s.propertyId === params.propertyId)
+            ?? {
+                id: `unlock_${Date.now()}`,
+                propertyId: params.propertyId,
+                amount: 99,
+                status: 'pending' as const,
+                message: 'Verifying payment...',
+                updatedAt: new Date().toISOString(),
+            };
+
+        try {
+            const response = await rentalsService.confirmPaymentAndUnlock({
+                razorpay_payment_id: params.razorpayPaymentId,
+                razorpay_order_id: params.razorpayOrderId,
+                razorpay_signature: params.razorpaySignature,
+                property_id: params.propertyId,
+                name: params.name ?? session.userName ?? undefined,
+                phone: params.phone ?? session.phone ?? undefined,
+            });
+
+            const parsed = parseUnlockSuccess(response);
+            if (!parsed || parsed.type === 'paywall') {
+                const failed: CheckoutState = {
+                    ...current,
+                    status: 'failed',
+                    message: 'Payment verified but contact unlock failed. Please contact support.',
+                    updatedAt: new Date().toISOString(),
+                };
+                saveState(failed);
+                return failed;
+            }
+
+            const success: CheckoutState = {
+                ...current,
+                status: 'success',
+                message: parsed.message,
+                unlockedPhone: parsed.ownerPhone,
+                unlockedName: parsed.ownerName,
+                unlockedDocuments: parsed.documents,
+                updatedAt: new Date().toISOString(),
+            };
+
+            addUnlockedTenantContact({
+                id: `tenant_unlock_${Date.now()}`,
+                propertyId: params.propertyId,
+                name: parsed.ownerName,
+                phone: parsed.ownerPhone,
+                source: 'api',
+                unlockedAt: success.updatedAt,
+            });
+
+            saveState(success);
+            return success;
+        } catch (error) {
+            const failed: CheckoutState = {
+                ...current,
+                status: 'failed',
+                message: extractErrorMessage(error, 'Payment verification failed.'),
+                updatedAt: new Date().toISOString(),
+            };
+            saveState(failed);
+            return failed;
+        }
+    }
+
     async startUnlock(payload: StartUnlockPayload): Promise<CheckoutState> {
         const state = createState(payload);
         saveState(state);
