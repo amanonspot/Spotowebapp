@@ -8,7 +8,7 @@ import Chip from "@/components/revamp/Chip";
 import HomePromoBannerRotator from "@/components/revamp/HomePromoBannerRotator";
 import PrimaryButton from "@/components/revamp/PrimaryButton";
 import RevampPropertyCard from "@/components/revamp/PropertyCard";
-import { checkoutAdapter, propertyAdapter } from "@/lib/adapters";
+import { authAdapter, checkoutAdapter, propertyAdapter } from "@/lib/adapters";
 import { CheckoutState, HomeFeed, PropertyListItem, UnlockPaymentContext, UnlockPaymentFlowState } from "@/lib/adapters/types";
 import { requireAuthThenContinue } from "@/lib/auth/requireAuthAction";
 import { useAuth } from "@/lib/hooks/useAuth";
@@ -426,18 +426,6 @@ export default function HomePage() {
         }
     };
 
-    const waitForPassActivation = async (): Promise<boolean> => {
-        for (let attempt = 0; attempt < 4; attempt++) {
-            const status = await refreshHomePassStatus();
-            if (status?.has_one_day_active || status?.has_weekly_active) {
-                return true;
-            }
-            if (attempt < 3) {
-                await new Promise((resolve) => setTimeout(resolve, 1500));
-            }
-        }
-        return false;
-    };
 
     const handleHomeOverlayPayNow = async () => {
         if (!homePaymentContext || homePaymentBusy) return;
@@ -464,19 +452,31 @@ export default function HomePage() {
             }
 
             const outcome = await runRazorpayCheckout(passState.payment);
-            if (outcome !== "success") {
+
+            if (outcome.status !== "success" || !outcome.paymentId || !outcome.signature) {
                 setHomePaymentFlowState("payment_failed");
                 return;
             }
 
-            const activated = await waitForPassActivation();
-            if (activated) {
+            // Atomically verify payment + activate pass (no webhook race condition)
+            const session = authAdapter.getSession();
+            const unlocked = await checkoutAdapter.verifyAndUnlock({
+                razorpayPaymentId: outcome.paymentId,
+                razorpayOrderId: outcome.orderId ?? passState.payment.razorpayOrderId,
+                razorpaySignature: outcome.signature,
+                propertyId: homePaymentContext.propertyId,
+                name: session.userName ?? undefined,
+                phone: session.phone ?? undefined,
+            });
+
+            if (unlocked.status === "success") {
+                await refreshHomePassStatus();
                 setHomePaymentFlowState("payment_success");
                 return;
             }
 
             setHomePaymentFlowState("payment_failed");
-            setHomePaymentError("Payment received. Pass will activate shortly — please refresh.");
+            setHomePaymentError(unlocked.message || "Payment received. Pass will activate shortly — please refresh.");
         } catch (err) {
             setHomePaymentFlowState("payment_failed");
             setHomePaymentError(err instanceof Error ? err.message : "Unable to process payment.");
