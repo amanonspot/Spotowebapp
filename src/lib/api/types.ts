@@ -60,6 +60,7 @@ export interface UserDetailsResponse extends User {
   // Add any additional fields returned by the API
 }
 
+
 // ==================== Event/Property Types ====================
 
 export interface EventType {
