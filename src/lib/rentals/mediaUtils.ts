@@ -1,6 +1,7 @@
 export type PropertyMediaType = "image" | "video";
 
 export interface PropertyMediaItem {
+    id?: string;
     url: string;
     mediaType: PropertyMediaType;
     isPrimary?: boolean;

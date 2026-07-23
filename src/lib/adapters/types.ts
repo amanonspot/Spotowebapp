@@ -271,6 +271,8 @@ export interface OwnerListingFormInput {
     availabilityMode?: OwnerAvailabilityMode;
     clearImages?: boolean;
     clearDocuments?: boolean;
+    /** Image UUIDs removed in edit mode (sent as delete_image_ids). */
+    deletedImageIds?: string[];
 }
 
 export interface OwnerListingSummary {

@@ -388,6 +388,7 @@ const toUpsertPayload = (input: OwnerListingFormInput): OwnerPropertyUpsertPaylo
     documentFile: input.documentFile,
     clearImages: input.clearImages,
     clearDocuments: input.clearDocuments,
+    deleteImageIds: (input.deletedImageIds || []).filter(Boolean),
 });
 
 const toComparableString = (value: unknown) => JSON.stringify(value ?? null);
@@ -439,6 +440,7 @@ const toPayloadFromWire = (wire: RentalPropertyDto): OwnerPropertyUpsertPayload 
     documentFile: null,
     clearImages: false,
     clearDocuments: false,
+    deleteImageIds: [],
 });
 
 const toExistingMediaFromWire = (wire: RentalPropertyDto): PropertyMediaItem[] => {
@@ -451,6 +453,7 @@ const toExistingMediaFromWire = (wire: RentalPropertyDto): PropertyMediaItem[] =
             const url = isVideo ? videoUrl || imageUrl : imageUrl || videoUrl;
             if (!url) return null;
             return {
+                id: firstString(img.id) || undefined,
                 url,
                 mediaType: isVideo || isVideoMediaUrl(url) ? ("video" as const) : ("image" as const),
             };
@@ -736,6 +739,7 @@ class HybridOwnerAdapter implements OwnerListingAdapter {
             if (input.documentFile) changedKeys.add("documentFile");
             if (input.clearImages) changedKeys.add("clearImages");
             if (input.clearDocuments) changedKeys.add("clearDocuments");
+            if ((input.deletedImageIds?.length || 0) > 0) changedKeys.add("deleteImageIds");
 
             if (changedKeys.size === 0) {
                 throw new Error("No changes to update.");

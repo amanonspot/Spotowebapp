@@ -61,6 +61,7 @@ const toAgentPayload = (input: OwnerListingFormInput): OwnerPropertyUpsertPayloa
         documentFile: input.documentFile,
         clearImages: input.clearImages,
         clearDocuments: input.clearDocuments,
+        deleteImageIds: (input.deletedImageIds || []).filter(Boolean),
     };
 };
 
@@ -109,6 +110,7 @@ export const agentAdapter = {
         if (input.documentFile) changedKeys.add("documentFile");
         if (input.clearImages) changedKeys.add("clearImages");
         if (input.clearDocuments) changedKeys.add("clearDocuments");
+        if ((input.deletedImageIds?.length || 0) > 0) changedKeys.add("deleteImageIds");
 
         if (changedKeys.size === 0) {
             throw new Error("No changes to update.");
@@ -121,6 +123,11 @@ export const agentAdapter = {
             throw new Error("Update succeeded but refreshed agent listings did not return this property.");
         }
         return updated;
+    },
+
+    async deleteProperty(id: string): Promise<void> {
+        await findAgentPropertyWire(id);
+        await rentalsService.deleteAgentProperty(id);
     },
 
     async submitAgentListing(input: OwnerListingFormInput) {

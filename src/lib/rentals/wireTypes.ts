@@ -249,4 +249,5 @@ export interface OwnerPropertyUpsertPayload {
     documentFile?: File | null;
     clearImages?: boolean;
     clearDocuments?: boolean;
+    deleteImageIds?: string[];
 }

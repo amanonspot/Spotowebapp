@@ -172,6 +172,9 @@ const buildOwnerFormData = (
     if (shouldInclude(mode, changedKeys, "clearDocuments") && payload.clearDocuments) {
         appendText(formData, "clear_documents", "true");
     }
+    if (shouldInclude(mode, changedKeys, "deleteImageIds") && payload.deleteImageIds?.length) {
+        appendText(formData, "delete_image_ids", JSON.stringify(payload.deleteImageIds));
+    }
     if (shouldInclude(mode, changedKeys, "documentType")) {
         appendText(formData, "document_type", payload.documentType || "");
     }
@@ -286,6 +289,16 @@ export const rentalsService = {
         clearCache("/api/rental/my/properties/");
         clearCache("/api/rental/properties/");
         return created;
+    },
+
+    deleteAgentProperty: async (propertyId: string) => {
+        const deleted = await api.delete<WireApiEnvelope<{ message?: string }>>(
+            `/api/rental/agent/properties/delete/?property_id=${encodeURIComponent(propertyId)}`
+        );
+        clearCache("/api/rental/agent/properties/");
+        clearCache("/api/rental/properties/");
+        clearCache(`/api/rental/properties/?property_id=${encodeURIComponent(propertyId)}`);
+        return deleted;
     },
 
     getOwnerProperties: () => api.get<WireApiEnvelope<RentalPropertyDto[]>>("/api/rental/my/properties/"),

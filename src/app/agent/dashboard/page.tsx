@@ -39,6 +39,7 @@ export default function AgentDashboardPage() {
     const [syncing, setSyncing] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState("");
+    const [deletingListingId, setDeletingListingId] = useState<string | null>(null);
 
     const load = useCallback(async (mode: "initial" | "sync" = "initial") => {
         if (mode === "initial") setLoading(true);
@@ -75,6 +76,21 @@ export default function AgentDashboardPage() {
             )
         );
     }, [listings, normalizedSearch]);
+
+    const handleDeleteListing = async (listingId: string) => {
+        const confirmed = window.confirm("Delete this listing? This action cannot be undone.");
+        if (!confirmed) return;
+        setError(null);
+        setDeletingListingId(listingId);
+        try {
+            await agentAdapter.deleteProperty(listingId);
+            await load("sync");
+        } catch (deleteError) {
+            setError(deleteError instanceof Error ? deleteError.message : "Unable to delete listing.");
+        } finally {
+            setDeletingListingId(null);
+        }
+    };
 
     return (
         <main className="min-h-screen bg-[#050507] pb-10 text-white">
@@ -194,13 +210,23 @@ export default function AgentDashboardPage() {
                                             {deposit ? (
                                                 <p className="text-sm text-white/55">{deposit} Deposit</p>
                                             ) : null}
-                                            <button
-                                                type="button"
-                                                onClick={() => router.push(`/agent/property/${item.id}/edit`)}
-                                                className="mt-4 w-full rounded-xl border border-[#A67AEB]/40 bg-[#A67AEB]/10 px-4 py-2.5 text-sm font-semibold text-[#D9C4FF] transition hover:bg-[#A67AEB]/20"
-                                            >
-                                                Edit listing
-                                            </button>
+                                            <div className="mt-4 flex gap-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => router.push(`/agent/property/${item.id}/edit`)}
+                                                    className="flex-1 rounded-xl border border-[#A67AEB]/40 bg-[#A67AEB]/10 px-4 py-2.5 text-sm font-semibold text-[#D9C4FF] transition hover:bg-[#A67AEB]/20"
+                                                >
+                                                    Edit listing
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleDeleteListing(item.id)}
+                                                    disabled={deletingListingId === item.id}
+                                                    className="rounded-xl border border-red-400/40 px-4 py-2.5 text-sm font-semibold text-red-300 transition hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-60"
+                                                >
+                                                    {deletingListingId === item.id ? "Deleting..." : "Delete"}
+                                                </button>
+                                            </div>
                                         </div>
                                     </article>
                                 );

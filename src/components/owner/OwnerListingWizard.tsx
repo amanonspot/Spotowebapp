@@ -73,6 +73,7 @@ const emptyForm: OwnerListingFormInput = {
     documentType: "",
     imageFiles: [],
     existingMediaItems: [],
+    deletedImageIds: [],
     documentFile: null,
     documentMeta: { uploadState: "idle" },
     availableFromDate: "",
@@ -616,6 +617,25 @@ export default function OwnerListingWizard({
         clearFieldError("imageFiles");
     };
 
+    const removeExistingMedia = (index: number) => {
+        setForm((prev) => {
+            const items = [...(prev.existingMediaItems || [])];
+            const removed = items[index];
+            if (!removed) return prev;
+            if (!removed.id) {
+                setError("Unable to remove this photo. Please refresh the page and try again.");
+                return prev;
+            }
+            items.splice(index, 1);
+            return {
+                ...prev,
+                existingMediaItems: items,
+                deletedImageIds: [...(prev.deletedImageIds || []), removed.id],
+            };
+        });
+        clearFieldError("imageFiles");
+    };
+
     const stepValid = useMemo(() => {
         const availabilityValid = form.availabilityMode === "date" ? Boolean(form.availableFromDate) : Boolean(form.availabilityId);
         if (step === 1) return Boolean(form.propertyTypeId);
@@ -958,12 +978,12 @@ export default function OwnerListingWizard({
                                             Saved photos & videos ({existingMediaCount})
                                         </p>
                                         <p className="mt-1 text-xs text-white/45">
-                                            Already on this listing. Add more below only if you need to (max 10 total).
+                                            Tap ✕ on a photo to remove it. Add more below if needed (max 10 total).
                                         </p>
                                         <div className="mt-3 grid grid-cols-2 gap-2">
                                             {(form.existingMediaItems || []).map((item, index) => (
                                                 <div
-                                                    key={`existing-${item.url}-${index}`}
+                                                    key={`existing-${item.id || item.url}-${index}`}
                                                     className="relative overflow-hidden rounded-xl border border-white/20"
                                                 >
                                                     {item.mediaType === "video" ? (
@@ -984,6 +1004,14 @@ export default function OwnerListingWizard({
                                                     <span className="absolute left-2 bottom-2 rounded-md bg-black/70 px-2 py-1 text-[10px] font-semibold text-white">
                                                         Saved
                                                     </span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => removeExistingMedia(index)}
+                                                        aria-label={`Remove saved ${item.mediaType} ${index + 1}`}
+                                                        className="absolute right-2 top-2 inline-flex h-6 w-6 items-center justify-center rounded-full bg-[#B7F041] text-black transition hover:bg-[#c9f55a]"
+                                                    >
+                                                        <X className="h-4 w-4" />
+                                                    </button>
                                                 </div>
                                             ))}
                                         </div>
