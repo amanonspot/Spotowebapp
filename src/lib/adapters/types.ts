@@ -110,10 +110,20 @@ export interface HomeFeed {
     listings: PropertyListItem[];
     topEvents: PropertyListItem[];
     promoBannerText: string;
+    /** Pagination state for progressive home-page loading. */
+    listingsMeta?: {
+        page: number;
+        hasMore: boolean;
+        total: number;
+    };
 }
 
 export interface PropertyAdapter {
     getHomeFeed(): Promise<HomeFeed>;
+    loadMoreHomeListings(page: number, pageSize?: number): Promise<{
+        items: PropertyListItem[];
+        meta: { page: number; hasMore: boolean; total: number };
+    }>;
     searchProperties(filters: FilterState): Promise<PropertyListItem[]>;
     getPropertyDetail(id: string): Promise<PropertyDetail>;
     refreshListings(): Promise<void>;

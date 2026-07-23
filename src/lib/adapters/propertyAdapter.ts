@@ -3,6 +3,7 @@ import { FilterState, HomeFeed, PropertyAdapter, PropertyDetail, PropertyListIte
 import { defaultFilterState, mockHomeFeed, mockPropertyDetails, mockPropertyList } from "@/mocks/properties";
 import {
     extractErrorMessage,
+    fetchMastersBundleCached,
     isUuidLike,
     mergeListWithSynced,
     normalizeLocalitiesFromProperties,
@@ -70,7 +71,17 @@ const toIdByTokenMap = (wires: RentalMasterOptionDto[]): Record<string, string> 
         return acc;
     }, {});
 
-const HOME_LIST_PAGE_SIZE = 24;
+const HOME_INITIAL_PAGE_SIZE = 9;
+const HOME_APPEND_PAGE_SIZE = 6;
+
+const extractListMeta = (payload: WireApiEnvelope<unknown>) => {
+    const envelope = payload as Record<string, unknown>;
+    const meta = envelope.meta as Record<string, unknown> | undefined;
+    const page = typeof meta?.page === "number" ? meta.page : 1;
+    const total = typeof meta?.total === "number" ? meta.total : 0;
+    const hasMore = typeof meta?.has_more === "boolean" ? meta.has_more : false;
+    return { page, hasMore, total };
+};
 
 const cityIdsFromPayload = (payload: WireApiEnvelope<unknown>) => {
     const cityIds = new Set<string>();
@@ -123,19 +134,33 @@ const contextFromMasterResults = (
     };
 };
 
+type NormalizerContext = ReturnType<typeof contextFromMasterResults>;
+
+const normalizeListResponse = (response: WireApiEnvelope<unknown>, context?: NormalizerContext) => {
+    const normalized = normalizePropertyList(response, { fallbackToMock: RENTALS_MOCK_MODE, ...context });
+    const liveVisible = RENTALS_MOCK_MODE ? normalized : normalized.filter(isTenantVisible);
+    return RENTALS_MOCK_MODE ? mergeListWithSynced(liveVisible) : liveVisible;
+};
+
 const buildNormalizationContext = async (payload: WireApiEnvelope<unknown>) => {
     const cityIds = cityIdsFromPayload(payload);
+    const wires = unwrapToList(payload);
+    const needsLocalityLookup = wires.some((wire) => {
+        const localityId = `${wire.locality_id || ""}`.trim();
+        const localityName = `${wire.locality_name || ""}`.trim();
+        return localityId && !localityName;
+    });
 
-    const [citiesRes, amenitiesRes, localitiesRes, propertyTypesRes, bhkRes, furnishingRes, availabilityRes] =
-        await Promise.allSettled([
-            rentalsService.listCities(),
-            rentalsService.listAmenities(),
-            Promise.all(Array.from(cityIds).map((cityId) => rentalsService.listLocalities(cityId))),
-            rentalsService.listPropertyTypes(),
-            rentalsService.listBhkTypes(),
-            rentalsService.listFurnishingTypes(),
-            rentalsService.listAvailabilityTypes(),
-        ]);
+    const [masters, localitiesRes] = await Promise.all([
+        fetchMastersBundle(),
+        needsLocalityLookup && cityIds.size > 0
+            ? Promise.allSettled([
+                  Promise.all(Array.from(cityIds).map((cityId) => rentalsService.listLocalities(cityId))),
+              ]).then(([result]) => result)
+            : Promise.resolve({ status: "fulfilled" as const, value: [] as WireApiEnvelope<unknown>[] }),
+    ]);
+
+    const [citiesRes, amenitiesRes, propertyTypesRes, bhkRes, furnishingRes, availabilityRes] = masters;
 
     return contextFromMasterResults(
         citiesRes,
@@ -148,28 +173,31 @@ const buildNormalizationContext = async (payload: WireApiEnvelope<unknown>) => {
     );
 };
 
-const fetchMastersBundle = () =>
-    Promise.allSettled([
-        rentalsService.listCities(),
-        rentalsService.listAmenities(),
-        rentalsService.listPropertyTypes(),
-        rentalsService.listBhkTypes(),
-        rentalsService.listFurnishingTypes(),
-        rentalsService.listAvailabilityTypes(),
-    ]);
+const fetchMastersBundle = () => fetchMastersBundleCached();
 
 const buildNormalizationContextFast = async (
     payload: WireApiEnvelope<unknown>,
-    prefetchedMasters?: PromiseSettledResult<WireApiEnvelope<unknown>>[]
+    prefetchedMasters?: Awaited<ReturnType<typeof fetchMastersBundleCached>>
 ) => {
+    const wires = unwrapToList(payload);
+    const needsLocalityLookup = wires.some((wire) => {
+        const localityId = `${wire.locality_id || ""}`.trim();
+        const localityName = `${wire.locality_name || ""}`.trim();
+        return localityId && !localityName;
+    });
     const cityIds = cityIdsFromPayload(payload);
-    const [masters, localitiesSettled] = await Promise.all([
-        prefetchedMasters ?? fetchMastersBundle(),
-        Promise.allSettled([
+
+    const masters = prefetchedMasters ?? (await fetchMastersBundle());
+
+    let localitiesRes: PromiseSettledResult<WireApiEnvelope<unknown>[]> = {
+        status: "fulfilled",
+        value: [],
+    };
+    if (needsLocalityLookup && cityIds.size > 0) {
+        localitiesRes = await Promise.allSettled([
             Promise.all(Array.from(cityIds).map((cityId) => rentalsService.listLocalities(cityId))),
-        ]),
-    ]);
-    const localitiesRes = localitiesSettled[0]!;
+        ]).then(([result]) => result);
+    }
 
     const [citiesRes, amenitiesRes, propertyTypesRes, bhkRes, furnishingRes, availabilityRes] = masters;
 
@@ -367,20 +395,32 @@ const toHomeFeed = (items: PropertyListItem[]): HomeFeed => {
 class ApiFirstPropertyAdapter implements PropertyAdapter {
     async getHomeFeed(): Promise<HomeFeed> {
         try {
-            const [response, masters] = await Promise.all([
-                rentalsService.listProperties({ page: 1, page_size: HOME_LIST_PAGE_SIZE }),
-                fetchMastersBundle(),
-            ]);
-            const context = await buildNormalizationContextFast(response, masters);
-            const normalized = normalizePropertyList(response, { fallbackToMock: RENTALS_MOCK_MODE, ...context });
-            const liveVisible = RENTALS_MOCK_MODE ? normalized : normalized.filter(isTenantVisible);
-            const merged = RENTALS_MOCK_MODE ? mergeListWithSynced(liveVisible) : liveVisible;
-            return toHomeFeed(merged);
+            // Fast path: one API call. Property payload already includes city/locality/BHK names.
+            const response = await rentalsService.listProperties({
+                page: 1,
+                page_size: HOME_INITIAL_PAGE_SIZE,
+            });
+            const merged = normalizeListResponse(response);
+            const meta = extractListMeta(response);
+            return {
+                ...toHomeFeed(merged),
+                listingsMeta: meta,
+            };
         } catch (error) {
             if (RENTALS_MOCK_MODE) {
                 return toHomeFeed(mergeListWithSynced(mockPropertyList));
             }
             throw new Error(extractErrorMessage(error, "Unable to load properties"));
+        }
+    }
+
+    async loadMoreHomeListings(page: number, pageSize = HOME_APPEND_PAGE_SIZE) {
+        try {
+            const response = await rentalsService.listProperties({ page, page_size: pageSize });
+            const items = normalizeListResponse(response);
+            return { items, meta: extractListMeta(response) };
+        } catch (error) {
+            throw new Error(extractErrorMessage(error, "Unable to load more properties"));
         }
     }
 
@@ -397,14 +437,12 @@ class ApiFirstPropertyAdapter implements PropertyAdapter {
                 rentalsService.listProperties({
                     ...params,
                     page: params.page ?? 1,
-                    page_size: params.page_size ?? HOME_LIST_PAGE_SIZE,
+                    page_size: params.page_size ?? HOME_INITIAL_PAGE_SIZE,
                 }),
                 fetchMastersBundle(),
             ]);
             const context = await buildNormalizationContextFast(response, masters);
-            const normalized = normalizePropertyList(response, { fallbackToMock: RENTALS_MOCK_MODE, ...context });
-            const liveVisible = RENTALS_MOCK_MODE ? normalized : normalized.filter(isTenantVisible);
-            const merged = RENTALS_MOCK_MODE ? mergeListWithSynced(liveVisible) : liveVisible;
+            const merged = normalizeListResponse(response, context);
             return applyClientFilters(merged, filters);
         } catch (error) {
             if (RENTALS_MOCK_MODE) {

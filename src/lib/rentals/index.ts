@@ -1,5 +1,6 @@
 export * from "@/lib/rentals/wireTypes";
 export * from "@/lib/rentals/normalizers";
+export * from "@/lib/rentals/mastersCache";
 export * from "@/lib/rentals/service";
 export * from "@/lib/rentals/listingSyncStore";
 export * from "@/lib/rentals/creditLedger";

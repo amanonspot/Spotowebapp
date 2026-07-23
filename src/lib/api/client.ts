@@ -4,7 +4,8 @@ import { getClientId, getSessionId } from "@/lib/analytics/sessionManager";
 
 const API_BASE_URL = getApiBaseUrl();
 
-const CACHE_DURATION_MS = 300_000; // 5 min — masters/listings repeat less on navigation
+const CACHE_DURATION_MS = 300_000; // 5 min in-memory — masters also cached 24h in localStorage
+const MASTERS_CACHE_DURATION_MS = 3_600_000; // 1 hour in-memory for master GETs
 const requestCache = new Map<string, { data: unknown; timestamp: number }>();
 
 const getAccessToken = () => {
@@ -166,7 +167,7 @@ export const clearCache = (url?: string) => {
 
 const apiClient: AxiosInstance = axios.create({
     baseURL: API_BASE_URL,
-    timeout: 30_000,
+    timeout: 60_000,
     headers: {
         Accept: "application/json",
     },
@@ -243,7 +244,8 @@ export const apiRequest = async <T = unknown>(
 
     if (cacheKey) {
         const cached = requestCache.get(cacheKey);
-        if (cached && now - cached.timestamp < CACHE_DURATION_MS) {
+        const ttl = url.includes("/masters/") ? MASTERS_CACHE_DURATION_MS : CACHE_DURATION_MS;
+        if (cached && now - cached.timestamp < ttl) {
             return cached.data as T;
         }
     }

@@ -12,7 +12,7 @@ import { authAdapter, checkoutAdapter, propertyAdapter } from "@/lib/adapters";
 import { CheckoutState, HomeFeed, PropertyListItem, UnlockPaymentContext, UnlockPaymentFlowState } from "@/lib/adapters/types";
 import { requireAuthThenContinue } from "@/lib/auth/requireAuthAction";
 import { useAuth } from "@/lib/hooks/useAuth";
-import { getUnlockedTenantContacts, rentalsService, type UnlockedContactRecord } from "@/lib/rentals";
+import { getUnlockedTenantContacts, rentalsService, warmMastersCache, type UnlockedContactRecord } from "@/lib/rentals";
 import UnlockPaymentFlowOverlay from "@/app/(home)/booking/[slug]/_components/UnlockPaymentFlowOverlay";
 import { runRazorpayCheckout } from "@/lib/payments/razorpayCheckout";
 import { pushEvent, ANALYTICS_EVENTS } from "@/lib/analytics";
@@ -111,6 +111,11 @@ export default function HomePage() {
     const loadMoreRef = useRef<HTMLDivElement | null>(null);
     const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE_LISTINGS);
     const [isAppendingListings, setIsAppendingListings] = useState(false);
+    const [listingsApiPage, setListingsApiPage] = useState(1);
+    const [listingsHasMore, setListingsHasMore] = useState(false);
+    const listingsHasMoreRef = useRef(false);
+    const listingsApiPageRef = useRef(1);
+    const isAppendingListingsRef = useRef(false);
     const resumeAction = searchParams.get("resume");
     const globalPassOneDayAmount = 99;
 
@@ -346,10 +351,16 @@ export default function HomePage() {
                 const nextFeed = await propertyAdapter.getHomeFeed();
                 if (mounted) {
                     setFeed(nextFeed);
+                    setListingsApiPage(nextFeed.listingsMeta?.page ?? 1);
+                    setListingsHasMore(nextFeed.listingsMeta?.hasMore ?? false);
+                    listingsApiPageRef.current = nextFeed.listingsMeta?.page ?? 1;
+                    listingsHasMoreRef.current = nextFeed.listingsMeta?.hasMore ?? false;
                     pushEvent(ANALYTICS_EVENTS.HOME_LOADED, {
                         property_count: nextFeed.listings.length,
                         is_logged_in: false,
                     });
+                    // Warm master cache in background for search/filters — does not block home render.
+                    void warmMastersCache();
                 }
             } catch (feedError) {
                 if (mounted) {
@@ -388,7 +399,19 @@ export default function HomePage() {
         [filteredListings, visibleCount]
     );
 
-    const hasMoreListings = visibleCount < filteredListings.length;
+    const hasMoreListings = visibleCount < filteredListings.length || listingsHasMore;
+
+    useEffect(() => {
+        listingsHasMoreRef.current = listingsHasMore;
+    }, [listingsHasMore]);
+
+    useEffect(() => {
+        listingsApiPageRef.current = listingsApiPage;
+    }, [listingsApiPage]);
+
+    useEffect(() => {
+        isAppendingListingsRef.current = isAppendingListings;
+    }, [isAppendingListings]);
 
     useEffect(() => {
         setVisibleCount(Math.min(INITIAL_VISIBLE_LISTINGS, filteredListings.length));
@@ -399,21 +422,57 @@ export default function HomePage() {
         const node = loadMoreRef.current;
         if (!node) return;
 
+        const appendFromFeed = () => {
+            setVisibleCount((prev) => Math.min(filteredListings.length, prev + LISTINGS_APPEND_CHUNK));
+        };
+
+        const fetchAndAppend = async () => {
+            if (isAppendingListingsRef.current || !listingsHasMoreRef.current) return;
+            isAppendingListingsRef.current = true;
+            setIsAppendingListings(true);
+            try {
+                const nextPage = listingsApiPageRef.current + 1;
+                const { items, meta } = await propertyAdapter.loadMoreHomeListings(nextPage);
+                setFeed((prev) => ({
+                    ...prev,
+                    listings: [...prev.listings, ...items],
+                    listingsMeta: meta,
+                }));
+                setListingsApiPage(meta.page);
+                setListingsHasMore(meta.hasMore);
+                listingsApiPageRef.current = meta.page;
+                listingsHasMoreRef.current = meta.hasMore;
+                setVisibleCount((prev) => prev + LISTINGS_APPEND_CHUNK);
+            } catch {
+                setListingsHasMore(false);
+                listingsHasMoreRef.current = false;
+            } finally {
+                isAppendingListingsRef.current = false;
+                setIsAppendingListings(false);
+            }
+        };
+
         const observer = new IntersectionObserver(
             (entries) => {
-                if (!entries[0]?.isIntersecting || isAppendingListings) return;
-                setIsAppendingListings(true);
-                window.setTimeout(() => {
-                    setVisibleCount((prev) => Math.min(filteredListings.length, prev + LISTINGS_APPEND_CHUNK));
-                    setIsAppendingListings(false);
-                }, 80);
+                if (!entries[0]?.isIntersecting || isAppendingListingsRef.current) return;
+
+                if (visibleCount < filteredListings.length) {
+                    setIsAppendingListings(true);
+                    window.setTimeout(() => {
+                        appendFromFeed();
+                        setIsAppendingListings(false);
+                    }, 80);
+                    return;
+                }
+
+                void fetchAndAppend();
             },
             { rootMargin: "280px 0px" }
         );
 
         observer.observe(node);
         return () => observer.disconnect();
-    }, [hasMoreListings, isAppendingListings, loading, filteredListings.length]);
+    }, [hasMoreListings, isAppendingListings, loading, filteredListings.length, visibleCount]);
 
     const refreshHomePassStatus = async (): Promise<PassStatus | null> => {
         try {
