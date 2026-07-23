@@ -444,21 +444,21 @@ const toPayloadFromWire = (wire: RentalPropertyDto): OwnerPropertyUpsertPayload 
 });
 
 const toExistingMediaFromWire = (wire: RentalPropertyDto): PropertyMediaItem[] => {
-    return asArray<UnknownRecord>(wire.images)
-        .map((img) => {
-            const mediaTypeRaw = firstString(img.media_type).toLowerCase();
-            const videoUrl = firstString(img.video_url, img.media_url);
-            const imageUrl = firstString(img.image_url, img.media_url, img.url);
-            const isVideo = mediaTypeRaw === "video" || (Boolean(videoUrl) && !imageUrl);
-            const url = isVideo ? videoUrl || imageUrl : imageUrl || videoUrl;
-            if (!url) return null;
-            return {
-                id: firstString(img.id) || undefined,
-                url,
-                mediaType: isVideo || isVideoMediaUrl(url) ? ("video" as const) : ("image" as const),
-            };
-        })
-        .filter((item): item is PropertyMediaItem => item !== null);
+    const items: PropertyMediaItem[] = [];
+    for (const img of asArray<UnknownRecord>(wire.images)) {
+        const mediaTypeRaw = firstString(img.media_type).toLowerCase();
+        const videoUrl = firstString(img.video_url, img.media_url);
+        const imageUrl = firstString(img.image_url, img.media_url, img.url);
+        const isVideo = mediaTypeRaw === "video" || (Boolean(videoUrl) && !imageUrl);
+        const url = isVideo ? videoUrl || imageUrl : imageUrl || videoUrl;
+        if (!url) continue;
+        items.push({
+            id: firstString(img.id) || undefined,
+            url,
+            mediaType: isVideo || isVideoMediaUrl(url) ? "video" : "image",
+        });
+    }
+    return items;
 };
 
 const toFormFromWire = (wire: RentalPropertyDto): OwnerListingFormInput => ({
