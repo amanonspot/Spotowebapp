@@ -1653,21 +1653,6 @@ export default function OwnerListingWizard({
                                 ) : null}
                                 {renderFieldError("documentType", "documentFile")}
                             </section>
-
-                            {!isAgentFlow ? (
-                                <section className={`${sectionCardClass} space-y-3`}>
-                                    <p className="text-sm font-semibold text-white/90">SPOTO employee ID (optional)</p>
-                                    <input
-                                        value={form.employeeId || ""}
-                                        onChange={(event) =>
-                                            updateField("employeeId", sanitizeTextInput(event.target.value))
-                                        }
-                                        placeholder="Employee ID (optional)"
-                                        className="h-12 w-full rounded-xl border border-white/20 bg-[#0d0d14] px-3 text-sm text-white/90 outline-none placeholder:text-white/35 focus:border-[#A67AEB]"
-                                    />
-                                    {renderFieldError("employeeId")}
-                                </section>
-                            ) : null}
                         </>
                     )}
                 </div>
