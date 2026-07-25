@@ -103,7 +103,8 @@ export default function AdminUsersPage() {
                         <p className="text-sm font-medium text-white/55">Growth & activity</p>
                         <h1 className="mt-1 text-3xl font-bold tracking-tight text-white">Users</h1>
                         <p className="mt-2 max-w-2xl text-sm text-white/55">
-                            Signups, logins, unlocks and pass purchases from your database. For page-level clicks and funnels, use{" "}
+                            Only users who completed OTP login appear here. Agent-created owner placeholders without login are excluded.
+                            For page-level clicks and funnels, use{" "}
                             <a
                                 href="https://analytics.google.com"
                                 target="_blank"
@@ -141,10 +142,10 @@ export default function AdminUsersPage() {
             </header>
 
             <section className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-                <AdminStatCard label="Total users" value={statsLoading ? "…" : (stats?.total_users ?? "—")} icon={Users} accent="purple" />
-                <AdminStatCard label="New today" value={statsLoading ? "…" : (stats?.new_users_today ?? "—")} icon={UserPlus} accent="green" />
+                <AdminStatCard label="Logged-in users" value={statsLoading ? "…" : (stats?.total_users ?? "—")} icon={Users} accent="purple" />
+                <AdminStatCard label="New login today" value={statsLoading ? "…" : (stats?.new_users_today ?? "—")} icon={UserPlus} accent="green" />
                 <AdminStatCard
-                    label={`New (${periodLabel})`}
+                    label={`First login (${periodLabel})`}
                     value={statsLoading ? "…" : (stats?.new_users_period ?? "—")}
                     icon={UserPlus}
                     accent="purple"
@@ -180,7 +181,7 @@ export default function AdminUsersPage() {
                     <h2 className="mb-3 text-lg font-bold text-white">{periodDays}-day funnel</h2>
                     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                         {[
-                            { label: "Signups", value: funnel.signups },
+                            { label: "First login", value: funnel.signups },
                             { label: "Logged in", value: funnel.logged_in },
                             { label: "Unlocked contact", value: funnel.unlocked_contact },
                             { label: "Bought pass", value: funnel.bought_pass },
@@ -200,7 +201,7 @@ export default function AdminUsersPage() {
 
             <section className="mt-6 grid gap-4 lg:grid-cols-2">
                 <AdminMiniTrendChart
-                    title="New signups"
+                    title="First-time logins"
                     points={stats?.signup_trend ?? []}
                     periodDays={periodDays}
                     accent="green"
@@ -215,7 +216,7 @@ export default function AdminUsersPage() {
 
             <section className="mt-8">
                 <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <h2 className="text-lg font-bold text-white">All users</h2>
+                    <h2 className="text-lg font-bold text-white">Logged-in users</h2>
                     <div className="relative max-w-xs">
                         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/40" />
                         <input
@@ -231,7 +232,7 @@ export default function AdminUsersPage() {
                 {usersLoading ? (
                     <AdminCard className="text-center text-sm text-white/55">Loading users…</AdminCard>
                 ) : users.length === 0 ? (
-                    <AdminCard className="text-center text-sm text-white/55">No users found.</AdminCard>
+                    <AdminCard className="text-center text-sm text-white/55">No logged-in users found.</AdminCard>
                 ) : (
                     <AdminCard className="overflow-hidden p-0">
                         <div className="overflow-x-auto">
