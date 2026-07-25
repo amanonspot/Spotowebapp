@@ -16,6 +16,7 @@ import { getUnlockedTenantContacts, rentalsService, warmMastersCache, type Unloc
 import UnlockPaymentFlowOverlay from "@/app/(home)/booking/[slug]/_components/UnlockPaymentFlowOverlay";
 import { runRazorpayCheckout } from "@/lib/payments/razorpayCheckout";
 import { pushEvent, ANALYTICS_EVENTS } from "@/lib/analytics";
+import { getUserAvatarInitial, getUserDisplayName, getUserDisplaySubtitle } from "@/lib/utils/userDisplay";
 
 const INITIAL_VISIBLE_LISTINGS = 9;
 const LISTINGS_APPEND_CHUNK = 6;
@@ -101,6 +102,7 @@ export default function HomePage() {
     const [passStatus, setPassStatus] = useState<PassStatus | null>(null);
     const [passLoading, setPassLoading] = useState(false);
     const [isAgent, setIsAgent] = useState(false);
+    const [isAdmin, setIsAdmin] = useState(false);
     const [homePaymentFlowState, setHomePaymentFlowState] = useState<UnlockPaymentFlowState>("idle");
     const [homePaymentContext, setHomePaymentContext] = useState<UnlockPaymentContext | null>(null);
     const [homeCheckoutState, setHomeCheckoutState] = useState<CheckoutState | null>(null);
@@ -152,6 +154,27 @@ export default function HomePage() {
             active = false;
         };
     }, [isAuthenticated]);
+
+    useEffect(() => {
+        if (!isAuthenticated) {
+            setIsAdmin(false);
+            return;
+        }
+        let active = true;
+        import("@/lib/adapters").then(({ adminAdapter }) =>
+            adminAdapter
+                .isAdminUser()
+                .then((allowed) => {
+                    if (active) setIsAdmin(Boolean(allowed));
+                })
+                .catch(() => {
+                    if (active) setIsAdmin(false);
+                })
+        );
+        return () => {
+            active = false;
+        };
+    }, [isAuthenticated, user?.id]);
 
     const handleDashboardClick = async () => {
         setShowProfileMenu(false);
@@ -764,18 +787,16 @@ export default function HomePage() {
                                     <div className="flex items-center gap-3 p-4 border-b border-white/10">
                                         <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#AF7AEB] to-[#9575e6] flex items-center justify-center flex-shrink-0">
                                             <span className="text-white text-sm font-bold">
-                                                {user?.first_name?.charAt(0) || user?.email?.charAt(0) || "U"}
+                                                {getUserAvatarInitial(user)}
                                             </span>
                                         </div>
                                         <div className="min-w-0">
                                             <p className="text-sm font-semibold text-white truncate">
-                                                {user?.first_name && user?.last_name
-                                                    ? `${user.first_name} ${user.last_name}`
-                                                    : user?.first_name || user?.email || "User"}
+                                                {getUserDisplayName(user)}
                                             </p>
-                                            {user?.email && (
-                                                <p className="text-xs text-white/50 truncate">{user.email}</p>
-                                            )}
+                                            {getUserDisplaySubtitle(user) ? (
+                                                <p className="text-xs text-white/50 truncate">{getUserDisplaySubtitle(user)}</p>
+                                            ) : null}
                                         </div>
                                     </div>
 
@@ -842,6 +863,20 @@ export default function HomePage() {
 
                                     {/* Actions */}
                                     <div className="px-4 pb-4 pt-3 border-t border-white/10 space-y-2">
+                                        {isAdmin ? (
+                                            <button
+                                                onClick={() => {
+                                                    setShowProfileMenu(false);
+                                                    router.push("/admin/dashboard");
+                                                }}
+                                                className="w-full flex items-center gap-2 px-3 py-2 text-sm font-semibold text-[#D9C4FF] bg-[#A67AEB]/15 hover:bg-[#A67AEB]/25 rounded-lg transition-colors"
+                                            >
+                                                <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                                                </svg>
+                                                Admin Console
+                                            </button>
+                                        ) : null}
                                         <button
                                             onClick={handleDashboardClick}
                                             className="w-full flex items-center gap-2 px-3 py-2 text-sm text-white/70 hover:text-white hover:bg-white/5 rounded-lg transition-colors"

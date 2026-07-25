@@ -2,7 +2,9 @@ import { api, apiFormData } from "@/lib/api";
 import { clearCache } from "@/lib/api/client";
 import {
     OwnerPropertyUpsertPayload,
+    RentalAdminListingsResponseDto,
     RentalAgentCreateDataDto,
+    RentalAgentEmployeeDto,
     RentalAgentMeDataDto,
     RentalContactUnlockRequestDto,
     RentalContactUnlockResponseDto,
@@ -344,14 +346,52 @@ export const rentalsService = {
         return deleted;
     },
 
-    approveProperty: (propertyId: string) =>
-        api.patch<WireApiEnvelope<{ message?: string }>>(
+    approveProperty: (propertyId: string) => {
+        clearCache("/api/rental/admin/properties/");
+        clearCache("/api/rental/properties/");
+        return api.patch<WireApiEnvelope<{ message?: string }>>(
             `/api/rental/admin/properties/approve/?property_id=${encodeURIComponent(propertyId)}`
+        );
+    },
+
+    rejectProperty: (propertyId: string, reason?: string) => {
+        clearCache("/api/rental/admin/properties/");
+        clearCache("/api/rental/properties/");
+        return api.patch<WireApiEnvelope<{ message?: string }>>(
+            `/api/rental/admin/properties/reject/?property_id=${encodeURIComponent(propertyId)}`,
+            reason ? { reason } : undefined,
+            { headers: { "Content-Type": "application/json" } }
+        );
+    },
+
+    deleteAdminProperty: (propertyId: string) => {
+        clearCache("/api/rental/admin/properties/");
+        clearCache("/api/rental/properties/");
+        return api.delete<WireApiEnvelope<{ message?: string }>>(
+            `/api/rental/admin/properties/delete/?property_id=${encodeURIComponent(propertyId)}`
+        );
+    },
+
+    listAdminProperties: (params?: { verification_status?: string; page?: number; page_size?: number }) =>
+        api.get<RentalAdminListingsResponseDto>("/api/rental/admin/properties/", { params }),
+
+    listEmployees: (params?: { is_active?: boolean }) =>
+        api.get<WireApiEnvelope<RentalAgentEmployeeDto[]>>("/api/rental/employees/", { params }),
+
+    createEmployee: (payload: { name: string; phone?: string; email?: string; is_active?: boolean }) =>
+        api.post<WireApiEnvelope<RentalAgentEmployeeDto>>("/api/rental/employees/create/", payload, {
+            headers: { "Content-Type": "application/json" },
+        }),
+
+    deleteEmployee: (employeeId: string) =>
+        api.delete<WireApiEnvelope<{ message?: string }>>(
+            `/api/rental/employees/delete/?employee_id=${encodeURIComponent(employeeId)}`
         ),
-    rejectProperty: (propertyId: string) =>
-        api.patch<WireApiEnvelope<{ message?: string }>>(
-            `/api/rental/admin/properties/reject/?property_id=${encodeURIComponent(propertyId)}`
-        ),
+
+    assignEmployeeUser: (payload: { employee_id: string; user_phone?: string; user_id?: string }) =>
+        api.patch<WireApiEnvelope<RentalAgentEmployeeDto>>("/api/rental/employees/assign-user/", payload, {
+            headers: { "Content-Type": "application/json" },
+        }),
 
     getMyPassStatus: () =>
         api.get<WireApiEnvelope<{

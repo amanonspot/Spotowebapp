@@ -197,12 +197,29 @@ export type RentalPassActivateResponseDto = ApiSuccessEnvelope<RentalPassActivat
 export interface RentalAgentEmployeeDto {
     id: string;
     employee_id: string;
+    is_agent?: boolean;
     user_id?: string | null;
     user_phone?: string | null;
     name: string;
     phone?: string;
     email?: string;
     is_active: boolean;
+    created_at?: string;
+    updated_at?: string;
+}
+
+export interface RentalAdminListMetaDto {
+    page: number;
+    page_size: number;
+    total: number;
+    has_more: boolean;
+    verification_status?: string;
+}
+
+export interface RentalAdminListingsResponseDto {
+    success?: boolean;
+    data: RentalPropertyDto[];
+    meta?: RentalAdminListMetaDto;
 }
 
 export interface RentalAgentMeDataDto {

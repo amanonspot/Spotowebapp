@@ -7,6 +7,7 @@ import { userService } from "@/lib/api";
 import { useGooglePlaces } from "@/lib/hooks/useGooglePlaces";
 import toast from "react-hot-toast";
 import { rentalsService } from "@/lib/rentals/service";
+import { getUserAvatarInitial, getUserDisplayName, getUserDisplaySubtitle, isPlaceholderEmail } from "@/lib/utils/userDisplay";
 
 interface PassStatus {
     free_contacts_used: number;
@@ -52,6 +53,7 @@ export default function Header({
     const [passStatus, setPassStatus] = useState<PassStatus | null>(null);
     const [passLoading, setPassLoading] = useState(false);
     const [isAgent, setIsAgent] = useState(false);
+    const [isAdmin, setIsAdmin] = useState(false);
     const profileMenuRef = useRef<HTMLDivElement>(null);
 
     // Check agent status — instant from pathname or localStorage, then confirm via API
@@ -92,6 +94,28 @@ export default function Header({
         );
         return () => { active = false; };
     }, [isAuthenticated, pathname]);
+
+    // Admin access — verified from server only (never cached in localStorage).
+    useEffect(() => {
+        if (!isAuthenticated) {
+            setIsAdmin(false);
+            return;
+        }
+        let active = true;
+        import("@/lib/adapters").then(({ adminAdapter }) =>
+            adminAdapter
+                .isAdminUser()
+                .then((allowed) => {
+                    if (active) setIsAdmin(Boolean(allowed));
+                })
+                .catch(() => {
+                    if (active) setIsAdmin(false);
+                })
+        );
+        return () => {
+            active = false;
+        };
+    }, [isAuthenticated, user?.id]);
     const locationMenuRef = useRef<HTMLDivElement>(null);
     
     // Google Places autocomplete for location search
@@ -214,6 +238,7 @@ export default function Header({
 
     const handleLogout = async () => {
         try {
+            setIsAdmin(false);
             await logout();
             toast.success("Logged out successfully!");
             setShowProfileMenu(false);
@@ -291,6 +316,11 @@ export default function Header({
         }
 
         router.push("/owner/dashboard");
+    };
+
+    const handleAdminConsoleClick = () => {
+        setShowProfileMenu(false);
+        router.push("/admin/dashboard");
     };
 
     return (
@@ -507,19 +537,15 @@ export default function Header({
                             <div className="flex items-center gap-3 mb-4 pb-4 border-b border-gray-200">
                                 <div className="w-10 h-10 rounded-full bg-gradient-to-r from-[#AF7AEB] to-[#9575e6] flex items-center justify-center">
                                     <span className="text-white text-sm font-bold">
-                                        {user?.first_name?.charAt(0) ||
-                                            user?.email?.charAt(0) ||
-                                            "U"}
+                                        {getUserAvatarInitial(user)}
                                     </span>
                                 </div>
                                 <div>
                                     <p className="text-sm font-semibold text-gray-900">
-                                        {user?.first_name && user?.last_name
-                                            ? `${user.first_name} ${user.last_name}`
-                                            : user?.email || "User"}
+                                        {getUserDisplayName(user)}
                                     </p>
                                     <p className="text-xs text-gray-500">
-                                        {user?.email || "No email"}
+                                        {getUserDisplaySubtitle(user) || "Signed in with phone"}
                                     </p>
                                 </div>
                             </div>
@@ -626,11 +652,15 @@ export default function Header({
                                 ) : (
                                     <div className="flex items-center justify-between">
                                         <span className="text-xs text-gray-600">
-                                            {user?.email || "No email"}
+                                            {user?.email && !isPlaceholderEmail(user.email)
+                                                ? user.email
+                                                : "No email added"}
                                         </span>
                                         <button
                                             onClick={() => {
-                                                setNewEmail(user?.email || "");
+                                                setNewEmail(
+                                                    user?.email && !isPlaceholderEmail(user.email) ? user.email : ""
+                                                );
                                                 setIsEditingEmail(true);
                                             }}
                                             className="px-3 py-1.5 text-xs bg-[#AF7AEB] text-white rounded-lg hover:bg-[#9575e6] transition-colors"
@@ -640,6 +670,21 @@ export default function Header({
                                     </div>
                                 )}
                             </div>
+
+                            {/* Admin console — staff only (server-verified) */}
+                            {isAdmin ? (
+                                <div className="mb-3">
+                                    <button
+                                        onClick={handleAdminConsoleClick}
+                                        className="w-full flex items-center gap-3 px-3 py-2 text-sm font-semibold text-[#7c3aed] bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors"
+                                    >
+                                        <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                                        </svg>
+                                        <span>Admin Console</span>
+                                    </button>
+                                </div>
+                            ) : null}
 
                             {/* Dashboard link — agent or owner */}
                             <div className="mb-3">

@@ -11,9 +11,10 @@ First, create a `.env.local` file in the root directory:
 NEXT_PUBLIC_API_BASE_URL=https://production.api.spoto.in
 NEXT_PUBLIC_API_URL=https://production.api.spoto.in
 
-# Optional mock controls (fallback safety)
-NEXT_PUBLIC_OWNER_MOCK_MODE=true
-NEXT_PUBLIC_OWNER_MOCK_OTP=0000
+# Optional mock controls — local dev only; keep false in production
+NEXT_PUBLIC_OWNER_MOCK_MODE=false
+NEXT_PUBLIC_RENTALS_MOCK_MODE=false
+NEXT_PUBLIC_OWNER_MOCK_OTP=
 
 # Google Maps API Key (Required for map functionality)
 NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=your_google_maps_api_key_here
@@ -40,6 +41,10 @@ bun dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+
+## Production deploy
+
+See [DEPLOY.md](./DEPLOY.md) for backend + frontend steps, admin staff setup, and smoke tests.
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 

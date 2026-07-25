@@ -44,6 +44,7 @@ export interface User {
   profile_pic?: string;
   city?: string;
   is_owner?: boolean;
+  is_staff?: boolean;
 }
 
 export interface UpdateUserRequest {
