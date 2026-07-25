@@ -284,6 +284,7 @@ export interface AdminUsersFunnelDto {
 export interface AdminUsersStatsDto {
     period_days: number;
     total_users: number;
+    logins_period: number;
     new_users_today: number;
     new_users_period: number;
     active_users_period: number;

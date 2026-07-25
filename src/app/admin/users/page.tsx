@@ -142,8 +142,13 @@ export default function AdminUsersPage() {
             </header>
 
             <section className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-                <AdminStatCard label="Logged-in users" value={statsLoading ? "…" : (stats?.total_users ?? "—")} icon={Users} accent="purple" />
-                <AdminStatCard label="New login today" value={statsLoading ? "…" : (stats?.new_users_today ?? "—")} icon={UserPlus} accent="green" />
+                <AdminStatCard label="All-time logged in" value={statsLoading ? "…" : (stats?.total_users ?? "—")} icon={Users} accent="purple" />
+                <AdminStatCard
+                    label={`Logins (${periodLabel})`}
+                    value={statsLoading ? "…" : (stats?.logins_period ?? "—")}
+                    icon={LogIn}
+                    accent="green"
+                />
                 <AdminStatCard
                     label={`First login (${periodLabel})`}
                     value={statsLoading ? "…" : (stats?.new_users_period ?? "—")}
@@ -178,11 +183,13 @@ export default function AdminUsersPage() {
 
             {funnel ? (
                 <section className="mt-6">
-                    <h2 className="mb-3 text-lg font-bold text-white">{periodDays}-day funnel</h2>
+                    <h2 className="mb-3 text-lg font-bold text-white">
+                        {periodDays === 1 ? "Today’s funnel" : `${periodDays}-day funnel`}
+                    </h2>
                     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                         {[
                             { label: "First login", value: funnel.signups },
-                            { label: "Active in period", value: funnel.logged_in },
+                            { label: periodDays === 1 ? "Active today" : "Active in period", value: funnel.logged_in },
                             { label: "Unlocked contact", value: funnel.unlocked_contact },
                             { label: "Bought pass", value: funnel.bought_pass },
                         ].map((step) => (
