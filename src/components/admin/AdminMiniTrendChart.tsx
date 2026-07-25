@@ -5,10 +5,12 @@ import { AdminDailyCountDto } from "@/lib/rentals/wireTypes";
 export function AdminMiniTrendChart({
     title,
     points,
+    periodDays,
     accent = "purple",
 }: {
     title: string;
     points: AdminDailyCountDto[];
+    periodDays?: number;
     accent?: "purple" | "green";
 }) {
     const max = Math.max(1, ...points.map((p) => p.count));
@@ -33,7 +35,9 @@ export function AdminMiniTrendChart({
                     ))}
                 </div>
             )}
-            <p className="mt-2 text-[10px] text-white/40">Last 30 days</p>
+            <p className="mt-2 text-[10px] text-white/40">
+                {periodDays ? `Last ${periodDays} day${periodDays === 1 ? "" : "s"}` : "Selected period"}
+            </p>
         </div>
     );
 }

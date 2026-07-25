@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Search } from "lucide-react";
 
 import { AdminListingsTable } from "@/components/admin/AdminListingsTable";
@@ -9,6 +9,7 @@ import { adminAdapter } from "@/lib/adapters/adminAdapter";
 import { PropertyListItem } from "@/lib/adapters/types";
 
 const FILTERS = [
+    { value: "all", label: "All" },
     { value: "in_review", label: "In review" },
     { value: "verification_pending", label: "Verification pending" },
     { value: "live", label: "Live" },
@@ -18,26 +19,28 @@ const FILTERS = [
 
 export default function AdminListingsPage() {
     const [rows, setRows] = useState<PropertyListItem[]>([]);
-    const [filter, setFilter] = useState("in_review");
+    const [filter, setFilter] = useState("all");
     const [search, setSearch] = useState("");
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        setLoading(true);
-        adminAdapter
-            .listListings({ verification_status: filter, page: 1, page_size: 50 })
-            .then((result) => setRows(result.listings))
-            .catch(() => setRows([]))
-            .finally(() => setLoading(false));
-    }, [filter]);
+        const query = search.trim();
+        const timer = window.setTimeout(() => {
+            setLoading(true);
+            adminAdapter
+                .listListings({
+                    verification_status: filter,
+                    search: query || undefined,
+                    page: 1,
+                    page_size: 50,
+                })
+                .then((result) => setRows(result.listings))
+                .catch(() => setRows([]))
+                .finally(() => setLoading(false));
+        }, query ? 300 : 0);
 
-    const visible = useMemo(() => {
-        const query = search.trim().toLowerCase();
-        if (!query) return rows;
-        return rows.filter((item) =>
-            [item.title, item.locality, item.city, item.id].some((value) => value?.toLowerCase().includes(query))
-        );
-    }, [rows, search]);
+        return () => window.clearTimeout(timer);
+    }, [filter, search]);
 
     return (
         <>
@@ -51,7 +54,7 @@ export default function AdminListingsPage() {
                     <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-white/45" />
                     <input
                         className="h-14 w-full rounded-xl border border-white/15 bg-[#0d0d14] pl-11 pr-4 text-base text-white outline-none placeholder:text-white/35 focus:border-[#A67AEB]"
-                        placeholder="Search title, area, or listing ID"
+                        placeholder="Search title, area, phone, or listing ID"
                         value={search}
                         onChange={(event) => setSearch(event.target.value)}
                     />
@@ -80,7 +83,7 @@ export default function AdminListingsPage() {
             {loading ? (
                 <AdminCard className="text-center text-sm text-white/55">Loading listings…</AdminCard>
             ) : (
-                <AdminListingsTable rows={visible} />
+                <AdminListingsTable rows={rows} />
             )}
         </>
     );

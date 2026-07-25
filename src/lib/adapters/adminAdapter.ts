@@ -76,6 +76,7 @@ export const adminAdapter = {
 
     async listListings(params?: {
         verification_status?: string;
+        search?: string;
         page?: number;
         page_size?: number;
     }): Promise<AdminListingsResult> {
@@ -158,8 +159,8 @@ export const adminAdapter = {
         await rentalsService.deleteEmployee(employeeId);
     },
 
-    async getUsersStats(): Promise<AdminUsersStatsDto> {
-        const response = await rentalsService.getAdminUsersStats();
+    async getUsersStats(params?: { days?: number }): Promise<AdminUsersStatsDto> {
+        const response = await rentalsService.getAdminUsersStats(params);
         const data = unwrapData<AdminUsersStatsDto>(response);
         if (!data) throw new Error("Unable to load user stats.");
         return data;

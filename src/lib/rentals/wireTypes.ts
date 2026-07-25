@@ -282,23 +282,28 @@ export interface AdminUsersFunnelDto {
 }
 
 export interface AdminUsersStatsDto {
+    period_days: number;
     total_users: number;
     new_users_today: number;
+    new_users_period: number;
+    active_users_period: number;
     new_users_7d: number;
-    new_users_30d: number;
     active_users_7d: number;
     owners: number;
     total_unlocks: number;
+    unlocks_period: number;
     unlocks_7d: number;
-    unlocks_30d: number;
     pass_purchases: number;
-    pass_purchases_7d: number;
+    pass_purchases_period: number;
     pass_revenue_inr: number;
+    pass_revenue_period_inr: number;
     total_listings: number;
     live_listings: number;
     signup_trend: AdminDailyCountDto[];
     login_trend: AdminDailyCountDto[];
-    funnel_30d: AdminUsersFunnelDto;
+    funnel: AdminUsersFunnelDto;
+    /** @deprecated use funnel + period_days */
+    funnel_30d?: AdminUsersFunnelDto | null;
 }
 
 export interface AdminUserRowDto {

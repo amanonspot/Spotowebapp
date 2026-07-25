@@ -10,6 +10,8 @@ import { AdminStatCard } from "@/components/admin/AdminStatCard";
 import { adminAdapter } from "@/lib/adapters/adminAdapter";
 import { AdminUserRowDto, AdminUsersStatsDto } from "@/lib/rentals/wireTypes";
 
+const PERIOD_OPTIONS = [1, 7, 14, 30, 60, 90] as const;
+
 const formatDate = (iso?: string | null) => {
     if (!iso) return "—";
     try {
@@ -48,64 +50,126 @@ export default function AdminUsersPage() {
     const [stats, setStats] = useState<AdminUsersStatsDto | null>(null);
     const [users, setUsers] = useState<AdminUserRowDto[]>([]);
     const [search, setSearch] = useState("");
+    const [periodDays, setPeriodDays] = useState<number>(30);
     const [page, setPage] = useState(1);
     const [hasMore, setHasMore] = useState(false);
-    const [loading, setLoading] = useState(true);
+    const [statsLoading, setStatsLoading] = useState(true);
+    const [usersLoading, setUsersLoading] = useState(true);
 
-    const load = useCallback(async (pageNum: number, query: string, append = false) => {
-        setLoading(true);
+    const loadStats = useCallback(async (days: number) => {
+        setStatsLoading(true);
         try {
-            const [statsData, listData] = await Promise.all([
-                append ? Promise.resolve(null) : adminAdapter.getUsersStats(),
-                adminAdapter.listUsers({ page: pageNum, page_size: 25, search: query || undefined }),
-            ]);
-            if (statsData) setStats(statsData);
+            const statsData = await adminAdapter.getUsersStats({ days });
+            setStats(statsData);
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : "Unable to load user stats.");
+            setStats(null);
+        } finally {
+            setStatsLoading(false);
+        }
+    }, []);
+
+    const loadUsers = useCallback(async (pageNum: number, query: string, append = false) => {
+        setUsersLoading(true);
+        try {
+            const listData = await adminAdapter.listUsers({ page: pageNum, page_size: 25, search: query || undefined });
             setUsers((prev) => (append ? [...prev, ...listData.users] : listData.users));
             setHasMore(listData.hasMore);
             setPage(listData.page);
         } catch (error) {
             toast.error(error instanceof Error ? error.message : "Unable to load users.");
-            setStats(null);
             setUsers([]);
         } finally {
-            setLoading(false);
+            setUsersLoading(false);
         }
     }, []);
 
     useEffect(() => {
-        load(1, search);
-    }, [load, search]);
+        loadStats(periodDays);
+    }, [loadStats, periodDays]);
 
-    const funnel = stats?.funnel_30d;
+    useEffect(() => {
+        loadUsers(1, search);
+    }, [loadUsers, search]);
+
+    const funnel = stats?.funnel;
+    const periodLabel = `${periodDays}d`;
 
     return (
         <>
             <header className="pb-5">
-                <p className="text-sm font-medium text-white/55">Growth & activity</p>
-                <h1 className="mt-1 text-3xl font-bold tracking-tight text-white">Users</h1>
-                <p className="mt-2 max-w-2xl text-sm text-white/55">
-                    Signups, logins, unlocks and pass purchases from your database. For page-level clicks and funnels, use{" "}
-                    <a
-                        href="https://analytics.google.com"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 font-semibold text-[#b7f041] hover:underline"
-                    >
-                        Google Analytics <ExternalLink className="h-3.5 w-3.5" />
-                    </a>
-                    .
-                </p>
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                        <p className="text-sm font-medium text-white/55">Growth & activity</p>
+                        <h1 className="mt-1 text-3xl font-bold tracking-tight text-white">Users</h1>
+                        <p className="mt-2 max-w-2xl text-sm text-white/55">
+                            Signups, logins, unlocks and pass purchases from your database. For page-level clicks and funnels, use{" "}
+                            <a
+                                href="https://analytics.google.com"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 font-semibold text-[#b7f041] hover:underline"
+                            >
+                                Google Analytics <ExternalLink className="h-3.5 w-3.5" />
+                            </a>
+                            .
+                        </p>
+                    </div>
+                    <div className="shrink-0">
+                        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-white/45">Period</p>
+                        <div className="flex flex-wrap gap-2">
+                            {PERIOD_OPTIONS.map((days) => {
+                                const active = periodDays === days;
+                                return (
+                                    <button
+                                        key={days}
+                                        type="button"
+                                        onClick={() => setPeriodDays(days)}
+                                        className={`rounded-full px-3 py-1.5 text-sm font-semibold transition ${
+                                            active
+                                                ? "bg-[#A67AEB] text-[#111]"
+                                                : "border border-white/15 bg-[#111116] text-white/70 hover:text-white"
+                                        }`}
+                                    >
+                                        {days}d
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+                </div>
             </header>
 
             <section className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-                <AdminStatCard label="Total users" value={stats?.total_users ?? "—"} icon={Users} accent="purple" />
-                <AdminStatCard label="New today" value={stats?.new_users_today ?? "—"} icon={UserPlus} accent="green" />
-                <AdminStatCard label="New (7d)" value={stats?.new_users_7d ?? "—"} icon={UserPlus} accent="purple" />
-                <AdminStatCard label="Active (7d)" value={stats?.active_users_7d ?? "—"} icon={Activity} accent="green" />
-                <AdminStatCard label="Unlocks (7d)" value={stats?.unlocks_7d ?? "—"} icon={LogIn} accent="amber" />
+                <AdminStatCard label="Total users" value={statsLoading ? "…" : (stats?.total_users ?? "—")} icon={Users} accent="purple" />
+                <AdminStatCard label="New today" value={statsLoading ? "…" : (stats?.new_users_today ?? "—")} icon={UserPlus} accent="green" />
                 <AdminStatCard
-                    label="Pass revenue"
-                    value={stats ? `₹${Math.round(stats.pass_revenue_inr).toLocaleString("en-IN")}` : "—"}
+                    label={`New (${periodLabel})`}
+                    value={statsLoading ? "…" : (stats?.new_users_period ?? "—")}
+                    icon={UserPlus}
+                    accent="purple"
+                />
+                <AdminStatCard
+                    label={`Active (${periodLabel})`}
+                    value={statsLoading ? "…" : (stats?.active_users_period ?? "—")}
+                    icon={Activity}
+                    accent="green"
+                />
+                <AdminStatCard
+                    label={`Unlocks (${periodLabel})`}
+                    value={statsLoading ? "…" : (stats?.unlocks_period ?? "—")}
+                    icon={LogIn}
+                    accent="amber"
+                />
+                <AdminStatCard
+                    label={`Pass revenue (${periodLabel})`}
+                    value={
+                        statsLoading
+                            ? "…"
+                            : stats
+                              ? `₹${Math.round(stats.pass_revenue_period_inr).toLocaleString("en-IN")}`
+                              : "—"
+                    }
                     icon={IndianRupee}
                     accent="green"
                 />
@@ -113,7 +177,7 @@ export default function AdminUsersPage() {
 
             {funnel ? (
                 <section className="mt-6">
-                    <h2 className="mb-3 text-lg font-bold text-white">30-day funnel</h2>
+                    <h2 className="mb-3 text-lg font-bold text-white">{periodDays}-day funnel</h2>
                     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                         {[
                             { label: "Signups", value: funnel.signups },
@@ -123,16 +187,30 @@ export default function AdminUsersPage() {
                         ].map((step) => (
                             <AdminCard key={step.label} className="p-4">
                                 <p className="text-xs font-semibold uppercase tracking-wide text-white/45">{step.label}</p>
-                                <p className="mt-2 text-3xl font-bold text-white">{step.value}</p>
+                                <p className="mt-2 text-3xl font-bold text-white">{statsLoading ? "…" : step.value}</p>
                             </AdminCard>
                         ))}
                     </div>
                 </section>
+            ) : statsLoading ? (
+                <section className="mt-6">
+                    <AdminCard className="text-center text-sm text-white/55">Loading funnel…</AdminCard>
+                </section>
             ) : null}
 
             <section className="mt-6 grid gap-4 lg:grid-cols-2">
-                <AdminMiniTrendChart title="New signups" points={stats?.signup_trend ?? []} accent="green" />
-                <AdminMiniTrendChart title="Logins (tracked)" points={stats?.login_trend ?? []} accent="purple" />
+                <AdminMiniTrendChart
+                    title="New signups"
+                    points={stats?.signup_trend ?? []}
+                    periodDays={periodDays}
+                    accent="green"
+                />
+                <AdminMiniTrendChart
+                    title="Logins (tracked)"
+                    points={stats?.login_trend ?? []}
+                    periodDays={periodDays}
+                    accent="purple"
+                />
             </section>
 
             <section className="mt-8">
@@ -150,7 +228,7 @@ export default function AdminUsersPage() {
                     </div>
                 </div>
 
-                {loading ? (
+                {usersLoading ? (
                     <AdminCard className="text-center text-sm text-white/55">Loading users…</AdminCard>
                 ) : users.length === 0 ? (
                     <AdminCard className="text-center text-sm text-white/55">No users found.</AdminCard>
@@ -195,7 +273,7 @@ export default function AdminUsersPage() {
                 {hasMore ? (
                     <button
                         type="button"
-                        onClick={() => load(page + 1, search, true)}
+                        onClick={() => loadUsers(page + 1, search, true)}
                         className="mt-4 w-full rounded-xl border border-white/15 py-3 text-sm font-semibold text-white/70 hover:bg-white/5"
                     >
                         Load more

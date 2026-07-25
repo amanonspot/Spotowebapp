@@ -374,15 +374,20 @@ export const rentalsService = {
         );
     },
 
-    listAdminProperties: (params?: { verification_status?: string; page?: number; page_size?: number }) =>
-        api.get<RentalAdminListingsResponseDto>("/api/rental/admin/properties/", { params }),
+    listAdminProperties: (params?: {
+        verification_status?: string;
+        search?: string;
+        page?: number;
+        page_size?: number;
+    }) => api.get<RentalAdminListingsResponseDto>("/api/rental/admin/properties/", { params }),
 
     getAdminPropertyDetail: (propertyId: string) =>
         api.get<WireApiEnvelope<RentalPropertyDto>>("/api/rental/admin/properties/", {
             params: { property_id: propertyId },
         }),
 
-    getAdminUsersStats: () => api.get<WireApiEnvelope<AdminUsersStatsDto>>("/api/rental/admin/users/stats/"),
+    getAdminUsersStats: (params?: { days?: number }) =>
+        api.get<WireApiEnvelope<AdminUsersStatsDto>>("/api/rental/admin/users/stats/", { params }),
 
     listAdminUsers: (params?: { page?: number; page_size?: number; search?: string }) =>
         api.get<AdminUsersListResponseDto & { success?: boolean }>("/api/rental/admin/users/", { params }),
