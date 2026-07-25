@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { Home } from "lucide-react";
 
 import Logo from "@/components/Logo";
 import { ADMIN_NAV_ITEMS, isAdminNavActive } from "@/components/admin/nav-items";
@@ -9,9 +10,20 @@ import { cn } from "@/lib/utils";
 
 export function AdminMobileTopBar() {
     return (
-        <header className="sticky top-0 z-20 border-b border-white/10 bg-[#09090f]/95 px-4 py-3 backdrop-blur lg:hidden">
-            <Logo className="!w-[110px]" variant="light" />
-            <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.28em] text-[#A67AEB]">Admin Console</p>
+        <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-white/10 bg-[#09090f]/95 px-4 py-3 backdrop-blur lg:hidden">
+            <div>
+                <Link href="/" aria-label="Back to Spoto home">
+                    <Logo className="!w-[110px]" variant="light" />
+                </Link>
+                <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.28em] text-[#A67AEB]">Admin Console</p>
+            </div>
+            <Link
+                href="/"
+                className="flex shrink-0 items-center gap-1.5 rounded-full border border-white/15 bg-white/5 px-3 py-2 text-xs font-semibold text-white/80 transition-colors hover:border-[#A67AEB]/40 hover:text-white"
+            >
+                <Home className="h-4 w-4" aria-hidden />
+                Home
+            </Link>
         </header>
     );
 }

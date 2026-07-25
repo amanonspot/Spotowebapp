@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LogOut } from "lucide-react";
+import { Home, LogOut } from "lucide-react";
 
 import Logo from "@/components/Logo";
 import { ADMIN_NAV_ITEMS, isAdminNavActive } from "@/components/admin/nav-items";
@@ -22,7 +22,9 @@ export function AdminSideNav({ adminName, adminPhone }: { adminName: string; adm
     return (
         <aside className="fixed inset-y-0 left-0 z-20 hidden w-64 flex-col border-r border-white/10 bg-[#111116] px-4 py-6 lg:flex">
             <div className="flex flex-col items-start gap-1 px-2">
-                <Logo className="!w-[120px]" variant="light" />
+                <Link href="/" className="rounded-lg transition-opacity hover:opacity-90" aria-label="Back to Spoto home">
+                    <Logo className="!w-[120px]" variant="light" />
+                </Link>
                 <p className="pl-1 text-[10px] font-semibold uppercase tracking-[0.3em] text-[#A67AEB]">Admin</p>
             </div>
 
@@ -45,6 +47,14 @@ export function AdminSideNav({ adminName, adminPhone }: { adminName: string; adm
                     );
                 })}
             </nav>
+
+            <Link
+                href="/"
+                className="mt-6 flex min-h-11 items-center gap-3 rounded-xl border border-white/10 px-3 text-sm font-semibold text-white/70 transition-colors hover:border-[#A67AEB]/40 hover:bg-[#A67AEB]/10 hover:text-white"
+            >
+                <Home className="h-4 w-4" aria-hidden />
+                Back to Spoto
+            </Link>
 
             <div className="mt-auto border-t border-white/10 pt-4">
                 <p className="px-2 text-sm font-semibold text-white">{adminName}</p>
