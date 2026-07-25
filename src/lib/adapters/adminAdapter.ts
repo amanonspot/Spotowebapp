@@ -1,7 +1,8 @@
 import { userService } from "@/lib/api";
-import { normalizePropertyList, rentalsService, WireApiEnvelope } from "@/lib/rentals";
+import { normalizePropertyDetail, normalizePropertyList, rentalsService, WireApiEnvelope } from "@/lib/rentals";
+import { fetchMastersBundleCached } from "@/lib/rentals/mastersCache";
 import { RentalAgentEmployeeDto, RentalPropertyDto } from "@/lib/rentals/wireTypes";
-import { PropertyListItem } from "@/lib/adapters/types";
+import { PropertyDetail, PropertyListItem } from "@/lib/adapters/types";
 
 export interface AdminDashboardStats {
     pendingReview: number;
@@ -79,7 +80,22 @@ export const adminAdapter = {
         page_size?: number;
     }): Promise<AdminListingsResult> {
         const response = await rentalsService.listAdminProperties(params);
-        return unwrapList(response);
+        return unwrapList(response as { data?: RentalPropertyDto[]; meta?: { total?: number; page?: number; page_size?: number; has_more?: boolean } });
+    },
+
+    async getListingDetail(propertyId: string): Promise<PropertyDetail> {
+        const [response, masters] = await Promise.all([
+            rentalsService.getAdminPropertyDetail(propertyId),
+            fetchMastersBundleCached(),
+        ]);
+        const detail = normalizePropertyDetail(response, propertyId, {
+            fallbackToMock: false,
+            ...masters,
+        });
+        if (!detail.propertyTitle && !detail.title) {
+            throw new Error("Property not found");
+        }
+        return detail;
     },
 
     async approveListing(propertyId: string) {

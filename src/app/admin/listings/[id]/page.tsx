@@ -9,7 +9,6 @@ import { AdminCard } from "@/components/admin/AdminCard";
 import { AdminConfirmModal } from "@/components/admin/AdminConfirmModal";
 import { AdminStatusBadge } from "@/components/admin/AdminStatusBadge";
 import BlurImage from "@/components/revamp/BlurImage";
-import { propertyAdapter } from "@/lib/adapters";
 import { adminAdapter } from "@/lib/adapters/adminAdapter";
 import { PropertyDetail } from "@/lib/adapters/types";
 
@@ -29,7 +28,7 @@ export default function AdminListingDetailPage({ params }: PageProps) {
     const load = async () => {
         setLoading(true);
         try {
-            const detail = await propertyAdapter.getPropertyDetail(id);
+            const detail = await adminAdapter.getListingDetail(id);
             setListing(detail);
         } catch (error) {
             toast.error(error instanceof Error ? error.message : "Unable to load listing.");
