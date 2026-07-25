@@ -80,7 +80,7 @@ export const adminAdapter = {
         page_size?: number;
     }): Promise<AdminListingsResult> {
         const response = await rentalsService.listAdminProperties(params);
-        return unwrapList(response as { data?: RentalPropertyDto[]; meta?: { total?: number; page?: number; page_size?: number; has_more?: boolean } });
+        return unwrapList(response);
     },
 
     async getListingDetail(propertyId: string): Promise<PropertyDetail> {
