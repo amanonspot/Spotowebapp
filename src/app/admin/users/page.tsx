@@ -182,7 +182,7 @@ export default function AdminUsersPage() {
                     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                         {[
                             { label: "First login", value: funnel.signups },
-                            { label: "Logged in", value: funnel.logged_in },
+                            { label: "Active in period", value: funnel.logged_in },
                             { label: "Unlocked contact", value: funnel.unlocked_contact },
                             { label: "Bought pass", value: funnel.bought_pass },
                         ].map((step) => (
