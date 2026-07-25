@@ -3,9 +3,11 @@
 import Link from "next/link";
 
 import { AdminCard } from "@/components/admin/AdminCard";
+import { AdminListingSourceBadge } from "@/components/admin/AdminListingSourceBadge";
 import { AdminStatusBadge } from "@/components/admin/AdminStatusBadge";
 import BlurImage from "@/components/revamp/BlurImage";
 import { PropertyListItem } from "@/lib/adapters/types";
+import { getListingSource } from "@/lib/utils/listingSource";
 
 const formatCurrency = (value: number) => (value > 0 ? `₹${value.toLocaleString("en-IN")}` : "—");
 
@@ -23,6 +25,7 @@ export function AdminListingsTable({ rows }: { rows: PropertyListItem[] }) {
                             <tr>
                                 <th className="px-4 py-3 font-semibold">Listing</th>
                                 <th className="px-4 py-3 font-semibold">Location</th>
+                                <th className="px-4 py-3 font-semibold">Listed via</th>
                                 <th className="px-4 py-3 font-semibold">Rent</th>
                                 <th className="px-4 py-3 font-semibold">Status</th>
                                 <th className="px-4 py-3 font-semibold">Action</th>
@@ -46,6 +49,9 @@ export function AdminListingsTable({ rows }: { rows: PropertyListItem[] }) {
                                     </td>
                                     <td className="px-4 py-3 text-white/70">
                                         {[row.locality, row.city].filter(Boolean).join(", ") || "—"}
+                                    </td>
+                                    <td className="px-4 py-3">
+                                        <AdminListingSourceBadge source={getListingSource(row)} />
                                     </td>
                                     <td className="px-4 py-3 font-semibold text-[#b7f041]">{formatCurrency(row.pricePerMonth)}</td>
                                     <td className="px-4 py-3">
@@ -81,6 +87,9 @@ export function AdminListingsTable({ rows }: { rows: PropertyListItem[] }) {
                                 <p className="mt-1 text-sm text-white/55">
                                     {[row.locality, row.city].filter(Boolean).join(", ") || "—"}
                                 </p>
+                                <div className="mt-2">
+                                    <AdminListingSourceBadge source={getListingSource(row)} />
+                                </div>
                                 <p className="mt-2 text-lg font-bold text-[#b7f041]">{formatCurrency(row.pricePerMonth)}</p>
                                 <Link
                                     href={`/admin/listings/${row.id}`}

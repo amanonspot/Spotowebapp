@@ -268,3 +268,61 @@ export interface OwnerPropertyUpsertPayload {
     clearDocuments?: boolean;
     deleteImageIds?: string[];
 }
+
+export interface AdminDailyCountDto {
+    day: string;
+    count: number;
+}
+
+export interface AdminUsersFunnelDto {
+    signups: number;
+    logged_in: number;
+    unlocked_contact: number;
+    bought_pass: number;
+}
+
+export interface AdminUsersStatsDto {
+    total_users: number;
+    new_users_today: number;
+    new_users_7d: number;
+    new_users_30d: number;
+    active_users_7d: number;
+    owners: number;
+    total_unlocks: number;
+    unlocks_7d: number;
+    unlocks_30d: number;
+    pass_purchases: number;
+    pass_purchases_7d: number;
+    pass_revenue_inr: number;
+    total_listings: number;
+    live_listings: number;
+    signup_trend: AdminDailyCountDto[];
+    login_trend: AdminDailyCountDto[];
+    funnel_30d: AdminUsersFunnelDto;
+}
+
+export interface AdminUserRowDto {
+    id: string;
+    display_name: string;
+    phone?: string | null;
+    email?: string | null;
+    date_joined?: string | null;
+    last_login?: string | null;
+    is_owner: boolean;
+    is_staff: boolean;
+    is_agent: boolean;
+    listings_count: number;
+    unlocks_count: number;
+    pass_purchases_count: number;
+    login_count: number;
+}
+
+export interface AdminUsersListResponseDto {
+    data: AdminUserRowDto[];
+    meta: {
+        page: number;
+        page_size: number;
+        total: number;
+        has_more: boolean;
+    };
+}

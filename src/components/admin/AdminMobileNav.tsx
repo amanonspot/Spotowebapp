@@ -32,7 +32,7 @@ export function AdminMobileBottomNav() {
     const pathname = usePathname();
 
     return (
-        <nav className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-3 border-t border-white/10 bg-[#111116] px-2 py-2 lg:hidden">
+        <nav className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-4 border-t border-white/10 bg-[#111116] px-1 py-2 lg:hidden">
             {ADMIN_NAV_ITEMS.map((item) => {
                 const Icon = item.icon;
                 const active = isAdminNavActive(pathname, item.href);

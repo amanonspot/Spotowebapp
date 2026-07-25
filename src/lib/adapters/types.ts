@@ -55,6 +55,11 @@ export interface PropertyListItem {
     badges: string[];
     features: string[];
     amenityIds?: string[];
+    /** Who created the listing (admin views) */
+    listedByEmployeeId?: string;
+    listedByEmployeeName?: string;
+    ownerListingName?: string;
+    contactPhone?: string;
 }
 
 export interface UnlockOffer {

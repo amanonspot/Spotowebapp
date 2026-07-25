@@ -565,6 +565,10 @@ export const normalizePropertyList = (payload: WireApiEnvelope<unknown>, options
             badges: keywords.length > 0 ? keywords.slice(0, 2) : fallback?.badges || [],
             features: amenities.length > 0 ? amenities.slice(0, 2) : fallback?.features || [],
             amenityIds,
+            listedByEmployeeId: firstString(wire.listed_by_employee_id) || undefined,
+            listedByEmployeeName: firstString(wire.listed_by_employee_name) || undefined,
+            ownerListingName: firstString(wire.owner_name) || undefined,
+            contactPhone: firstString(wire.contact_phone) || undefined,
         } satisfies PropertyListItem);
 
         return acc;
@@ -693,6 +697,9 @@ export const normalizePropertyDetail = (
         furnishingLabel: firstString(wire.furnishing_name),
         availabilityLabel: firstString(wire.availability_name),
         listedByEmployeeName: firstString(wire.listed_by_employee_name),
+        listedByEmployeeId: firstString(wire.listed_by_employee_id) || undefined,
+        ownerListingName: firstString(wire.owner_name) || undefined,
+        contactPhone: firstString(wire.contact_phone) || undefined,
     };
 };
 

@@ -3,6 +3,8 @@ import { clearCache } from "@/lib/api/client";
 import {
     OwnerPropertyUpsertPayload,
     RentalAdminListingsResponseDto,
+    AdminUsersListResponseDto,
+    AdminUsersStatsDto,
     RentalAgentCreateDataDto,
     RentalAgentEmployeeDto,
     RentalAgentMeDataDto,
@@ -379,6 +381,11 @@ export const rentalsService = {
         api.get<WireApiEnvelope<RentalPropertyDto>>("/api/rental/admin/properties/", {
             params: { property_id: propertyId },
         }),
+
+    getAdminUsersStats: () => api.get<WireApiEnvelope<AdminUsersStatsDto>>("/api/rental/admin/users/stats/"),
+
+    listAdminUsers: (params?: { page?: number; page_size?: number; search?: string }) =>
+        api.get<AdminUsersListResponseDto & { success?: boolean }>("/api/rental/admin/users/", { params }),
 
     listEmployees: (params?: { is_active?: boolean }) =>
         api.get<WireApiEnvelope<RentalAgentEmployeeDto[]>>("/api/rental/employees/", { params }),

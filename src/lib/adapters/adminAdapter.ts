@@ -1,7 +1,7 @@
 import { userService } from "@/lib/api";
 import { normalizePropertyDetail, normalizePropertyList, rentalsService, WireApiEnvelope } from "@/lib/rentals";
 import { fetchMastersBundleCached } from "@/lib/rentals/mastersCache";
-import { RentalAgentEmployeeDto, RentalPropertyDto } from "@/lib/rentals/wireTypes";
+import { RentalAgentEmployeeDto, RentalPropertyDto, AdminUserRowDto, AdminUsersStatsDto } from "@/lib/rentals/wireTypes";
 import { PropertyDetail, PropertyListItem } from "@/lib/adapters/types";
 
 export interface AdminDashboardStats {
@@ -156,5 +156,23 @@ export const adminAdapter = {
 
     async deleteAgent(employeeId: string) {
         await rentalsService.deleteEmployee(employeeId);
+    },
+
+    async getUsersStats(): Promise<AdminUsersStatsDto> {
+        const response = await rentalsService.getAdminUsersStats();
+        const data = unwrapData<AdminUsersStatsDto>(response);
+        if (!data) throw new Error("Unable to load user stats.");
+        return data;
+    },
+
+    async listUsers(params?: { page?: number; page_size?: number; search?: string }) {
+        const response = await rentalsService.listAdminUsers(params);
+        return {
+            users: Array.isArray(response.data) ? response.data : [],
+            total: response.meta?.total ?? 0,
+            page: response.meta?.page ?? 1,
+            pageSize: response.meta?.page_size ?? 25,
+            hasMore: Boolean(response.meta?.has_more),
+        };
     },
 };

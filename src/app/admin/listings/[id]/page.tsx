@@ -7,10 +7,12 @@ import toast from "react-hot-toast";
 
 import { AdminCard } from "@/components/admin/AdminCard";
 import { AdminConfirmModal } from "@/components/admin/AdminConfirmModal";
+import { AdminListingSourceBadge } from "@/components/admin/AdminListingSourceBadge";
 import { AdminStatusBadge } from "@/components/admin/AdminStatusBadge";
 import BlurImage from "@/components/revamp/BlurImage";
 import { adminAdapter } from "@/lib/adapters/adminAdapter";
 import { PropertyDetail } from "@/lib/adapters/types";
+import { getListingSource } from "@/lib/utils/listingSource";
 
 interface PageProps {
     params: Promise<{ id: string }>;
@@ -165,6 +167,16 @@ export default function AdminListingDetailPage({ params }: PageProps) {
 
                 <div className="space-y-4">
                     <AdminCard>
+                        <p className="text-sm font-semibold text-white/75">Listed via</p>
+                        <div className="mt-3">
+                            <AdminListingSourceBadge source={getListingSource(listing)} />
+                        </div>
+                        {listing.listedByEmployeeId ? (
+                            <p className="mt-2 text-xs text-white/45">Employee ID: {listing.listedByEmployeeId}</p>
+                        ) : null}
+                    </AdminCard>
+
+                    <AdminCard>
                         <p className="text-sm font-semibold text-white/75">Owner contact</p>
                         <div className="mt-3 space-y-2 text-sm">
                             <DetailRow label="Name" value={listing.owner?.ownerName || "—"} />
@@ -184,9 +196,6 @@ export default function AdminListingDetailPage({ params }: PageProps) {
                                 }
                             />
                         </div>
-                        {listing.listedByEmployeeName ? (
-                            <p className="mt-3 text-xs text-white/50">Listed by agent: {listing.listedByEmployeeName}</p>
-                        ) : null}
                     </AdminCard>
 
                     {listing.statusReason ? (
