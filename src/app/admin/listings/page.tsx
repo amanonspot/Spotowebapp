@@ -59,7 +59,8 @@ export default function AdminListingsPage() {
                         onChange={(event) => setSearch(event.target.value)}
                     />
                 </div>
-                <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:px-0">
+                <div className="scrollbar-hide overflow-x-auto pb-1">
+                    <div className="flex w-max min-w-full gap-2 sm:w-auto sm:flex-wrap">
                     {FILTERS.map((item) => {
                         const active = filter === item.value;
                         return (
@@ -77,6 +78,7 @@ export default function AdminListingsPage() {
                             </button>
                         );
                     })}
+                    </div>
                 </div>
             </div>
 

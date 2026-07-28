@@ -10,12 +10,18 @@ const STATUS_META: Record<string, { label: string; className: string }> = {
     verification_retry: { label: "Retry needed", className: "bg-orange-400/15 text-orange-300 ring-orange-400/30" },
 };
 
-export function AdminStatusBadge({ status }: { status?: string }) {
+export function AdminStatusBadge({ status, compact = false }: { status?: string; compact?: boolean }) {
     const key = (status || "in_review").toLowerCase();
     const meta = STATUS_META[key] || { label: status || "Unknown", className: "bg-white/10 text-white/70 ring-white/20" };
     return (
-        <span className={cn("inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset", meta.className)}>
-            {meta.label}
+        <span
+            className={cn(
+                "inline-flex max-w-full rounded-full px-2.5 py-1 font-semibold ring-1 ring-inset",
+                compact ? "text-[10px] leading-tight" : "text-xs",
+                meta.className
+            )}
+        >
+            <span className="truncate">{meta.label}</span>
         </span>
     );
 }

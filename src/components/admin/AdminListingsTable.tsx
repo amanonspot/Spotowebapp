@@ -72,35 +72,42 @@ export function AdminListingsTable({ rows }: { rows: PropertyListItem[] }) {
                 </div>
             </AdminCard>
 
-            <div className="grid gap-3 lg:hidden">
-                {rows.map((row) => (
-                    <AdminCard key={row.id} className="p-4">
-                        <div className="flex gap-3">
-                            <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-[#0d0d14]">
-                                {row.image ? <BlurImage src={row.image} alt={row.title} /> : null}
-                            </div>
-                            <div className="min-w-0 flex-1">
-                                <div className="flex items-start justify-between gap-2">
-                                    <p className="truncate font-semibold text-white">{row.title}</p>
-                                    <AdminStatusBadge status={row.verificationStatus || row.status} />
+            <div className="grid w-full min-w-0 gap-3 lg:hidden">
+                {rows.map((row) => {
+                    const location = [row.locality, row.city].filter(Boolean).join(", ") || "—";
+                    return (
+                        <AdminCard key={row.id} className="w-full min-w-0 overflow-hidden p-3 sm:p-4">
+                            <div className="flex min-w-0 gap-3">
+                                <div className="relative h-[4.5rem] w-[4.5rem] shrink-0 overflow-hidden rounded-xl bg-[#0d0d14] sm:h-20 sm:w-20">
+                                    {row.image ? <BlurImage src={row.image} alt={row.title} /> : null}
                                 </div>
-                                <p className="mt-1 text-sm text-white/55">
-                                    {[row.locality, row.city].filter(Boolean).join(", ") || "—"}
+                                <div className="min-w-0 flex-1">
+                                    <p className="line-clamp-2 text-sm font-semibold leading-snug text-white sm:text-base">
+                                        {row.title}
+                                    </p>
+                                    <p className="mt-1 line-clamp-2 text-xs text-white/55 sm:text-sm">{location}</p>
+                                    <div className="mt-2">
+                                        <AdminStatusBadge status={row.verificationStatus || row.status} compact />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="mt-3 grid gap-2 border-t border-white/10 pt-3 sm:grid-cols-[1fr_auto] sm:items-end">
+                                <AdminListingSourceBadge source={getListingSource(row)} className="min-w-0" />
+                                <p className="text-xl font-bold tabular-nums text-[#b7f041] sm:text-right">
+                                    {formatCurrency(row.pricePerMonth)}
                                 </p>
-                                <div className="mt-2">
-                                    <AdminListingSourceBadge source={getListingSource(row)} />
-                                </div>
-                                <p className="mt-2 text-lg font-bold text-[#b7f041]">{formatCurrency(row.pricePerMonth)}</p>
-                                <Link
-                                    href={`/admin/listings/${row.id}`}
-                                    className="mt-3 inline-flex text-sm font-semibold text-[#A67AEB]"
-                                >
-                                    Review listing →
-                                </Link>
                             </div>
-                        </div>
-                    </AdminCard>
-                ))}
+
+                            <Link
+                                href={`/admin/listings/${row.id}`}
+                                className="mt-3 flex min-h-11 w-full items-center justify-center rounded-xl border border-[#A67AEB]/35 bg-[#A67AEB]/10 px-4 text-sm font-semibold text-[#D4B0FF]"
+                            >
+                                Review listing
+                            </Link>
+                        </AdminCard>
+                    );
+                })}
             </div>
         </>
     );

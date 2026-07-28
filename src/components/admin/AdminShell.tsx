@@ -13,7 +13,7 @@ export function AdminShell({
     adminPhone?: string;
 }) {
     return (
-        <div className="min-h-screen bg-[#050507] text-white">
+        <div className="min-h-screen overflow-x-hidden bg-[#050507] text-white">
             <AdminSideNav adminName={adminName} adminPhone={adminPhone} />
             <AdminMobileTopBar />
             <div className="lg:pl-64">
