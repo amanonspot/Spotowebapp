@@ -10,6 +10,7 @@ import { AdminConfirmModal } from "@/components/admin/AdminConfirmModal";
 import { AdminListingSourceBadge } from "@/components/admin/AdminListingSourceBadge";
 import { AdminStatusBadge } from "@/components/admin/AdminStatusBadge";
 import BlurImage from "@/components/revamp/BlurImage";
+import PropertyMediaLightbox from "@/components/revamp/PropertyMediaLightbox";
 import { adminAdapter } from "@/lib/adapters/adminAdapter";
 import { PropertyDetail } from "@/lib/adapters/types";
 import { getListingSource } from "@/lib/utils/listingSource";
@@ -26,6 +27,8 @@ export default function AdminListingDetailPage({ params }: PageProps) {
     const [rejectOpen, setRejectOpen] = useState(false);
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [rejectReason, setRejectReason] = useState("");
+    const [lightboxOpen, setLightboxOpen] = useState(false);
+    const [lightboxIndex, setLightboxIndex] = useState(0);
 
     const load = async () => {
         setLoading(true);
@@ -135,13 +138,24 @@ export default function AdminListingDetailPage({ params }: PageProps) {
                             <p className="mb-3 text-sm font-semibold text-white/75">Photos & videos</p>
                             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                                 {gallery.map((item, index) => (
-                                    <div key={`${item.url}-${index}`} className="relative aspect-[4/3] overflow-hidden rounded-xl bg-[#0d0d14]">
+                                    <button
+                                        key={`${item.url}-${index}`}
+                                        type="button"
+                                        onClick={() => {
+                                            setLightboxIndex(index);
+                                            setLightboxOpen(true);
+                                        }}
+                                        className="group relative aspect-[4/3] overflow-hidden rounded-xl bg-[#0d0d14] ring-0 transition hover:ring-2 hover:ring-[#B7F041]/50"
+                                    >
                                         {item.mediaType === "video" ? (
-                                            <video src={item.url} className="h-full w-full object-cover" controls playsInline />
+                                            <video src={item.url} className="h-full w-full object-cover" muted playsInline preload="metadata" />
                                         ) : (
                                             <BlurImage src={item.url} alt="" />
                                         )}
-                                    </div>
+                                        <span className="absolute inset-0 flex items-end justify-center bg-gradient-to-t from-black/60 to-transparent p-2 text-[10px] font-semibold text-white/80 opacity-0 transition group-hover:opacity-100">
+                                            Preview
+                                        </span>
+                                    </button>
                                 ))}
                             </div>
                         </AdminCard>
@@ -266,6 +280,14 @@ export default function AdminListingDetailPage({ params }: PageProps) {
                 loading={working}
                 onCancel={() => setDeleteOpen(false)}
                 onConfirm={handleDelete}
+            />
+
+            <PropertyMediaLightbox
+                items={gallery}
+                initialIndex={lightboxIndex}
+                open={lightboxOpen}
+                onClose={() => setLightboxOpen(false)}
+                title={listing.title}
             />
         </>
     );

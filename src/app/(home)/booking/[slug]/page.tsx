@@ -10,6 +10,7 @@ import { requireAuthThenContinue } from "@/lib/auth/requireAuthAction";
 import { rentalsService } from "@/lib/rentals/service";
 import UnlockPaymentFlowOverlay from "@/app/(home)/booking/[slug]/_components/UnlockPaymentFlowOverlay";
 import PropertyMediaPreview from "@/components/revamp/PropertyMediaPreview";
+import PropertyMediaLightbox from "@/components/revamp/PropertyMediaLightbox";
 import { extractLatLngFromGoogleMapsUrl } from "@/lib/maps/parseGoogleMapsUrl";
 import { isVideoMediaUrl } from "@/lib/rentals/mediaUtils";
 import type { PropertyMediaItem } from "@/lib/rentals/mediaUtils";
@@ -60,6 +61,8 @@ export default function BookingDetailPage({ params }: PageProps) {
     const [checkoutState, setCheckoutState] = useState<CheckoutState | null>(null);
     const [isUnlocked, setIsUnlocked] = useState(false);
     const [activeImageIndex, setActiveImageIndex] = useState(0);
+    const [lightboxOpen, setLightboxOpen] = useState(false);
+    const [lightboxIndex, setLightboxIndex] = useState(0);
     const [paymentFlowState, setPaymentFlowState] = useState<UnlockPaymentFlowState>("idle");
     const [paymentContext, setPaymentContext] = useState<UnlockPaymentContext | null>(null);
     const [paymentBusy, setPaymentBusy] = useState(false);
@@ -541,6 +544,12 @@ export default function BookingDetailPage({ params }: PageProps) {
               }));
     const activeMedia = galleryMedia[Math.min(activeImageIndex, galleryMedia.length - 1)] || galleryMedia[0];
 
+    const openLightbox = (index: number) => {
+        setLightboxIndex(index);
+        setActiveImageIndex(index);
+        setLightboxOpen(true);
+    };
+
     /** Map + directions: same gate as owner contact — listing unlocked or any active day/weekly pass */
     const hasMapAccess = isUnlocked || Boolean(activePassInfo);
 
@@ -615,15 +624,25 @@ export default function BookingDetailPage({ params }: PageProps) {
             {/* Hero image with gradient overlay */}
             <div className="relative h-56 w-full overflow-hidden sm:h-72 md:h-[420px]">
                 {activeMedia ? (
-                    <PropertyMediaPreview
-                        item={activeMedia}
-                        alt={property.title}
-                        className="h-full w-full object-cover transition-all duration-500"
-                        controls={activeMedia.mediaType === "video"}
-                        autoPlay={activeMedia.mediaType === "video"}
-                        muted
-                        loop
-                    />
+                    <button
+                        type="button"
+                        onClick={() => openLightbox(activeImageIndex)}
+                        className="group relative h-full w-full cursor-zoom-in"
+                        aria-label="Open photo preview"
+                    >
+                        <PropertyMediaPreview
+                            item={activeMedia}
+                            alt={property.title}
+                            className="h-full w-full object-cover transition-all duration-500 group-hover:scale-[1.02]"
+                            controls={false}
+                            autoPlay={activeMedia.mediaType === "video"}
+                            muted
+                            loop
+                        />
+                        <span className="absolute right-3 top-14 rounded-full border border-white/20 bg-black/55 px-3 py-1 text-xs font-semibold text-white/90 backdrop-blur-md md:right-5 md:top-16">
+                            Tap to preview · {galleryMedia.length} {galleryMedia.length === 1 ? "photo" : "photos"}
+                        </span>
+                    </button>
                 ) : null}
                 {/* Gradient overlays */}
                 <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#040405] via-transparent to-black/30" />
@@ -656,7 +675,7 @@ export default function BookingDetailPage({ params }: PageProps) {
                         <button
                             key={`${media.url}-${index}`}
                             type="button"
-                            onClick={() => setActiveImageIndex(index)}
+                            onClick={() => openLightbox(index)}
                             className={`relative h-14 w-20 shrink-0 overflow-hidden rounded-xl border transition-all duration-200 md:h-16 md:w-24 ${
                                 activeImageIndex === index
                                     ? "border-[#B7F041] shadow-[0_0_10px_rgba(183,240,65,0.3)] scale-105"
@@ -860,6 +879,14 @@ export default function BookingDetailPage({ params }: PageProps) {
                 onPayNow={handleOverlayPayNow}
                 onRetryPayment={handleOverlayRetry}
                 onContinueFromSuccess={handleFlowContinueFromSuccess}
+            />
+
+            <PropertyMediaLightbox
+                items={galleryMedia}
+                initialIndex={lightboxIndex}
+                open={lightboxOpen}
+                onClose={() => setLightboxOpen(false)}
+                title={property.title}
             />
         </main>
     );
