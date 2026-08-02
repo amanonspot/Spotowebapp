@@ -100,6 +100,23 @@ export interface RentalPropertyDto extends UnknownRecord {
     updated_at?: string;
     property_id?: string;
     documents?: RentalOwnerDocumentDto[];
+    owner_doc_verification?: RentalOwnerDocVerificationDto;
+}
+
+export interface RentalOwnerDocVerificationDto {
+    status?: string;
+    score?: number | null;
+    name_score?: number;
+    address_score?: number;
+    phone_score?: number;
+    expected_name?: string;
+    name_found_in_document?: boolean;
+    expected_address_hint?: string;
+    address_tokens_matched?: number;
+    document_type?: string;
+    processed_at?: string;
+    error?: string;
+    ocr_text_preview?: string;
 }
 
 export interface RentalMyPropertyCreateDataDto {

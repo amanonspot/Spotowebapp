@@ -13,7 +13,6 @@ import BlurImage from "@/components/revamp/BlurImage";
 import PropertyMediaLightbox from "@/components/revamp/PropertyMediaLightbox";
 import { adminAdapter } from "@/lib/adapters/adminAdapter";
 import { PropertyDetail } from "@/lib/adapters/types";
-import { getListingSource } from "@/lib/utils/listingSource";
 
 interface PageProps {
     params: Promise<{ id: string }>;
@@ -212,6 +211,8 @@ export default function AdminListingDetailPage({ params }: PageProps) {
                         </div>
                     </AdminCard>
 
+                    <OwnerDocVerificationCard listing={listing} />
+
                     {listing.statusReason ? (
                         <AdminCard className="border-red-400/30 bg-red-500/5">
                             <p className="text-sm font-semibold text-red-200">Status note</p>
@@ -299,5 +300,102 @@ function DetailRow({ label, value }: { label: string; value: React.ReactNode }) 
             <p className="text-xs uppercase tracking-wide text-white/45">{label}</p>
             <p className="mt-1 font-medium text-white">{value}</p>
         </div>
+    );
+}
+
+function verificationStatusLabel(status: string): { label: string; className: string } {
+    switch (status) {
+        case "strong_match":
+            return { label: "Strong match", className: "bg-emerald-400/15 text-emerald-300 ring-emerald-400/30" };
+        case "review_needed":
+            return { label: "Review needed", className: "bg-amber-400/15 text-amber-300 ring-amber-400/30" };
+        case "weak_match":
+            return { label: "Weak match", className: "bg-red-400/15 text-red-300 ring-red-400/30" };
+        case "error":
+            return { label: "OCR failed", className: "bg-red-400/15 text-red-300 ring-red-400/30" };
+        case "skipped":
+            return { label: "OCR disabled", className: "bg-white/10 text-white/60 ring-white/15" };
+        case "no_document":
+            return { label: "No document", className: "bg-white/10 text-white/60 ring-white/15" };
+        default:
+            return { label: status.replace(/_/g, " "), className: "bg-white/10 text-white/70 ring-white/15" };
+    }
+}
+
+function OwnerDocVerificationCard({ listing }: { listing: PropertyDetail }) {
+    const verification = listing.ownerDocVerification;
+    const doc = listing.owner?.documents?.[0];
+    const badge = verification ? verificationStatusLabel(verification.status) : null;
+
+    return (
+        <AdminCard>
+            <div className="flex flex-wrap items-start justify-between gap-2">
+                <p className="text-sm font-semibold text-white/75">Owner document (OCR)</p>
+                {badge ? (
+                    <span className={`rounded-full px-3 py-1 text-xs font-semibold ring-1 ${badge.className}`}>
+                        {badge.label}
+                    </span>
+                ) : null}
+            </div>
+
+            {!verification ? (
+                <p className="mt-3 text-sm text-white/55">No OCR result yet. Upload a verification document on listing.</p>
+            ) : (
+                <div className="mt-3 space-y-3 text-sm">
+                    {typeof verification.score === "number" ? (
+                        <DetailRow label="Overall match score" value={`${verification.score}%`} />
+                    ) : null}
+                    <div className="grid gap-3 sm:grid-cols-3">
+                        {typeof verification.nameScore === "number" ? (
+                            <DetailRow label="Name match" value={`${verification.nameScore}%`} />
+                        ) : null}
+                        {typeof verification.addressScore === "number" ? (
+                            <DetailRow label="Address match" value={`${verification.addressScore}%`} />
+                        ) : null}
+                        {typeof verification.phoneScore === "number" ? (
+                            <DetailRow label="Phone match" value={`${verification.phoneScore}%`} />
+                        ) : null}
+                    </div>
+                    {verification.expectedName ? (
+                        <DetailRow
+                            label="Expected owner name"
+                            value={
+                                verification.nameFoundInDocument
+                                    ? `${verification.expectedName} (found in document)`
+                                    : verification.expectedName
+                            }
+                        />
+                    ) : null}
+                    {verification.expectedAddressHint ? (
+                        <DetailRow label="Expected address" value={verification.expectedAddressHint} />
+                    ) : null}
+                    {verification.documentType ? (
+                        <DetailRow label="Document type" value={verification.documentType.replace(/_/g, " ")} />
+                    ) : null}
+                    {verification.error ? (
+                        <p className="rounded-xl border border-red-400/30 bg-red-500/10 px-3 py-2 text-red-200">{verification.error}</p>
+                    ) : null}
+                    {verification.ocrTextPreview ? (
+                        <div>
+                            <p className="text-xs uppercase tracking-wide text-white/45">Extracted text preview</p>
+                            <p className="mt-1 max-h-32 overflow-y-auto rounded-xl border border-white/10 bg-[#0d0d14] p-3 text-xs leading-relaxed text-white/65">
+                                {verification.ocrTextPreview}
+                            </p>
+                        </div>
+                    ) : null}
+                </div>
+            )}
+
+            {doc?.documentUrl ? (
+                <a
+                    href={doc.documentUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-4 inline-flex text-sm font-semibold text-[#b7f041] hover:underline"
+                >
+                    Open uploaded document
+                </a>
+            ) : null}
+        </AdminCard>
     );
 }

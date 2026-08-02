@@ -2,6 +2,7 @@ import {
     BHKOption,
     MoveInOption,
     OwnerContact,
+    OwnerDocVerification,
     OwnerDocument,
     PropertyDetail,
     PropertyListItem,
@@ -426,6 +427,29 @@ const normalizeOwnerDocuments = (wire: RentalPropertyDto): OwnerDocument[] =>
         }))
         .filter((item) => Boolean(item.documentUrl));
 
+const normalizeOwnerDocVerification = (wire: RentalPropertyDto): OwnerDocVerification | undefined => {
+    const raw = asRecord((wire as UnknownRecord).owner_doc_verification);
+    if (!raw || !firstString(raw.status)) return undefined;
+    return {
+        status: firstString(raw.status, "unknown"),
+        score: typeof raw.score === "number" ? raw.score : raw.score == null ? null : Number(raw.score) || null,
+        nameScore: typeof raw.name_score === "number" ? raw.name_score : Number(raw.name_score) || undefined,
+        addressScore: typeof raw.address_score === "number" ? raw.address_score : Number(raw.address_score) || undefined,
+        phoneScore: typeof raw.phone_score === "number" ? raw.phone_score : Number(raw.phone_score) || undefined,
+        expectedName: firstString(raw.expected_name) || undefined,
+        nameFoundInDocument: raw.name_found_in_document === true,
+        expectedAddressHint: firstString(raw.expected_address_hint) || undefined,
+        addressTokensMatched:
+            typeof raw.address_tokens_matched === "number"
+                ? raw.address_tokens_matched
+                : Number(raw.address_tokens_matched) || undefined,
+        documentType: firstString(raw.document_type) || undefined,
+        processedAt: firstString(raw.processed_at) || undefined,
+        error: firstString(raw.error) || undefined,
+        ocrTextPreview: firstString(raw.ocr_text_preview) || undefined,
+    };
+};
+
 const normalizeOwner = (wire: RentalPropertyDto): OwnerContact => {
     const ownerName = firstString((wire as UnknownRecord).owner_name, (wire as UnknownRecord).contact_name, "Owner");
     const phone = firstString(wire.contact_phone, (wire as UnknownRecord).owner_phone);
@@ -700,6 +724,7 @@ export const normalizePropertyDetail = (
         listedByEmployeeId: firstString(wire.listed_by_employee_id) || undefined,
         ownerListingName: firstString(wire.owner_name) || undefined,
         contactPhone: firstString(wire.contact_phone) || undefined,
+        ownerDocVerification: normalizeOwnerDocVerification(wire),
     };
 };
 

@@ -76,6 +76,22 @@ export interface OwnerDocument {
     uploadedAt?: string;
 }
 
+export interface OwnerDocVerification {
+    status: string;
+    score?: number | null;
+    nameScore?: number;
+    addressScore?: number;
+    phoneScore?: number;
+    expectedName?: string;
+    nameFoundInDocument?: boolean;
+    expectedAddressHint?: string;
+    addressTokensMatched?: number;
+    documentType?: string;
+    processedAt?: string;
+    error?: string;
+    ocrTextPreview?: string;
+}
+
 export interface OwnerContact {
     ownerName: string;
     maskedPhone: string;
@@ -105,6 +121,7 @@ export interface PropertyDetail extends PropertyListItem {
     highlights: string[];
     owner: OwnerContact;
     unlockOffer: UnlockOffer;
+    ownerDocVerification?: OwnerDocVerification;
 }
 
 export interface HomeFeed {
