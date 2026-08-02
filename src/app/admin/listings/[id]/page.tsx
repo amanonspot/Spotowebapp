@@ -13,6 +13,7 @@ import BlurImage from "@/components/revamp/BlurImage";
 import PropertyMediaLightbox from "@/components/revamp/PropertyMediaLightbox";
 import { adminAdapter } from "@/lib/adapters/adminAdapter";
 import { PropertyDetail } from "@/lib/adapters/types";
+import { getListingSource } from "@/lib/utils/listingSource";
 
 interface PageProps {
     params: Promise<{ id: string }>;
