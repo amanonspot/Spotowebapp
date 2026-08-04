@@ -20,7 +20,7 @@ export function AdminSideNav({ adminName, adminPhone }: { adminName: string; adm
     };
 
     return (
-        <aside className="fixed inset-y-0 left-0 z-20 hidden w-64 flex-col border-r border-white/10 bg-[#111116] px-4 py-6 lg:flex">
+        <aside className="sticky top-0 z-20 hidden h-screen w-64 shrink-0 flex-col border-r border-white/10 bg-[#111116] px-4 py-6 lg:flex">
             <div className="flex flex-col items-start gap-1 px-2">
                 <Link href="/" className="rounded-lg transition-opacity hover:opacity-90" aria-label="Back to Spoto home">
                     <Logo className="!w-[120px]" variant="light" />
