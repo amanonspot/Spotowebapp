@@ -43,7 +43,7 @@ export default function AdminListingsPage() {
     }, [filter, search]);
 
     return (
-        <>
+        <div className="min-w-0 overflow-x-hidden">
             <header className="pb-4">
                 <p className="text-sm font-semibold text-[#A67AEB]">Review queue</p>
                 <h1 className="mt-1 text-3xl font-bold text-white">Listings</h1>
@@ -59,8 +59,7 @@ export default function AdminListingsPage() {
                         onChange={(event) => setSearch(event.target.value)}
                     />
                 </div>
-                <div className="scrollbar-hide overflow-x-auto pb-1">
-                    <div className="flex w-max min-w-full gap-2 sm:w-auto sm:flex-wrap">
+                <div className="flex flex-wrap gap-2">
                     {FILTERS.map((item) => {
                         const active = filter === item.value;
                         return (
@@ -68,7 +67,7 @@ export default function AdminListingsPage() {
                                 key={item.value}
                                 type="button"
                                 onClick={() => setFilter(item.value)}
-                                className={`shrink-0 rounded-full px-4 py-2 text-sm font-semibold transition ${
+                                className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
                                     active
                                         ? "bg-[#A67AEB] text-[#111]"
                                         : "border border-white/15 bg-[#111116] text-white/70 hover:text-white"
@@ -78,7 +77,6 @@ export default function AdminListingsPage() {
                             </button>
                         );
                     })}
-                    </div>
                 </div>
             </div>
 
@@ -87,6 +85,6 @@ export default function AdminListingsPage() {
             ) : (
                 <AdminListingsTable rows={rows} />
             )}
-        </>
+        </div>
     );
 }

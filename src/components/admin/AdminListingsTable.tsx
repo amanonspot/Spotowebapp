@@ -18,9 +18,9 @@ export function AdminListingsTable({ rows }: { rows: PropertyListItem[] }) {
 
     return (
         <>
-            <AdminCard className="hidden overflow-hidden p-0 lg:block">
-                <div className="overflow-x-auto">
-                    <table className="min-w-full text-left text-sm">
+            <AdminCard className="hidden max-w-full overflow-hidden p-0 lg:block">
+                <div className="max-w-full overflow-x-auto">
+                    <table className="w-full text-left text-sm">
                         <thead className="border-b border-white/10 bg-[#0d0d14] text-white/55">
                             <tr>
                                 <th className="px-4 py-3 font-semibold">Listing</th>
@@ -48,7 +48,9 @@ export function AdminListingsTable({ rows }: { rows: PropertyListItem[] }) {
                                         </div>
                                     </td>
                                     <td className="px-4 py-3 text-white/70">
-                                        {[row.locality, row.city].filter(Boolean).join(", ") || "—"}
+                                        <span className="line-clamp-2 break-words">
+                                            {[row.locality, row.city].filter(Boolean).join(", ") || "—"}
+                                        </span>
                                     </td>
                                     <td className="px-4 py-3">
                                         <AdminListingSourceBadge source={getListingSource(row)} />

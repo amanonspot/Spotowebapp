@@ -115,24 +115,24 @@ export default function AdminListingDetailPage({ params }: PageProps) {
         : (listing.galleryImages || []).map((url) => ({ url, mediaType: "image" as const }));
 
     return (
-        <>
+        <div className="min-w-0 overflow-x-hidden">
             <Link href="/admin/listings" className="mb-4 inline-flex items-center gap-2 text-sm font-semibold text-white/70 hover:text-white">
                 <ArrowLeft className="h-4 w-4" /> Back to listings
             </Link>
 
             <header className="pb-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
+                <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
                         <p className="text-sm font-semibold text-[#A67AEB]">Listing review</p>
-                        <h1 className="mt-1 text-3xl font-bold text-white">{listing.title}</h1>
-                        <p className="mt-1 font-mono text-xs text-white/45">{listing.id}</p>
+                        <h1 className="mt-1 break-words text-3xl font-bold text-white">{listing.title}</h1>
+                        <p className="mt-1 break-all font-mono text-xs text-white/45">{listing.id}</p>
                     </div>
                     <AdminStatusBadge status={listing.verificationStatus || listing.status} />
                 </div>
             </header>
 
-            <div className="grid gap-4 lg:grid-cols-3">
-                <div className="space-y-4 lg:col-span-2">
+            <div className="grid min-w-0 gap-4 lg:grid-cols-3">
+                <div className="min-w-0 space-y-4 lg:col-span-2">
                     {gallery.length > 0 ? (
                         <AdminCard className="p-4">
                             <p className="mb-3 text-sm font-semibold text-white/75">Photos & videos</p>
@@ -174,12 +174,12 @@ export default function AdminListingDetailPage({ params }: PageProps) {
                             <DetailRow label="Address" value={listing.addressLine || "—"} />
                         </div>
                         {listing.description ? (
-                            <p className="mt-4 text-sm leading-relaxed text-white/70">{listing.description}</p>
+                            <p className="mt-4 break-words text-sm leading-relaxed text-white/70">{listing.description}</p>
                         ) : null}
                     </AdminCard>
                 </div>
 
-                <div className="space-y-4">
+                <div className="min-w-0 space-y-4">
                     <AdminCard>
                         <p className="text-sm font-semibold text-white/75">Listed via</p>
                         <div className="mt-3">
@@ -217,7 +217,7 @@ export default function AdminListingDetailPage({ params }: PageProps) {
                     {listing.statusReason ? (
                         <AdminCard className="border-red-400/30 bg-red-500/5">
                             <p className="text-sm font-semibold text-red-200">Status note</p>
-                            <p className="mt-2 text-sm text-red-100/80">{listing.statusReason}</p>
+                            <p className="mt-2 break-words text-sm text-red-100/80">{listing.statusReason}</p>
                         </AdminCard>
                     ) : null}
 
@@ -291,15 +291,43 @@ export default function AdminListingDetailPage({ params }: PageProps) {
                 onClose={() => setLightboxOpen(false)}
                 title={listing.title}
             />
-        </>
+        </div>
     );
+}
+
+function formatVerificationError(error: string): string {
+    const trimmed = error.trim();
+    if (!trimmed) return error;
+
+    if (/BILLING_DISABLED|billing.*disabled/i.test(trimmed)) {
+        return "Document OCR is unavailable — GCP billing is not enabled. Enable billing in Google Cloud Console, then re-upload the document.";
+    }
+
+    if (/PERMISSION_DENIED|403/.test(trimmed)) {
+        const messageMatch = trimmed.match(/"message"\s*:\s*"([^"]+)"/);
+        if (messageMatch?.[1]) return messageMatch[1];
+        return "Document OCR failed — permission denied. Check GCP Document AI configuration and billing.";
+    }
+
+    if (trimmed.startsWith("{") || trimmed.includes('"message"')) {
+        try {
+            const parsed = JSON.parse(trimmed) as { error?: { message?: string }; message?: string };
+            const message = parsed.error?.message || parsed.message;
+            if (typeof message === "string" && message.trim()) return message.trim();
+        } catch {
+            const messageMatch = trimmed.match(/"message"\s*:\s*"([^"]+)"/);
+            if (messageMatch?.[1]) return messageMatch[1];
+        }
+    }
+
+    return trimmed;
 }
 
 function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
     return (
-        <div>
+        <div className="min-w-0">
             <p className="text-xs uppercase tracking-wide text-white/45">{label}</p>
-            <p className="mt-1 font-medium text-white">{value}</p>
+            <div className="mt-1 break-words font-medium text-white">{value}</div>
         </div>
     );
 }
@@ -329,8 +357,8 @@ function OwnerDocVerificationCard({ listing }: { listing: PropertyDetail }) {
     const badge = verification ? verificationStatusLabel(verification.status) : null;
 
     return (
-        <AdminCard>
-            <div className="flex flex-wrap items-start justify-between gap-2">
+        <AdminCard className="min-w-0 overflow-hidden">
+            <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
                 <p className="text-sm font-semibold text-white/75">Owner document (OCR)</p>
                 {badge ? (
                     <span className={`rounded-full px-3 py-1 text-xs font-semibold ring-1 ${badge.className}`}>
@@ -342,7 +370,7 @@ function OwnerDocVerificationCard({ listing }: { listing: PropertyDetail }) {
             {!verification ? (
                 <p className="mt-3 text-sm text-white/55">No OCR result yet. Upload a verification document on listing.</p>
             ) : (
-                <div className="mt-3 space-y-3 text-sm">
+                <div className="mt-3 min-w-0 space-y-3 text-sm">
                     {typeof verification.score === "number" ? (
                         <DetailRow label="Overall match score" value={`${verification.score}%`} />
                     ) : null}
@@ -374,12 +402,14 @@ function OwnerDocVerificationCard({ listing }: { listing: PropertyDetail }) {
                         <DetailRow label="Document type" value={verification.documentType.replace(/_/g, " ")} />
                     ) : null}
                     {verification.error ? (
-                        <p className="rounded-xl border border-red-400/30 bg-red-500/10 px-3 py-2 text-red-200">{verification.error}</p>
+                        <p className="break-words rounded-xl border border-red-400/30 bg-red-500/10 px-3 py-2 text-sm leading-relaxed text-red-200">
+                            {formatVerificationError(verification.error)}
+                        </p>
                     ) : null}
                     {verification.ocrTextPreview ? (
-                        <div>
+                        <div className="min-w-0">
                             <p className="text-xs uppercase tracking-wide text-white/45">Extracted text preview</p>
-                            <p className="mt-1 max-h-32 overflow-y-auto rounded-xl border border-white/10 bg-[#0d0d14] p-3 text-xs leading-relaxed text-white/65">
+                            <p className="mt-1 max-h-32 overflow-y-auto break-words rounded-xl border border-white/10 bg-[#0d0d14] p-3 text-xs leading-relaxed text-white/65">
                                 {verification.ocrTextPreview}
                             </p>
                         </div>
