@@ -24,7 +24,7 @@ const verificationMeta: Record<OwnerListingVerificationState, VerificationUi> = 
     },
     in_review: {
         headline: "Listing under review",
-        subline: "We usually get back within about 30 minutes.",
+        subline: "Document verification score was below threshold. Add an employee code below to go live instantly.",
         accentClass: "text-white",
     },
     verification_pending: {
