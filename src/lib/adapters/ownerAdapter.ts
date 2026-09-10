@@ -305,7 +305,7 @@ const verificationMessage = (state: OwnerListingVerificationState, reason?: stri
     if (reason && reason.trim()) return reason.trim();
     if (state === "live") return "Property is live now.";
     if (state === "awaiting_owner_login") {
-        return "Your field agent submitted this listing. Log in with this phone number to activate it.";
+        return "Your field agent submitted this listing. It will appear here when you log in with your registered phone number.";
     }
     if (state === "rejected") return "Property verification was rejected.";
     if (state === "verifying" || state === "verification_retry" || state === "verification_pending") {

@@ -18,8 +18,8 @@ type VerificationUi = {
 
 const verificationMeta: Record<OwnerListingVerificationState, VerificationUi> = {
     awaiting_owner_login: {
-        headline: "Waiting for your login",
-        subline: "A field agent submitted this listing. Log in with your registered phone to activate it.",
+        headline: "Linked to your phone",
+        subline: "A field agent listed this property for you. Log in with your registered phone to manage it on your dashboard.",
         accentClass: "text-[#d8c3ff]",
     },
     in_review: {

@@ -80,6 +80,9 @@ const toPaywallFromPayload = (payload: unknown): CheckoutState["paywall"] | unde
     };
 };
 
+const effectivePropertyId = (propertyId: string) =>
+    propertyId && propertyId !== "global_pass" ? propertyId : undefined;
+
 const parseUnlockSuccess = (response: RentalContactUnlockResponseDto) => {
     const record = asRecord(response);
     if (!record) return null;
@@ -94,9 +97,18 @@ const parseUnlockSuccess = (response: RentalContactUnlockResponseDto) => {
     }
 
     const data = asRecord(record.data);
+    const passActivated = data?.pass_activated === true;
     const owner = asRecord(data?.owner);
     const phone = firstString(owner?.phone);
-    if (!phone) return null;
+    if (!phone) {
+        if (passActivated) {
+            return {
+                type: "pass_only" as const,
+                message: firstString(record.message, "Pass activated successfully"),
+            };
+        }
+        return null;
+    }
     const documents = Array.isArray(data?.documents)
         ? data.documents
               .map((doc) => {
@@ -123,6 +135,92 @@ const parseUnlockSuccess = (response: RentalContactUnlockResponseDto) => {
     };
 };
 
+type ParsedUnlockSuccess = NonNullable<ReturnType<typeof parseUnlockSuccess>>;
+
+const buildContactSuccessState = (
+    current: CheckoutState,
+    parsed: Extract<ParsedUnlockSuccess, { type: "success" }>,
+    propertyId: string,
+): CheckoutState => {
+    const success: CheckoutState = {
+        ...current,
+        status: "success",
+        message: parsed.message,
+        unlockedPhone: parsed.ownerPhone,
+        unlockedName: parsed.ownerName,
+        unlockedDocuments: parsed.documents,
+        updatedAt: new Date().toISOString(),
+    };
+
+    addUnlockedTenantContact({
+        id: `tenant_unlock_${Date.now()}`,
+        propertyId,
+        name: parsed.ownerName,
+        phone: parsed.ownerPhone,
+        source: "api",
+        unlockedAt: success.updatedAt,
+    });
+
+    saveState(success);
+    return success;
+};
+
+const buildPassOnlySuccessState = (current: CheckoutState, message: string): CheckoutState => {
+    const success: CheckoutState = {
+        ...current,
+        status: "success",
+        message,
+        updatedAt: new Date().toISOString(),
+    };
+    saveState(success);
+    return success;
+};
+
+const tryUnlockContact = async (
+    propertyId: string,
+    session: ReturnType<typeof authAdapter.getSession>,
+) => {
+    try {
+        const response = await rentalsService.unlockPropertyContact(propertyId, {
+            name: session.userName || "Spoto User",
+            phone: session.phone || "",
+            message: "Interested in this rental property",
+        });
+        const parsed = parseUnlockSuccess(response);
+        return parsed?.type === "success" ? parsed : null;
+    } catch {
+        return null;
+    }
+};
+
+const recoverAfterConfirmFailure = async (
+    current: CheckoutState,
+    propertyIdForApi: string | undefined,
+    session: ReturnType<typeof authAdapter.getSession>,
+): Promise<CheckoutState | null> => {
+    try {
+        const passRes = await rentalsService.getMyPassStatus();
+        const passData = asRecord(asRecord(passRes)?.data) ?? asRecord(passRes);
+        const hasPass =
+            passData?.has_one_day_active === true || passData?.has_weekly_active === true;
+        if (!hasPass) return null;
+
+        if (propertyIdForApi) {
+            const fallback = await tryUnlockContact(propertyIdForApi, session);
+            if (fallback) {
+                return buildContactSuccessState(current, fallback, propertyIdForApi);
+            }
+        }
+
+        return buildPassOnlySuccessState(
+            current,
+            "Payment received. Your pass is active — you can unlock owner contacts now.",
+        );
+    } catch {
+        return null;
+    }
+};
+
 class HybridCheckoutAdapter implements CheckoutAdapter {
     async verifyAndUnlock(params: {
         razorpayPaymentId: string;
@@ -134,6 +232,7 @@ class HybridCheckoutAdapter implements CheckoutAdapter {
     }): Promise<CheckoutState> {
         const session = authAdapter.getSession();
         const store = readStore();
+        const propertyIdForApi = effectivePropertyId(params.propertyId);
         // Find the checkout session for this property
         const current = Object.values(store).find(s => s.propertyId === params.propertyId)
             ?? {
@@ -150,45 +249,52 @@ class HybridCheckoutAdapter implements CheckoutAdapter {
                 razorpay_payment_id: params.razorpayPaymentId,
                 razorpay_order_id: params.razorpayOrderId,
                 razorpay_signature: params.razorpaySignature,
-                property_id: params.propertyId,
+                property_id: propertyIdForApi,
                 name: params.name ?? session.userName ?? undefined,
                 phone: params.phone ?? session.phone ?? undefined,
             });
 
             const parsed = parseUnlockSuccess(response);
-            if (!parsed || parsed.type === 'paywall') {
-                const failed: CheckoutState = {
-                    ...current,
-                    status: 'failed',
-                    message: 'Payment verified but contact unlock failed. Please contact support.',
-                    updatedAt: new Date().toISOString(),
-                };
-                saveState(failed);
-                return failed;
+            if (parsed?.type === "success") {
+                return buildContactSuccessState(current, parsed, params.propertyId);
             }
 
-            const success: CheckoutState = {
+            if (parsed?.type === "pass_only") {
+                if (propertyIdForApi) {
+                    const fallback = await tryUnlockContact(propertyIdForApi, session);
+                    if (fallback) {
+                        return buildContactSuccessState(current, fallback, params.propertyId);
+                    }
+                }
+                return buildPassOnlySuccessState(current, parsed.message);
+            }
+
+            const data = asRecord(asRecord(response)?.data);
+            if (data?.pass_activated === true) {
+                if (propertyIdForApi) {
+                    const fallback = await tryUnlockContact(propertyIdForApi, session);
+                    if (fallback) {
+                        return buildContactSuccessState(current, fallback, params.propertyId);
+                    }
+                }
+                return buildPassOnlySuccessState(
+                    current,
+                    firstString(asRecord(response)?.message, "Pass activated successfully"),
+                );
+            }
+
+            const failed: CheckoutState = {
                 ...current,
-                status: 'success',
-                message: parsed.message,
-                unlockedPhone: parsed.ownerPhone,
-                unlockedName: parsed.ownerName,
-                unlockedDocuments: parsed.documents,
+                status: 'failed',
+                message: 'Payment verified but contact unlock failed. Please contact support.',
                 updatedAt: new Date().toISOString(),
             };
-
-            addUnlockedTenantContact({
-                id: `tenant_unlock_${Date.now()}`,
-                propertyId: params.propertyId,
-                name: parsed.ownerName,
-                phone: parsed.ownerPhone,
-                source: 'api',
-                unlockedAt: success.updatedAt,
-            });
-
-            saveState(success);
-            return success;
+            saveState(failed);
+            return failed;
         } catch (error) {
+            const recovered = await recoverAfterConfirmFailure(current, propertyIdForApi, session);
+            if (recovered) return recovered;
+
             const failed: CheckoutState = {
                 ...current,
                 status: 'failed',
@@ -249,28 +355,11 @@ class HybridCheckoutAdapter implements CheckoutAdapter {
                 return paywallState;
             }
 
-            const success: CheckoutState = {
-                ...current,
-                status: "success",
-                message: parsed.message,
-                unlockedPhone: parsed.ownerPhone,
-                unlockedName: parsed.ownerName,
-                unlockedDocuments: parsed.documents,
-                creditsRemaining: undefined,
-                updatedAt: new Date().toISOString(),
-            };
+            if (parsed.type === "pass_only") {
+                return buildPassOnlySuccessState(current, parsed.message);
+            }
 
-            addUnlockedTenantContact({
-                id: `tenant_unlock_${Date.now()}`,
-                propertyId: current.propertyId,
-                name: parsed.ownerName,
-                phone: parsed.ownerPhone,
-                source: "api",
-                unlockedAt: success.updatedAt,
-            });
-
-            saveState(success);
-            return success;
+            return buildContactSuccessState(current, parsed, current.propertyId);
         } catch (error) {
             const apiError = error as ApiError;
             const paywall = apiError.status === 402 ? toPaywallFromPayload(apiError.data) : undefined;

@@ -9,8 +9,6 @@ export default function AgentListPropertySuccessPage() {
     const searchParams = useSearchParams();
     const propertyId = searchParams.get("property_id") || "";
     const ownerPhone = searchParams.get("owner_phone") || "";
-    const verificationStatus = (searchParams.get("verification_status") || "").toLowerCase();
-    const isLive = verificationStatus === "live";
 
     return (
         <main className="min-h-screen bg-[#050507] text-white">
@@ -19,20 +17,10 @@ export default function AgentListPropertySuccessPage() {
                     <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-[#B7F041]/20 text-[#B7F041]">
                         <Check className="h-8 w-8" />
                     </div>
-                    <h1 className="text-center text-2xl font-semibold">
-                        {isLive ? "Listing is live" : "Listing saved"}
-                    </h1>
+                    <h1 className="text-center text-2xl font-semibold">Listing is live</h1>
                     <p className="mt-3 text-center text-sm text-white/70">
-                        {isLive ? (
-                            <>
-                                This owner has logged in on Spoto before, so the property is live on the app now.
-                            </>
-                        ) : (
-                            <>
-                                The property is linked to the owner&apos;s phone number. It will go live when the owner
-                                logs in with OTP on Spoto for the first time.
-                            </>
-                        )}
+                        The property is live on Spoto now. It is linked to the owner&apos;s phone number —
+                        when they log in with OTP, it will appear on their owner dashboard.
                     </p>
                     {ownerPhone ? (
                         <p className="mt-4 rounded-xl border border-white/15 bg-[#0d0d14] px-4 py-3 text-center text-sm">

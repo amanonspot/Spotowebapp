@@ -148,11 +148,11 @@ export const agentAdapter = {
         return {
             id: propertyId,
             ownerPhone: data.owner_phone || phone,
-            verificationStatus: data.verification_status || "awaiting_owner_login",
+            verificationStatus: data.verification_status || "live",
             message:
                 typeof (response as { message?: string }).message === "string"
                     ? (response as { message?: string }).message
-                    : "Listing saved. Owner must log in to activate.",
+                    : "Listing is live on Spoto.",
         };
     },
 };
